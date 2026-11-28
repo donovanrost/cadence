@@ -12,17 +12,13 @@ defmodule CadenceWeb.CatalogRegistryValidityTest do
   alias Cadence.Applications.{
     ApplicationDefinition,
     CatalogRegistry,
-    Comms,
     DerivedTelemetry,
-    LegacyCommsOverview,
     Limits,
     OpsConsole,
     TelemetryDecomCatalogContribution
   }
 
   @contributors [
-    Comms,
-    LegacyCommsOverview,
     Limits,
     TelemetryDecomCatalogContribution,
     OpsConsole,

@@ -253,26 +253,8 @@ defmodule Cadence.Governance.ActivationPolicy do
     }
   end
 
-  def current?(organization_id, mission_id, %{"forced_by" => reason} = policy),
-    do: policy == forced_approval(evidence(organization_id, mission_id), reason)
-
   def current?(organization_id, mission_id, policy),
     do: policy == evidence(organization_id, mission_id)
-
-  @doc """
-  `evidence/2` with independent approval FORCED, whatever the mission's setting, for change sets
-  whose apply must be approved by someone who isn't their author (the legacy route conversion,
-  director 11-16: stager != applier). Marked with `forced_by`, and validated as such at apply.
-  """
-  @spec forced_approval(map(), String.t()) :: map()
-  def forced_approval(evidence, reason) when is_binary(reason),
-    do:
-      Map.merge(evidence, %{
-        "approval_required" => true,
-        "required_human_approvals" => 1,
-        "separation_of_duties" => true,
-        "forced_by" => reason
-      })
 
   def validate(organization_id, mission_id, policy) do
     if current?(organization_id, mission_id, policy),

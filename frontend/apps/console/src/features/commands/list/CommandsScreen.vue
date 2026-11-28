@@ -42,7 +42,7 @@ const go = (query: LocationQuery) =>
 const setFilter = (key: "q" | "target" | "stage", value: string | null) =>
   go(withFilter(route.query, key, value));
 function clearFilters() {
-  const { q: _q, target: _t, stage: _s, ...rest } = route.query;
+  const { q: _q, target: _t, stage: _s, withdrawn_revision: _w, ...rest } = route.query;
   return go(rest);
 }
 const fleet = useFleet(missionId, { live: false });

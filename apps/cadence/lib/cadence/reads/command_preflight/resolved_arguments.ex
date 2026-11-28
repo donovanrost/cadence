@@ -39,12 +39,14 @@ defmodule Cadence.Reads.CommandPreflight.ResolvedArguments do
         request: member.request
       }
     end)
-    |> by_position(org, mission)
+    |> by_position(org, mission, nil)
   end
 
   @doc "The group read: `members` are the group's stored requests; rejected ones are skipped."
-  @spec for_group(binary(), binary(), map(), [map()]) :: %{non_neg_integer() => [row()]}
-  def for_group(org, mission, group, members) do
+  @spec for_group(binary(), binary(), map(), [map()], map() | nil) :: %{
+          non_neg_integer() => [row()]
+        }
+  def for_group(org, mission, group, members, bases \\ nil) do
     spacecraft = Map.new(group.targets, &{&1["index"], &1["spacecraft_id"]})
 
     members
@@ -56,14 +58,14 @@ defmodule Cadence.Reads.CommandPreflight.ResolvedArguments do
         request: request
       }
     end)
-    |> by_position(org, mission)
+    |> by_position(org, mission, bases)
   end
 
   defp spacecraft_id(%{spacecraft_id: id}), do: id
   defp spacecraft_id(_target), do: nil
 
-  defp by_position(members, org, mission) do
-    specs = specs_by_key(org, mission, Enum.map(members, & &1.request))
+  defp by_position(members, org, mission, bases) do
+    specs = specs_by_key(org, mission, Enum.map(members, & &1.request), bases)
 
     members
     |> Enum.group_by(& &1.position)
@@ -154,26 +156,33 @@ defmodule Cadence.Reads.CommandPreflight.ResolvedArguments do
   defp key(request), do: {request.mission_model_revision_id, request.command_id}
 
   # Once per (pinned revision, command), as VerifierGroups: the same specs whatever the target.
-  defp specs_by_key(org, mission, requests) do
-    requests
-    |> Enum.uniq_by(&key/1)
-    |> Map.new(fn request -> {key(request), definition(org, mission, request)} end)
-  end
+  defp specs_by_key(org, mission, requests, shared) do
+    bases = shared || RequestValidation.resolve_keyed(org, mission, requests)
 
-  defp definition(org, mission, request) do
-    case RequestValidation.resolve_basis(
-           org,
-           mission,
-           request.mission_model_revision_id,
-           request.command_id,
-           request.source_endpoint_ref
-         ) do
-      {:ok, %{runtime_definition: %{argument_specs: specs}}} when is_list(specs) ->
-        %{specs: specs, units: units(org, mission, request.mission_model_revision_id, specs)}
+    # The units of every command's arguments, one read per revision.
+    specs =
+      for {{revision, _command} = key, {:ok, %{runtime_definition: %{argument_specs: specs}}}} <-
+            bases,
+          is_list(specs),
+          do: {key, revision, specs}
 
-      _unavailable ->
-        nil
-    end
+    units =
+      specs
+      |> Enum.group_by(&elem(&1, 1), &elem(&1, 2))
+      |> Map.new(fn {revision, lists} ->
+        {revision, units(org, mission, revision, Enum.concat(lists))}
+      end)
+
+    Map.new(specs, fn {key, revision, spec_list} ->
+      {key,
+       %{
+         specs: spec_list,
+         units: Map.take(units[revision], Enum.map(spec_list, & &1.argument_id))
+       }}
+    end)
+    |> then(fn defined ->
+      Map.new(bases, fn {key, _result} -> {key, Map.get(defined, key)} end)
+    end)
   end
 
   defp units(_org, _mission, _revision, []), do: %{}

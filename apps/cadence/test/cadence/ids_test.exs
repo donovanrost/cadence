@@ -10,6 +10,18 @@ defmodule Cadence.IdsTest do
     assert Cadence.Ids.spacecraft_id_from_managed_source_endpoint(nil) == nil
   end
 
+  test "only Cadence.Ids defines the managed source endpoint prefix" do
+    root = Path.expand("../../../..", __DIR__)
+    ids_path = Path.join(root, "apps/cadence/lib/cadence/ids.ex")
+
+    paths = Path.wildcard(Path.join(root, "{apps,packages}/*/lib/**/*.{ex,exs}"))
+    assert ids_path in paths
+
+    for path <- paths -- [ids_path] do
+      refute File.read!(path) =~ "spacecraft_runtime:", Path.relative_to(path, root)
+    end
+  end
+
   test "generates unique ids with a stable per-boot prefix" do
     first_id = Cadence.Ids.new("packet")
     second_id = Cadence.Ids.new("packet")

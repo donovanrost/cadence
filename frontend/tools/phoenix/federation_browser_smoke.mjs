@@ -1049,7 +1049,7 @@ export function browserUrls({
   return {
     baseUrl,
     loginUrl: `${baseUrl}/sign-in`,
-    commsUrl: `${baseUrl}/missions/${encodeURIComponent(missionId)}/applications/comms/federated`,
+    opsUrl: `${baseUrl}/missions/${encodeURIComponent(missionId)}/applications/ops_console/workspace/federated`,
     telemetryUrl: `${baseUrl}/missions/${encodeURIComponent(missionId)}/spacecraft/${encodeURIComponent(spacecraftId)}/applications/telemetry_decom/packet_bindings/federated`,
   };
 }
@@ -4324,7 +4324,7 @@ async function assertContainedRemoteFailureAndRetry({
     });
     await waitForExpression(
       client,
-      "Boolean(document.querySelector('#remote-error') && document.querySelector('#remote-error-message') && document.querySelector('#remote-error-reference') && !document.querySelector('#comms-application'))",
+      "Boolean(document.querySelector('#remote-error') && document.querySelector('#remote-error-message') && document.querySelector('#remote-error-reference') && !document.querySelector('#ops-console-application'))",
       "contained manifest failure",
       { signal },
     );
@@ -4673,10 +4673,8 @@ async function assertRemoteSurface({
   reportProgress(`${applicationKey} manifest assets asserted`);
 
   const staticRemotePrefix = {
-    comms: "/assets/application-host/comms/",
     telemetry_decom: "/assets/application-host/telemetry-decom/",
     ops_console: "/assets/application-host/ops-console/",
-    organization_admin: "/assets/application-host/organization-admin/",
   }[applicationKey];
   assert.ok(staticRemotePrefix, `${applicationKey} has no static fallback prefix contract`);
   const staticFallback = diagnostics
@@ -4886,50 +4884,6 @@ async function assertPersistentHostNavigation(client, diagnostics, missionId, or
   reportProgress("shell identity, ops rail and back/forward navigation retained");
 }
 
-/** @param {import("./browser-diagnostics.ts").RepresentativeOptions} options */
-async function assertRepresentativeRemoteSurface({
-  client,
-  diagnostics,
-  signal,
-  args,
-  argName,
-  expectedPath,
-  applicationKey,
-  surfaceId,
-  expectedScope,
-  readyExpression,
-  catalogPath,
-  queryPath,
-  queryId,
-  expectedReleaseId,
-  expectedOrigin,
-  navigateSurface = true,
-  existingGeneration,
-}) {
-  const url = requiredArg(args, argName);
-  const target = assertHttpUrl(url, expectedOrigin, `${applicationKey} representative URL`);
-  assert.equal(target.pathname, expectedPath, `${applicationKey} representative route changed`);
-
-  return assertRemoteSurface({
-    client,
-    diagnostics,
-    signal,
-    url: target.href,
-    expectedOrigin,
-    catalogPath,
-    applicationKey,
-    surfaceId,
-    expectedScope,
-    readyExpression,
-    queryPath,
-    queryId,
-    queryVersion: 1,
-    expectedReleaseId,
-    navigateSurface,
-    existingGeneration,
-  });
-}
-
 /** @param {string} lifecycleUrl @param {"promote"|"rollback"} transition @param {Record<import("./browser-diagnostics.ts").ApplicationKey,string>} expectedReleaseIds */
 export async function applyReleaseTransition(lifecycleUrl, transition, expectedReleaseIds) {
   const endpoint = assertHttpUrl(
@@ -4956,7 +4910,7 @@ export async function applyReleaseTransition(lifecycleUrl, transition, expectedR
 /** @param {CdpPort} client @param {Diagnostics} diagnostics @param {string[]} args @param {{secret?:import("./browser-diagnostics.ts").LoginSecret|null,signal?:AbortSignal}} [options] */
 export async function runScenario(client, diagnostics, args, { secret, signal } = {}) {
   assertNoPasswordArgument(args);
-  const commsUrl = requiredArg(args, "--comms-url");
+  const opsUrl = requiredArg(args, "--ops-url");
   const telemetryUrl = requiredArg(args, "--telemetry-url");
   const loginUrl = requiredArg(args, "--login-url");
   const email = requiredArg(args, "--login-email");
@@ -4968,11 +4922,11 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
   assert.equal(Number.isInteger(expectedApid), true, "--expected-apid must be an integer");
   assert.ok(secret?.password, "structured login secret is required");
 
-  const origin = assertHttpUrl(commsUrl, undefined, "Comms surface URL").origin;
+  const origin = assertHttpUrl(opsUrl, undefined, "Ops Console workspace URL").origin;
   assert.equal(
-    new URL(commsUrl).pathname,
-    `/missions/${encodeURIComponent(missionId)}/applications/comms/federated`,
-    "Comms surface must use the authenticated federated route",
+    new URL(opsUrl).pathname,
+    `/missions/${encodeURIComponent(missionId)}/applications/ops_console/workspace/federated`,
+    "Ops Console workspace must use the authenticated federated route",
   );
   assertHttpUrl(telemetryUrl, origin, "Telemetry surface URL");
   assertSignInUrl(loginUrl, origin);
@@ -4980,16 +4934,12 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
   assertHttpUrl(lifecycleUrl, undefined, "federation lifecycle URL");
   const releases = {
     nMinus1: {
-      comms: requiredArg(args, "--n-minus-1-comms-release-id"),
       telemetry_decom: requiredArg(args, "--n-minus-1-telemetry-release-id"),
       ops_console: requiredArg(args, "--n-minus-1-ops-console-release-id"),
-      organization_admin: requiredArg(args, "--n-minus-1-organization-admin-release-id"),
     },
     n: {
-      comms: requiredArg(args, "--n-comms-release-id"),
       telemetry_decom: requiredArg(args, "--n-telemetry-release-id"),
       ops_console: requiredArg(args, "--n-ops-console-release-id"),
-      organization_admin: requiredArg(args, "--n-organization-admin-release-id"),
     },
   };
   for (const releaseIds of Object.values(releases)) {
@@ -4998,13 +4948,13 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
     }
   }
 
-  const commsQueryPath = `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/query`;
-  const commsCatalogPath = `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/catalog`;
+  const missionQueryPath = `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/query`;
+  const missionCatalogPath = `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/catalog`;
   reportProgress("proving unauthenticated catalog cannot mount or act");
   await assertUnauthenticatedCatalogContained(
     client,
     diagnostics,
-    `${origin}${commsCatalogPath}`,
+    `${origin}${missionCatalogPath}`,
     origin,
     signal,
   );
@@ -5041,99 +4991,49 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
     { signal },
   );
 
-  /** @type {import("./browser-diagnostics.ts").RepresentativeConfig[]} */
-  const representativeConfigs = [
-    {
-      argName: "--ops-url",
-      // OpsConsole's workspace surface (its required application workspace) outlives the ops pages.
-      expectedPath: `/missions/${encodeURIComponent(missionId)}/applications/ops_console/workspace/federated`,
-      applicationKey: "ops_console",
-      surfaceId: "workspace",
-      expectedScope: "mission",
-      readyExpression: `(() => {
-        const links = [...document.querySelectorAll('#ops-workspace-landing a')];
-        if (links.length === 0 || !links.every((link) => link instanceof HTMLAnchorElement)) return false;
-        const prefix = ${JSON.stringify(`/missions/${encodeURIComponent(missionId)}/ops/`)};
-        return Boolean(document.querySelector('#ops-console-application[data-ops-console-surface="workspace"]') &&
-          links.every((link) => {
-            const destination = new URL(link.href);
-            return destination.origin === location.origin && destination.pathname.startsWith(prefix);
-          }) &&
-          !document.querySelector('#ops-workspace-landing-unavailable') &&
-          !document.querySelector('#ops-console-error') && !document.querySelector('#remote-error'));
-      })()`,
-      catalogPath: `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/catalog`,
-      queryPath: `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/query`,
-      queryId: "cadence.ops.workspace",
-      expectedReleaseId: releases.nMinus1.ops_console,
-      // The first representative loads the shared host bundle: read its body once here.
-      readPublishedHostBody: true,
-    },
-  ];
-
-  const representatives = [];
-  for (const config of representativeConfigs) {
-    representatives.push(
-      await assertRepresentativeRemoteSurface({
-        ...config,
-        client,
-        diagnostics,
-        signal,
-        args,
-        expectedOrigin: origin,
-      }),
-    );
-  }
-  reportProgress("representative ops remote mounted");
-  await assertPersistentHostNavigation(client, diagnostics, missionId, origin, signal);
-
-  const comms = await assertRemoteSurface({
+  const opsSurface = {
     client,
     diagnostics,
     signal,
-    url: commsUrl,
+    url: opsUrl,
     expectedOrigin: origin,
-    catalogPath: commsCatalogPath,
-    applicationKey: "comms",
-    surfaceId: "overview",
+    applicationKey: /** @type {const} */ ("ops_console"),
+    surfaceId: "workspace",
     expectedScope: "mission",
-    readyExpression:
-      "Boolean(document.querySelector('[data-remote-state=\"ready\"]') && document.querySelector('#comms-application') && document.querySelector('#comms-overview-page') && document.querySelector('#comms-transports') && !document.querySelector('#remote-error') && !document.querySelector('#comms-application-error'))",
-    queryPath: commsQueryPath,
-    queryId: "cadence.comms.overview",
+    readyExpression: `(() => {
+    const links = [...document.querySelectorAll('#ops-workspace-landing a')];
+    if (links.length === 0 || !links.every((link) => link instanceof HTMLAnchorElement)) return false;
+    const prefix = ${JSON.stringify(`/missions/${encodeURIComponent(missionId)}/ops/`)};
+    return Boolean(document.querySelector('#ops-console-application[data-ops-console-surface="workspace"]') &&
+      links.every((link) => {
+        const destination = new URL(link.href);
+        return destination.origin === location.origin && destination.pathname.startsWith(prefix);
+      }) &&
+      !document.querySelector('#ops-workspace-landing-unavailable') &&
+      !document.querySelector('#ops-console-error') && !document.querySelector('#remote-error'));
+  })()`,
+    catalogPath: missionCatalogPath,
+    queryPath: missionQueryPath,
+    queryId: "cadence.ops.workspace",
     queryVersion: 1,
-    expectedReleaseId: releases.nMinus1.comms,
+  };
+  const ops = await assertRemoteSurface({
+    ...opsSurface,
+    expectedReleaseId: releases.nMinus1.ops_console,
+    readPublishedHostBody: true,
   });
-  assertCommsQuery(comms.query);
-  assert.equal(
-    comms.query.navigation.fallback_href,
-    `/missions/${encodeURIComponent(missionId)}/comms`,
-  );
-  assert.equal(comms.query.trusted_surface.root.attrs.id, "comms-overview-page");
-  assert.equal(comms.query.trusted_surface.overview.transport.id, "comms-transports");
-  assert.equal(comms.query.trusted_surface.overview.transport.count, 1);
-
-  reportProgress("verifying Comms Overview DOM and network contract");
-  assert.equal(
-    await evaluate(
-      client,
-      "document.querySelector('#comms-transports')?.textContent?.includes('Federation Browser Transport')",
-      "Comms Overview transport",
-      { signal },
-    ),
-    true,
-  );
+  reportProgress("Ops Console workspace mounted");
+  await assertPersistentHostNavigation(client, diagnostics, missionId, origin, signal);
 
   reportProgress("proving manifest failure containment and immutable-release retry");
   await assertContainedRemoteFailureAndRetry({
     client,
     diagnostics,
     signal,
-    url: commsUrl,
+    url: opsUrl,
     expectedOrigin: origin,
-    expectedReleaseId: releases.nMinus1.comms,
-    readyExpression:
-      "Boolean(document.querySelector('[data-remote-state=\"ready\"]') && document.querySelector('#comms-application') && document.querySelector('#comms-overview-page') && document.querySelector('#comms-transports') && !document.querySelector('#remote-error') && !document.querySelector('#comms-application-error'))",
+    expectedReleaseId: releases.nMinus1.ops_console,
+    readyExpression: opsSurface.readyExpression,
   });
   reportProgress("manifest failure containment and immutable-release retry observed");
 
@@ -5520,22 +5420,9 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
 
     reportProgress("promoting signed federation generation N");
     await applyReleaseTransition(`${lifecycleUrl}/`, "promote", releases.n);
-    const promotedComms = await assertRemoteSurface({
-      client,
-      diagnostics,
-      signal,
-      url: commsUrl,
-      expectedOrigin: origin,
-      catalogPath: `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/catalog`,
-      applicationKey: "comms",
-      surfaceId: "overview",
-      expectedScope: "mission",
-      readyExpression:
-        "Boolean(document.querySelector('[data-remote-state=\"ready\"]') && document.querySelector('#comms-application') && document.querySelector('#comms-overview-page') && document.querySelector('#comms-transports') && !document.querySelector('#remote-error') && !document.querySelector('#comms-application-error'))",
-      queryPath: commsQueryPath,
-      queryId: "cadence.comms.overview",
-      queryVersion: 1,
-      expectedReleaseId: releases.n.comms,
+    const promotedOps = await assertRemoteSurface({
+      ...opsSurface,
+      expectedReleaseId: releases.n.ops_console,
     });
     const promotedTelemetry = await assertRemoteSurface({
       client,
@@ -5554,22 +5441,12 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
       queryVersion: 1,
       expectedReleaseId: releases.n.telemetry_decom,
     });
-    for (const config of representativeConfigs) {
-      await assertRepresentativeRemoteSurface({
-        ...config,
-        client,
-        diagnostics,
-        signal,
-        args,
-        expectedOrigin: origin,
-        expectedReleaseId: releases.n[config.applicationKey],
-        navigateSurface: true,
-      });
-    }
     assertNoReleaseArtifactRequests(
-      diagnostics.completed(() => true, { generation: promotedTelemetry.generation }),
       [
-        { applicationKey: "comms", releaseId: releases.nMinus1.comms },
+        ...diagnostics.completed(() => true, { generation: promotedOps.generation }),
+        ...diagnostics.completed(() => true, { generation: promotedTelemetry.generation }),
+      ],
+      [
         { applicationKey: "telemetry_decom", releaseId: releases.nMinus1.telemetry_decom },
         { applicationKey: "ops_console", releaseId: releases.nMinus1.ops_console },
       ],
@@ -5579,22 +5456,9 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
 
     reportProgress("rolling back signed federation generation N-1");
     await applyReleaseTransition(`${lifecycleUrl}/`, "rollback", releases.nMinus1);
-    const rolledBackComms = await assertRemoteSurface({
-      client,
-      diagnostics,
-      signal,
-      url: commsUrl,
-      expectedOrigin: origin,
-      catalogPath: `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/catalog`,
-      applicationKey: "comms",
-      surfaceId: "overview",
-      expectedScope: "mission",
-      readyExpression:
-        "Boolean(document.querySelector('[data-remote-state=\"ready\"]') && document.querySelector('#comms-application') && document.querySelector('#comms-overview-page') && document.querySelector('#comms-transports') && !document.querySelector('#remote-error') && !document.querySelector('#comms-application-error'))",
-      queryPath: commsQueryPath,
-      queryId: "cadence.comms.overview",
-      queryVersion: 1,
-      expectedReleaseId: releases.nMinus1.comms,
+    const rolledBackOps = await assertRemoteSurface({
+      ...opsSurface,
+      expectedReleaseId: releases.nMinus1.ops_console,
     });
     const rolledBackTelemetry = await assertRemoteSurface({
       client,
@@ -5613,31 +5477,23 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
       queryVersion: 1,
       expectedReleaseId: releases.nMinus1.telemetry_decom,
     });
-    for (const config of representativeConfigs) {
-      await assertRepresentativeRemoteSurface({
-        ...config,
-        client,
-        diagnostics,
-        signal,
-        args,
-        expectedOrigin: origin,
-        expectedReleaseId: releases.nMinus1[config.applicationKey],
-        navigateSurface: true,
-      });
-    }
     assertNoReleaseArtifactRequests(
-      diagnostics.completed(() => true, { generation: rolledBackTelemetry.generation }),
       [
-        { applicationKey: "comms", releaseId: releases.n.comms },
+        ...diagnostics.completed(() => true, { generation: rolledBackOps.generation }),
+        ...diagnostics.completed(() => true, { generation: rolledBackTelemetry.generation }),
+      ],
+      [
         { applicationKey: "telemetry_decom", releaseId: releases.n.telemetry_decom },
         { applicationKey: "ops_console", releaseId: releases.n.ops_console },
       ],
       "generation N-1 rollback",
     );
     assertImmutableReleaseCacheReuse(
-      diagnostics.completed(() => true, { generation: rolledBackTelemetry.generation }),
       [
-        { applicationKey: "comms", releaseId: releases.nMinus1.comms },
+        ...diagnostics.completed(() => true, { generation: rolledBackOps.generation }),
+        ...diagnostics.completed(() => true, { generation: rolledBackTelemetry.generation }),
+      ],
+      [
         { applicationKey: "telemetry_decom", releaseId: releases.nMinus1.telemetry_decom },
         { applicationKey: "ops_console", releaseId: releases.nMinus1.ops_console },
       ],
@@ -5652,11 +5508,11 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
     const result = {
       origin,
       remotes: [
-        comms.application.release.releaseId,
+        ops.application.release.releaseId,
         telemetry.application.release.releaseId,
-        promotedComms.application.release.releaseId,
+        promotedOps.application.release.releaseId,
         promotedTelemetry.application.release.releaseId,
-        rolledBackComms.application.release.releaseId,
+        rolledBackOps.application.release.releaseId,
         rolledBackTelemetry.application.release.releaseId,
       ],
       queryResponses: diagnostics.completed(
@@ -6354,7 +6210,7 @@ export async function runBrowserGate(
       mobile: false,
     });
 
-    const diagnosticUrl = originUrl ?? requiredArg(args, "--comms-url");
+    const diagnosticUrl = originUrl ?? requiredArg(args, "--ops-url");
     const client = admittedClient;
     assert.ok(client, "CDP client was not admitted");
     const activeDiagnostics = installDiagnostics(client, {
@@ -6653,21 +6509,4 @@ function readBrowserCatalog(value) {
       },
     ),
   };
-}
-
-/** @param {unknown} value @returns {asserts value is {navigation:{fallback_href:string},trusted_surface:{root:{attrs:{id:string}},overview:{transport:{id:string,count:number}}}}} */
-function assertCommsQuery(value) {
-  diagnosticString(diagnosticField(value, "navigation", "fallback_href"), "Comms fallback href");
-  diagnosticString(
-    diagnosticField(value, "trusted_surface", "root", "attrs", "id"),
-    "Comms root ID",
-  );
-  diagnosticString(
-    diagnosticField(value, "trusted_surface", "overview", "transport", "id"),
-    "Comms transport ID",
-  );
-  diagnosticNumber(
-    diagnosticField(value, "trusted_surface", "overview", "transport", "count"),
-    "Comms transport count",
-  );
 }

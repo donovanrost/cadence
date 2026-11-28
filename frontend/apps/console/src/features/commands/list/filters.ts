@@ -23,7 +23,16 @@ export const STAGE_FILTER_WORDS: Readonly<Record<Stage, string>> = {
 };
 export const Q_MAX = 100;
 
-export type CommandFilters = Readonly<{ q: string; target: string | null; stages: Stage[] }>;
+export type CommandFilters = Readonly<{
+  q: string;
+  target: string | null;
+  stages: Stage[];
+  /**
+   * E2 (#546, #1019): groups with a target running this withdrawn mission-model revision (a
+   * withdrawn revision's "50 of N" link opens the list on it). Server-resolved; no id list.
+   */
+  withdrawnRevision: string | null;
+}>;
 
 const isStage = (s: string): s is Stage => (STAGES as readonly string[]).includes(s);
 
@@ -33,11 +42,15 @@ export function filtersOf(query: LocationQuery): CommandFilters {
     q: typeof query.q === "string" ? query.q.trim() : "",
     target: typeof query.target === "string" && query.target ? query.target : null,
     stages: STAGES.filter((s) => raw.filter(isStage).includes(s)),
+    withdrawnRevision:
+      typeof query.withdrawn_revision === "string" && query.withdrawn_revision
+        ? query.withdrawn_revision
+        : null,
   };
 }
 
 export const filtered = (f: CommandFilters) =>
-  f.q !== "" || f.target !== null || f.stages.length > 0;
+  f.q !== "" || f.target !== null || f.stages.length > 0 || f.withdrawnRevision !== null;
 
 /** ux U72: over 100 characters the search isn't sent. */
 export const qProblem = (q: string) =>
@@ -59,6 +72,7 @@ function parts(f: CommandFilters, nameOf: (id: string) => string) {
     stages: f.stages.map((s) => STAGE_FILTER_WORDS[s]).join(", "),
     q: f.q ? `“${f.q}”` : "",
     target: f.target ? nameOf(f.target) : "",
+    withdrawn: f.withdrawnRevision ? "on craft whose model approval was withdrawn" : "",
   };
 }
 
@@ -74,7 +88,7 @@ export function resultLine(
 ): string {
   const p = parts(f, nameOf);
   const head = more ? `${shown} shown` : plural(shown, "command");
-  return [head, p.stages, p.q && `matching ${p.q}`, p.target && `on ${p.target}`]
+  return [head, p.stages, p.q && `matching ${p.q}`, p.target && `on ${p.target}`, p.withdrawn]
     .filter(Boolean)
     .join(" · ");
 }
@@ -82,6 +96,8 @@ export function resultLine(
 /** ux U72: 'No commands match: Failed · “heater”.' (with the target when set). */
 export function emptyLine(f: CommandFilters, nameOf: (id: string) => string): string {
   const p = parts(f, nameOf);
-  const said = [p.stages, p.q, p.target && `on ${p.target}`].filter(Boolean).join(" · ");
+  const said = [p.stages, p.q, p.target && `on ${p.target}`, p.withdrawn]
+    .filter(Boolean)
+    .join(" · ");
   return `No commands match: ${said}.`;
 }

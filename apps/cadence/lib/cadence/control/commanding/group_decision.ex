@@ -50,10 +50,17 @@ defmodule Cadence.Control.Commanding.GroupDecision do
   (`RequestDigest.digest/1`, its content digest).
   """
   @spec members_digest(CommandGroup.t()) :: binary()
-  def members_digest(%CommandGroup{} = group) do
+  def members_digest(%CommandGroup{} = group),
+    do:
+      members_digest(
+        group,
+        GroupStore.members(group.organization_id, group.mission_id, group.command_group_id)
+      )
+
+  # The same digest over members the caller already read.
+  defp members_digest(%CommandGroup{}, members) do
     entries =
-      group.organization_id
-      |> GroupStore.members(group.mission_id, group.command_group_id)
+      members
       |> Enum.map(&[&1.command_request_id, RequestDigest.digest(&1)])
       |> Enum.sort()
 
@@ -104,9 +111,11 @@ defmodule Cadence.Control.Commanding.GroupDecision do
     with {:ok, group} <- GroupStore.fetch(org, mission, group_id, lock: true),
          :ok <- decidable(group, actor, decision),
          :ok <- same_basis(group, snapshot),
-         :ok <- members_as_submitted(group, decision),
+         # Read once: the count check, the digest and the decision all use these members.
+         members = GroupStore.members(org, mission, group_id),
+         :ok <- members_as_submitted(group, decision, members),
          {:ok, seen} <- withdrawn_seen(group, decision) do
-      apply_decision(group, actor, decision, seen)
+      apply_decision(group, actor, decision, seen, members)
     end
   end
 
@@ -198,18 +207,15 @@ defmodule Cadence.Control.Commanding.GroupDecision do
   # member_count, not the member ids. A GO on a group whose member rows no longer match what
   # submission recorded is refused (four-eyes audit 11-17, P0, defence in depth). Send back and
   # NO-GO stay allowed: they release nothing, and a group nobody can stop is worse (ux U92).
-  defp members_as_submitted(group, %{kind: kind}) when kind in [:go, :go_excluding] do
-    current =
-      group.organization_id
-      |> GroupStore.members(group.mission_id, group.command_group_id)
-      |> length()
+  defp members_as_submitted(group, %{kind: kind}, members) when kind in [:go, :go_excluding] do
+    current = length(members)
 
     if current == group.member_count,
       do: :ok,
       else: {:error, {:command_group_members_changed, group.member_count, current}}
   end
 
-  defp members_as_submitted(_group, _decision), do: :ok
+  defp members_as_submitted(_group, _decision, _members), do: :ok
 
   defp same_basis(group, snapshot) do
     if group.basis["token"] == snapshot.token,
@@ -217,11 +223,10 @@ defmodule Cadence.Control.Commanding.GroupDecision do
       else: {:error, :command_group_basis_changed}
   end
 
-  defp apply_decision(group, actor, decision, seen) do
+  defp apply_decision(group, actor, decision, seen, members) do
     now = DateTime.utc_now()
     # Before anything changes: the members the decider's token covered (#117 step 4b records it).
-    members_digest = members_digest(group)
-    members = GroupStore.members(group.organization_id, group.mission_id, group.command_group_id)
+    members_digest = members_digest(group, members)
     {approved, rejected} = split(members, group, decision)
     note = Map.get(decision, :note)
     craft = Map.new(group.targets, &{&1["index"], &1["spacecraft_id"]})
@@ -384,7 +389,7 @@ defmodule Cadence.Control.Commanding.GroupDecision do
 
   defp after_commit({:ok, %{group: group, lanes: lanes}}, org, mission) do
     ScopedReadUpdates.publish(:commanding_changed, org, mission)
-    Enum.each(lanes, &Dispatcher.kick_lane(ProcessNamespace.default(), org, mission, &1))
+    Dispatcher.kick_lanes(ProcessNamespace.default(), org, mission, lanes)
     {:ok, group}
   end
 

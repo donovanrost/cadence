@@ -33,6 +33,59 @@ defmodule Cadence.Runtime.MissionRuntimeSpecTest do
     assert :erts_debug.flat_size(compact) < div(:erts_debug.flat_size(legacy), 100)
   end
 
+  # CB-9 (#512): the caller names the hash the binding set must have. A missing key is an error,
+  # never a default to the computed hash, so no path checks computed against computed.
+  describe "the expected binding-set hash is required" do
+    defp identity_attrs(binding_set) do
+      %{
+        activation_id: "a",
+        mission_id: binding_set.mission_id,
+        generation: 1,
+        binding_set_id: binding_set.binding_set_id,
+        binding_set_version: binding_set.version,
+        binding_set: binding_set,
+        activated_at: ~U[2026-11-28 00:00:00Z]
+      }
+    end
+
+    setup do
+      %{
+        binding_set: BindingSet.new(%{mission_id: "m", binding_set_id: "basis", version: 1})
+      }
+    end
+
+    test "a spec built without it is refused", %{binding_set: binding_set} do
+      assert {:error, {:invalid_mission_runtime_spec, :binding_set_content_sha256}} =
+               MissionRuntimeSpec.new(identity_attrs(binding_set))
+
+      assert {:error, {:invalid_mission_runtime_spec, :binding_set_content_sha256}} =
+               MissionRuntimeSpec.new(
+                 Map.put(identity_attrs(binding_set), :binding_set_content_sha256, nil)
+               )
+    end
+
+    test "one that names another hash is a mismatch", %{binding_set: binding_set} do
+      assert {:error, {:mission_runtime_spec_mismatch, :binding_set_content_sha256}} =
+               MissionRuntimeSpec.new(
+                 Map.put(identity_attrs(binding_set), :binding_set_content_sha256, "not-its-hash")
+               )
+    end
+
+    test "the right hash passes this check (the spec goes on to its mission model)", %{
+      binding_set: binding_set
+    } do
+      attrs =
+        Map.put(
+          identity_attrs(binding_set),
+          :binding_set_content_sha256,
+          MissionRuntimeSpec.content_sha256(binding_set)
+        )
+
+      assert {:error, {:invalid_mission_runtime_spec, :mission_model_revision_id}} =
+               MissionRuntimeSpec.new(attrs)
+    end
+  end
+
   test "selection keeps distinct executable plans and prunes unrelated models" do
     first = basis("first", [%{offset: 8}])
     second = basis("second", [%{offset: 16}])

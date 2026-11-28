@@ -181,6 +181,12 @@ No side effects. Returns:
   `not_before` (or now) to `expires_at` (or 6 h after that start). A HOLD has per-target
   `reason: "no_commandable_contact"` and `next_contact: null`. C4 draws from it. Evidence
   `{from, until}` is the window.
+  The read is of the targets' own passes only, and all of them (paged by the keyset until it is
+  complete), so a mission with more than 500 passes in the window can't cut a target's pass off
+  (#1040). If it can't be completed (40 pages of 500, `config :cadence,
+  :command_preflight_contact_pages`), the check is a `no_go` with `evidence.reason:
+  "contact_read_truncated"` and no per-target rows: never a HOLD for "no contact" decided from a
+  truncated read.
 - `model_approval_withdrawn` (E2c, #546; label "Composition"): a target whose **active** generation
   (what a command is encoded and verified against, not the profile's pin) runs a revision whose
   approval was withdrawn. An ackable HOLD, never a NO-GO: the craft keeps its last generation and
@@ -341,7 +347,7 @@ Body: the draft plus `preflight_digest` (from the preflight the operator saw) an
   withdrawal read over the group's craft and one read of the waiting members' approval rows, so
   the query count doesn't depend on the number of targets. A person naming the contact is not
   refused, so this is a caution for them, not a block.
-- **Paged targets and events (#795).** Show also carries `targets_page: {total, revision,
+- **Paged targets and events (#795).** Show also carries `targets_page: {total, unnamed, revision,
   next_cursor}` and `events_page: {total, next_cursor}`: how many there are, and `revision` changes
   whenever anything a page of targets shows does: a target's stage, `blocked`, or a member's facts (a live client refetches its pages then, or when
   `events_page.total` moves). Each target also carries its `index`. Show (and the create answer)
@@ -354,7 +360,10 @@ Body: the draft plus `preflight_digest` (from the preflight the operator saw) an
     substring of the name or spacecraft id; `needs_you=true` keeps the targets "Needs you" lists: a
     target at `verify_failed`, `release_failed` or `indeterminate`, or one with `blocked` set (a
     lane held by a release of unknown outcome, which sits on a waiting target of any stage).
-    Filters combine. `meta.total` counts the filtered targets.
+    `unnamed=true` keeps the targets with no name (nil or empty): the ones the console's GO check
+    counts, so it can list them; `targets_page.unnamed` on show is that count for the whole group,
+    whatever the page (#1064). `needs_you` and `unnamed` are strictly `true` or `false`, else 422
+    `invalid_params`; `false` (like leaving it out) means don't filter, not "only the named". Filters combine. `meta.total` counts the filtered targets.
   - `GET /command-groups/:id/events?limit=&cursor=&kind=`: a page of `events[]`, chronological, the
     latest first; the cursor reads back to older ones. `limit` 1..200 (default 50). `kind` is a comma
     list of event kinds (the vocabulary under Timeline events); `meta.total` and the cursor count

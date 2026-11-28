@@ -8,17 +8,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Reads.ApplicationSurfaces.OpsConsole.Presentation
 
-  alias Cadence.Reads.ApplicationSurfaces.Planning.{
-    ContactDetail,
-    ContactPlanShow,
-    ContactRecord,
-    ContactSchedule,
-    FleetDirectory,
-    FleetRun,
-    FleetStart
-  }
-
-  alias Cadence.Reads.CommandMonitor
   alias Cadence.Reads.LimitAlarmConditions
   alias Cadence.Reads.OpsWorkspace.Landing
 
@@ -26,12 +15,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
   @application_version 1
   @surface_version 1
   @exploration_query_keys ~w(point_id spacecraft_id scope_kind scope_id time_mode time_axis from to replay_run_id order limit selection_view data_view validity_state realm logical_source data_source_id source_binding_id source_dashboard_id sample_id selected_time question limit_mode)
-  @subject_param_keys %{
-    "contact_plan_show" => "contact_plan_id",
-    "contact_detail" => "provider_reservation_id",
-    "contact_record" => "contact_id",
-    "fleet_planning_run" => "fleet_planning_run_id"
-  }
 
   @impl true
   def application_key, do: @application_key
@@ -105,55 +88,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
     end
   end
 
-  defp validate_params(%{id: "commands"}, params) do
-    case CommandMonitor.admit_query(Map.delete(params, "mission_id")) do
-      {:ok, _} -> :ok
-      _ -> {:error, :invalid_application_surface_query}
-    end
-  end
-
-  defp validate_params(%{id: "fleet_planning"}, params) do
-    case FleetDirectory.admit_query(Map.delete(params, "mission_id")) do
-      {:ok, _} -> :ok
-      {:error, _} = error -> error
-    end
-  end
-
-  defp validate_params(%{id: "contact_schedule"}, params) do
-    case ContactSchedule.admit_query(Map.delete(params, "mission_id")) do
-      {:ok, _} -> :ok
-      {:error, _} = error -> error
-    end
-  end
-
-  defp validate_params(%{id: "contact_record"}, params) do
-    case ContactRecord.admit_query(Map.delete(params, "mission_id")) do
-      {:ok, _} -> :ok
-      {:error, _} = error -> error
-    end
-  end
-
-  defp validate_params(%{id: "contact_detail"}, params) do
-    case ContactDetail.admit_query(Map.delete(params, "mission_id")) do
-      {:ok, _} -> :ok
-      {:error, _} = error -> error
-    end
-  end
-
-  defp validate_params(%{id: "contact_plan_show"}, params) do
-    case ContactPlanShow.admit_query(Map.delete(params, "mission_id")) do
-      {:ok, _} -> :ok
-      {:error, _} = error -> error
-    end
-  end
-
-  defp validate_params(%{id: "fleet_planning_run"}, params) do
-    case FleetRun.admit_query(Map.delete(params, "mission_id")) do
-      {:ok, _} -> :ok
-      {:error, _} = error -> error
-    end
-  end
-
   defp validate_params(%{id: "timeline"}, params) do
     if Enum.all?(params, fn {key, value} ->
          key in ~w(mission_id category kind severity spacecraft_id from to event_id source_dashboard_id before_at before_id) and
@@ -161,7 +95,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
        end), do: :ok, else: {:error, :unsupported_application_surface_query}
   end
 
-  defp validate_params(spec, params) do
+  defp validate_params(_spec, params) do
     allowed =
       MapSet.new([
         "mission_id",
@@ -174,11 +108,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
         "share_id",
         "snapshot_id",
         "playlist_id",
-        "contact_requirement_id",
-        "contact_plan_id",
-        "provider_reservation_id",
-        "contact_id",
-        "fleet_planning_run_id",
         "data_source_id",
         "source_binding_id",
         "point_id",
@@ -213,20 +142,11 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
 
     with true <- Enum.all?(Map.keys(params), &is_binary/1),
          true <- Enum.all?(Map.keys(params), &MapSet.member?(allowed, &1)),
-         :ok <- JSONBoundary.validate(params),
-         :ok <- validate_subject_param(spec.id, params) do
+         :ok <- JSONBoundary.validate(params) do
       :ok
     else
       _invalid -> {:error, :invalid_application_surface_query}
     end
-  end
-
-  defp validate_subject_param(surface_id, params) do
-    key = Map.get(@subject_param_keys, surface_id)
-
-    if is_nil(key) or valid_text?(Map.get(params, key)),
-      do: :ok,
-      else: {:error, :subject_required}
   end
 
   defp validate_mission_param(mission_id, params) do
@@ -240,44 +160,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
   defp validate_scope_mission(%Scope{mission_id: nil}, _mission_id), do: :ok
   defp validate_scope_mission(%Scope{mission_id: mission_id}, mission_id), do: :ok
   defp validate_scope_mission(%Scope{}, _mission_id), do: {:error, :scope_mismatch}
-
-  defp validate_subject("contact_plan_show", organization_id, mission_id, params) do
-    case Cadence.Management.Contacts.fetch_plan(
-           organization_id,
-           mission_id,
-           params["contact_plan_id"]
-         ) do
-      {:ok, _plan, _version} -> :ok
-      _ -> {:error, :subject_not_found}
-    end
-  end
-
-  defp validate_subject("contact_detail", organization_id, mission_id, params),
-    do:
-      fetch_subject(Cadence.Contacts.ProviderReservations, :fetch, [
-        organization_id,
-        mission_id,
-        params["provider_reservation_id"]
-      ])
-
-  defp validate_subject("contact_record", organization_id, mission_id, params) do
-    contact_id = params["contact_id"]
-
-    case {Cadence.Contacts.fetch_scheduled_contact(organization_id, mission_id, contact_id),
-          Cadence.Contacts.fetch_realized_contact(organization_id, mission_id, contact_id)} do
-      {{:ok, _contact}, _other} -> :ok
-      {_other, {:ok, _contact}} -> :ok
-      _missing -> {:error, :subject_not_found}
-    end
-  end
-
-  defp validate_subject("fleet_planning_run", organization_id, mission_id, params),
-    do:
-      fetch_subject(Cadence.ContactPlanning.FleetPlanningRuns, :fetch, [
-        organization_id,
-        mission_id,
-        params["fleet_planning_run_id"]
-      ])
 
   defp validate_subject(surface_id, organization_id, mission_id, params)
        when surface_id in ["data_sources", "data_source_settings"] do
@@ -298,15 +180,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
 
   defp validate_subject(_surface_id, _organization_id, _mission_id, _params), do: :ok
 
-  defp fetch_subject(module, function, arguments) do
-    case apply(module, function, arguments) do
-      {:ok, _subject} -> :ok
-      _missing -> {:error, :subject_not_found}
-    end
-  rescue
-    _exception -> {:error, :subject_not_found}
-  end
-
   defp fetch_scoped_subject(module, function, arguments, organization_id, mission_id) do
     case apply(module, function, arguments) do
       {:ok, subject} -> scope_subject(subject, organization_id, mission_id)
@@ -326,7 +199,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
   defp dispatch("workspace", scope, mission, _params), do: landing(scope, mission)
   defp dispatch("alarms", scope, mission, params), do: alarms(scope, mission, params)
   defp dispatch("timeline", scope, mission, params), do: timeline(scope, mission, params)
-  defp dispatch("commands", scope, mission, params), do: commands(scope, mission, params)
 
   defp dispatch("data_sources", scope, mission, params),
     do: envelope("OpsDataSources", Presentation.data_sources(scope, mission, params, :reader))
@@ -337,55 +209,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
 
   defp dispatch("data_source_settings", scope, mission, params),
     do: envelope("OpsDataSources", Presentation.data_sources(scope, mission, params, :settings))
-
-  defp dispatch("contact_schedule", scope, mission, params) do
-    case ContactSchedule.load(scope, mission, params) do
-      {:ok, model} -> envelope("OpsContactSchedule", model)
-      {:error, _} -> throw(:contact_schedule_unavailable)
-    end
-  end
-
-  defp dispatch("contact_record", scope, mission, params) do
-    case ContactRecord.load(scope, mission, params) do
-      {:ok, model} -> envelope("OpsContactRecord", model)
-      {:error, _} -> throw(:contact_record_unavailable)
-    end
-  end
-
-  defp dispatch("contact_detail", scope, mission, params) do
-    case ContactDetail.load(scope, mission, params) do
-      {:ok, model} -> envelope("OpsContactDetail", model)
-      {:error, _} -> throw(:reservation_detail_unavailable)
-    end
-  end
-
-  defp dispatch("contact_plan_show", scope, mission, params) do
-    case ContactPlanShow.load(scope, mission, params) do
-      {:ok, model} -> envelope("OpsContactPlanShow", model)
-      {:error, _} -> throw(:plan_detail_unavailable)
-    end
-  end
-
-  defp dispatch("fleet_planning", scope, mission, params) do
-    case FleetDirectory.load(scope, mission, params) do
-      {:ok, model} -> envelope("OpsFleetPlanning", model)
-      {:error, reason} -> raise ArgumentError, "Fleet directory unavailable: #{inspect(reason)}"
-    end
-  end
-
-  defp dispatch("fleet_planning_new", scope, mission, _params) do
-    case FleetStart.load(scope, mission) do
-      {:ok, model} -> envelope("OpsFleetPlanningNew", model)
-      {:error, reason} -> raise ArgumentError, "Fleet start unavailable: #{inspect(reason)}"
-    end
-  end
-
-  defp dispatch("fleet_planning_run", scope, mission, params) do
-    case FleetRun.load(scope, mission, params) do
-      {:ok, model} -> envelope("OpsFleetPlanningRun", model)
-      {:error, _} -> throw(:fleet_run_unavailable)
-    end
-  end
 
   defp dispatch(surface_id, _scope, mission, params), do: generic(surface_id, mission, params)
 
@@ -434,13 +257,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
     })
   end
 
-  defp commands(_scope, mission, params) do
-    envelope("OpsCommands", %{
-      "mission_id" => mission.mission_id,
-      "query" => Map.delete(params, "mission_id")
-    })
-  end
-
   defp page(id, title, mission, params),
     do: %{
       "id" => id,
@@ -456,14 +272,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
     }
 
   defp component_name("workspace"), do: "OpsConsoleLanding"
-  defp component_name("contact_schedule"), do: "OpsContactSchedule"
-  defp component_name("contact_plan_show"), do: "OpsContactPlanShow"
-  defp component_name("contact_detail"), do: "OpsContactDetail"
-  defp component_name("contact_record"), do: "OpsContactRecord"
-  defp component_name("fleet_planning"), do: "OpsFleetPlanning"
-  defp component_name("fleet_planning_new"), do: "OpsFleetPlanningNew"
-  defp component_name("fleet_planning_run"), do: "OpsFleetPlanningRun"
-  defp component_name("commands"), do: "OpsCommands"
   defp component_name("telemetry_explore"), do: "OpsTelemetryExplore"
   defp component_name("data_sources"), do: "OpsDataSources"
   defp component_name("data_source_registration"), do: "OpsDataSourceRegistration"
@@ -481,8 +289,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
     do: String.valid?(value) and not Regex.match?(~r/[\x00-\x1f\x7f]/u, value)
 
   defp exploration_value?(_), do: false
-
-  defp valid_text?(value), do: is_binary(value) and value != ""
 
   defp title(surface_id),
     do:

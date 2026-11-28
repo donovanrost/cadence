@@ -138,6 +138,37 @@ defmodule Cadence.Catalog.FleetSnapshot do
 
   def spacecraft_on_catalog(_metadata, _catalog_revision_id), do: []
 
+  @doc """
+  The entries that own `source_ids` (`source_id => entry`; absent: no entry owns it), in one query
+  for a v2 fleet whatever the count: `entry_for_source/2` for many sources at once.
+  """
+  @spec entries_for_sources(map(), [String.t()]) :: {:ok, map()} | {:error, term()}
+  def entries_for_sources(_metadata, []), do: {:ok, %{}}
+
+  def entries_for_sources(%{"spacecraft_configuration_version" => 2, "fleet" => fleet}, ids) do
+    case members_query(fleet) do
+      nil ->
+        {:error, :invalid_spacecraft_model_bindings}
+
+      query ->
+        wanted = MapSet.new(ids)
+
+        {:ok,
+         query
+         |> where([m], fragment("? && ?", m.source_endpoint_ids, type(^ids, {:array, :string})))
+         |> with_entries()
+         |> Repo.all()
+         |> Enum.flat_map(fn {_spacecraft_id, entry} ->
+           for source <- Map.get(entry, "source_endpoint_ids", []),
+               MapSet.member?(wanted, source),
+               do: {source, entry}
+         end)
+         |> Map.new()}
+    end
+  end
+
+  def entries_for_sources(_metadata, _ids), do: {:error, :spacecraft_model_not_active}
+
   @doc "One spacecraft's entry."
   @spec entry(map(), String.t()) :: {:ok, map()} | {:error, :spacecraft_model_not_active}
   def entry(%{"spacecraft_configuration_version" => 2, "fleet" => fleet}, spacecraft_id) do

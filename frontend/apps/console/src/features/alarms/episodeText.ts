@@ -1,3 +1,4 @@
+import { isKnown } from "@/api";
 import { formatClock, formatCountdown, type OpState } from "@/ui";
 import type { Episode, EpisodeDetail, EpisodeEvent } from "./episodes.ts";
 
@@ -71,6 +72,8 @@ export function eventText(event: EpisodeEvent): string {
   const p = event.payload;
   const note = text(field(p, "note"));
   const suffix = note ? `: “${note}”` : "";
+  // A kind this console doesn't know says the server's word, plainly (U20).
+  if (!isKnown(event.kind)) return sentenceOf(event.kind.unrecognized);
   switch (event.kind) {
     case "raised":
       return "Alarm raised";
@@ -92,10 +95,20 @@ export function eventText(event: EpisodeEvent): string {
       return field(p, "unacknowledged") === true
         ? "Cleared before anyone acknowledged"
         : "Cleared, back in limits";
+    // #451: the episode itself is unchanged; only the rules in force on its parameter moved.
+    case "rule_changed":
+      return "The limits for this alarm changed";
   }
 }
 
+/** `rule_reset` → "Rule reset". */
+const sentenceOf = (raw: string) => {
+  const words = raw.replaceAll("_", " ").trim();
+  return words ? `${words.charAt(0).toUpperCase()}${words.slice(1)}` : "Event";
+};
+
 export function eventState(event: EpisodeEvent): OpState {
+  if (!isKnown(event.kind)) return "neutral";
   switch (event.kind) {
     case "raised":
     case "escalated":
@@ -109,6 +122,7 @@ export function eventState(event: EpisodeEvent): OpState {
     case "unassigned":
     case "note":
     case "handed_off":
+    case "rule_changed":
       return "neutral";
   }
 }

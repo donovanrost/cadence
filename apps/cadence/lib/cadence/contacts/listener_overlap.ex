@@ -85,13 +85,14 @@ defmodule Cadence.Contacts.ListenerOverlap do
   """
   @spec scheduled_listeners_by_id([ScheduledContact.t()]) :: %{binary() => [listener()]}
   def scheduled_listeners_by_id(contacts) do
-    contacts
-    |> Enum.group_by(&route_key/1)
-    |> Enum.flat_map(fn {_key, [first | _] = same} ->
-      listeners = scheduled_listeners(first)
-      Enum.map(same, &{&1.scheduled_contact_id, listeners})
-    end)
-    |> Map.new()
+    routes = contacts |> Enum.group_by(&route_key/1) |> Map.values()
+    resolved = routes |> Enum.map(&hd/1) |> ContactRuntimeConfig.resolve_paths_many()
+
+    for [first | _] = same <- routes,
+        listeners = resolved_listeners(Map.fetch!(resolved, first)),
+        contact <- same,
+        into: %{},
+        do: {contact.scheduled_contact_id, listeners}
   end
 
   defp route_key(%ScheduledContact{} = c),
@@ -117,11 +118,11 @@ defmodule Cadence.Contacts.ListenerOverlap do
   @doc "A booked pass's own listeners, its paths resolved as the runtime resolves them."
   @spec scheduled_listeners(ScheduledContact.t()) :: [listener()]
   def scheduled_listeners(%ScheduledContact{} = contact) do
-    case ContactRuntimeConfig.resolve_paths(contact) do
-      {:ok, paths} -> listeners(paths)
-      {:error, _unresolvable} -> []
-    end
+    contact |> ContactRuntimeConfig.resolve_paths() |> resolved_listeners()
   end
+
+  defp resolved_listeners({:ok, paths}), do: listeners(paths)
+  defp resolved_listeners({:error, _unresolvable}), do: []
 
   @doc """
   A planned pass's own listeners: its route's path template resolved as a booking's would be

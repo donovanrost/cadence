@@ -38,10 +38,6 @@ defmodule Cadence.ContactPlanning.ContactPlans do
 
   @insert_batch_size 3_000
 
-  defguardp review_page?(version, page)
-            when is_integer(version) and version in 1..2_147_483_647 and
-                   is_integer(page) and page in 1..1_000_000
-
   @spec create(Scope.t(), binary(), map(), keyword()) ::
           {:ok, ContactPlan.t(), ContactPlanVersion.t()} | {:error, term()}
   def create(%Scope{} = current_scope, mission_id, attrs, opts \\ []) do
@@ -296,90 +292,6 @@ defmodule Cadence.ContactPlanning.ContactPlans do
     |> Repo.all()
     |> Enum.map(&ContactPlanVersionRow.to_domain/1)
   end
-
-  @doc "Bounded immutable history through an explicitly reviewed plan version."
-  def list_versions_page(organization_id, mission_id, plan_id, through_version, page)
-      when is_binary(organization_id) and is_binary(mission_id) and is_binary(plan_id) and
-             review_page?(through_version, page) do
-    rows =
-      ContactPlanVersionRow
-      |> where(
-        [version],
-        version.organization_id == ^organization_id and version.mission_id == ^mission_id and
-          version.contact_plan_id == ^plan_id and version.version <= ^through_version
-      )
-      |> order_by([version], desc: version.version)
-      |> offset(^((page - 1) * 25))
-      |> limit(26)
-      |> Repo.all()
-
-    {:ok,
-     %{
-       entries: rows |> Enum.take(25) |> Enum.map(&ContactPlanVersionRow.to_domain/1),
-       more?: length(rows) > 25
-     }}
-  end
-
-  def list_versions_page(_, _, _, _, _), do: {:error, :invalid_contact_plan_review_page}
-
-  @doc """
-  Reviews the immutable manifest in selected, locked, then rejected order.
-
-  Each entry retains its disposition: locked commitments are not new bookings.
-  Only the requested page's snapshots are loaded, within the plan's scope and
-  declared runs. Missing evidence fails the page instead of disappearing through
-  an inner join. These reads do not authorize decisions or provider effects.
-  """
-  def list_opportunities_page(organization_id, mission_id, plan_id, version, page)
-      when is_binary(organization_id) and is_binary(mission_id) and is_binary(plan_id) and
-             review_page?(version, page) do
-    with {:ok, manifest} <- fetch_version(organization_id, mission_id, plan_id, version) do
-      selections =
-        [
-          {:selected, manifest.selected_snapshot_ids},
-          {:locked, manifest.locked_snapshot_ids},
-          {:rejected, manifest.rejected_snapshot_ids}
-        ]
-        |> Stream.flat_map(fn {disposition, ids} ->
-          Stream.map(ids, &{disposition, &1})
-        end)
-        |> Stream.drop((page - 1) * 25)
-        |> Enum.take(26)
-
-      entries = Enum.take(selections, 25)
-      ids = Enum.map(entries, &elem(&1, 1))
-      run_ids = Map.fetch!(manifest.planning_run_refs_document, "runs")
-
-      snapshots =
-        ContactOpportunitySnapshotRow
-        |> where(
-          [snapshot],
-          snapshot.organization_id == ^organization_id and snapshot.mission_id == ^mission_id and
-            snapshot.contact_planning_run_id in ^run_ids and
-            snapshot.contact_opportunity_snapshot_id in ^ids
-        )
-        |> Repo.all()
-        |> Repo.preload(:search)
-        |> Map.new(
-          &{&1.contact_opportunity_snapshot_id, ContactOpportunitySnapshotRow.to_domain(&1)}
-        )
-
-      if map_size(snapshots) == length(entries) do
-        {:ok,
-         %{
-           entries:
-             Enum.map(entries, fn {disposition, id} ->
-               %{disposition: disposition, snapshot: Map.fetch!(snapshots, id)}
-             end),
-           more?: length(selections) > 25
-         }}
-      else
-        {:error, :contact_plan_opportunity_evidence_missing}
-      end
-    end
-  end
-
-  def list_opportunities_page(_, _, _, _, _), do: {:error, :invalid_contact_plan_review_page}
 
   @spec selected_snapshots(binary(), binary(), binary(), pos_integer()) :: [struct()]
   def selected_snapshots(organization_id, mission_id, plan_id, version) do
