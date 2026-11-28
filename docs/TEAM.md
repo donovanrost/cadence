@@ -147,7 +147,7 @@ Laptop 1 worktrees live in `~/.herdr/worktrees/cadence/<handle>`. The new agent 
 | console | Head of Console | laptop 1 | `console` | Claude Opus 5.5, high | 2026-11-25 |
 | console-eng | Frontend engineer, Console (head: console) | laptop 1 | `console-eng` | Claude Opus 5.5, high | 2026-11-25 |
 | ground | Head of Ground & Comms | laptop 1 | `ground` | Claude Opus 5.5, high | 2026-11-25 |
-| ground-scale | Ground & Comms backend and scale engineer (reports to ground) | laptop 2 | `donovans-macbook-pro-1/ground-scale` | Codex, high | 2026-11-25 |
+| ground-scale | Engineer, Mission Model & Spacecraft (head: mission-model; moved from ground 2026-11-28 for the overhaul) | laptop 2 | `donovans-macbook-pro-1/ground-scale` | Codex, high | 2026-11-25 |
 | commanding | Head of Commanding & Approvals | laptop 2 | `donovans-macbook-pro-1/commanding` | Claude Opus 5.5, high | 2026-11-25 |
 | mission-model | Head of Mission Model & Spacecraft | laptop 2 | `donovans-macbook-pro-1/mission-model` | Claude Opus 5.5, high | 2026-11-25 |
 | telemetry | Head of Telemetry & Data | laptop 2 | `donovans-macbook-pro-1/telemetry` | Claude Opus 5.5, high | 2026-11-25 |
