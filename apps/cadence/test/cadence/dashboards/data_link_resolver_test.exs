@@ -25,7 +25,7 @@ defmodule Cadence.Dashboards.DataLinkResolverTest do
   }
 
   alias Cadence.Limits
-  alias Cadence.Limits.{Definition, DefinitionLifecycle}
+  alias Cadence.Limits.{Definition, DefinitionLifecycle, Store}
 
   alias Cadence.Repo
   alias Cadence.SourceEndpoints.SourceEndpoint
@@ -783,7 +783,7 @@ defmodule Cadence.Dashboards.DataLinkResolverTest do
     assert {:ok, _run} = Cadence.Limits.evaluate(mission_id)
 
     [event] =
-      Cadence.Limits.Store.list_latest_states(mission_id,
+      Store.list_latest_states(mission_id,
         organization_id: organization_id,
         point_id: "HK.counter"
       )
