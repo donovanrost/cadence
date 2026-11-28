@@ -11,7 +11,7 @@ defmodule Cadence.Comms.TransportKinds.TCPSocket do
 
   import Cadence.Comms.TransportKinds.TCPSocket.Fields
 
-  alias Cadence.Comms.{PeerAddresses, Transport}
+  alias Cadence.Comms.{ListenerChoice, PeerAddresses, Transport}
   alias Cadence.Comms.TransportKind.Definition
   alias Cadence.Contacts.ProviderProfile
 
@@ -40,7 +40,6 @@ defmodule Cadence.Comms.TransportKinds.TCPSocket do
     "host" => :host,
     "ingress_metadata" => :ingress_metadata,
     "ingress_protocol_family" => :ingress_protocol_family,
-    "listener" => :listener,
     "mode" => :mode,
     "policy" => :policy,
     "port" => :port,
@@ -188,15 +187,18 @@ defmodule Cadence.Comms.TransportKinds.TCPSocket do
 
   @impl true
   def normalize_config(config) when is_map(config) do
-    with {:ok, mode} <- tcp_mode(value(config, "mode", "listen")),
+    with {:ok, choice} <- ListenerChoice.parse(ListenerChoice.value(config)),
+         {:ok, mode} <- tcp_mode(value(config, "mode", "listen")),
          {:ok, direction_capability} <-
            direction_capability(value(config, "direction_capability", value(config, "direction"))),
+         :ok <- ListenerChoice.validate_target(choice, mode, direction_capability),
          {:ok, host} <- required_text(value(config, "host"), "Host is required."),
          {:ok, port} <- port(value(config, "port")),
          {:ok, allowlist} <- listener_allowlist(config, mode),
          {:ok, framing_mode} <- framing_mode(value(config, "framing_mode", framing_value(config))),
          {:ok, frame_size} <-
-           frame_size(
+           listener_frame_size(
+             choice,
              value(config, "fixed_message_bytes", value(config, "frame_size")),
              framing_mode
            ),
@@ -207,36 +209,66 @@ defmodule Cadence.Comms.TransportKinds.TCPSocket do
            ingress_protocol_family(value(config, "ingress_protocol_family")),
          {:ok, ingress_metadata} <- ingress_metadata(value(config, "ingress_metadata", %{})),
          {:ok, resource_id} <- uplink_resource_id(value(config, "uplink_resource_id")) do
-      {:ok,
-       %{
-         "adapter" => "tcp_socket",
-         "mode" => mode,
-         "direction_capability" => direction_capability,
-         "host" => host,
-         "port" => port,
-         "framing" => compact(%{"mode" => framing_mode, "fixed_message_bytes" => frame_size}),
-         "tls" => %{"enabled" => tls_enabled},
-         "reconnect" => reconnect_configuration(mode, reconnect_policy)
-       }
-       |> maybe_put_uplink_resource(resource_id)
-       |> maybe_put_allowlist(allowlist)
-       |> maybe_put_fixed_message_bytes(frame_size)
-       |> maybe_put_ingress_protocol_family(ingress_protocol_family)
-       |> maybe_put_ingress_metadata(ingress_metadata)
-       |> put_listener_options(config)}
+      normalized =
+        %{
+          "adapter" => "tcp_socket",
+          "mode" => mode,
+          "direction_capability" => direction_capability,
+          "host" => host,
+          "port" => port,
+          "framing" => compact(%{"mode" => framing_mode, "fixed_message_bytes" => frame_size}),
+          "tls" => %{"enabled" => tls_enabled},
+          "reconnect" => reconnect_configuration(mode, reconnect_policy)
+        }
+        |> maybe_put_uplink_resource(resource_id)
+        |> maybe_put_allowlist(allowlist)
+        |> maybe_put_fixed_message_bytes(frame_size)
+        |> maybe_put_ingress_protocol_family(ingress_protocol_family)
+        |> maybe_put_ingress_metadata(ingress_metadata)
+        |> put_delivery_options(config)
+
+      with_listener(normalized, choice)
     end
   end
+
+  defp listener_frame_size("shared", bytes, framing) do
+    case frame_size(bytes, framing) do
+      {:ok, _bytes} = success -> success
+      {:error, _reason} -> {:error, :shared_listener_requires_tm_framing}
+    end
+  end
+
+  defp listener_frame_size(_choice, bytes, framing), do: frame_size(bytes, framing)
 
   defp listener_allowlist(config, mode) do
     peers = value(config, "expected_peer_addresses")
 
-    if value(config, "delivery_auth") in [:mtls, "mtls"] and peers in [nil, []],
-      do: {:ok, nil},
-      else: allowlist(peers, mode)
+    cond do
+      value(config, "delivery_auth") in [:mtls, "mtls"] and peers in [nil, []] ->
+        {:ok, nil}
+
+      mode == "listen" and ListenerChoice.shared?(config) and
+          value(config, "delivery_auth") not in [:mtls, "mtls"] ->
+        case allowlist(peers, mode) do
+          {:ok, _entries} = success -> success
+          {:error, _reason} -> {:error, :shared_listener_requires_allowlist}
+        end
+
+      true ->
+        allowlist(peers, mode)
+    end
   end
 
-  defp put_listener_options(normalized, input) do
-    for key <- ["delivery_auth", "delivery_credential_ref", "listener"],
+  @doc "Applies the Cadence-owned listener choice to normalized TCP settings."
+  def with_listener(normalized, value) do
+    with {:ok, choice} <- ListenerChoice.parse(value),
+         :ok <- ListenerChoice.validate(choice, normalized) do
+      {:ok, if(choice, do: Map.put(normalized, "listener", choice), else: normalized)}
+    end
+  end
+
+  defp put_delivery_options(normalized, input) do
+    for key <- ["delivery_auth", "delivery_credential_ref"],
         option = value(input, key),
         not is_nil(option),
         reduce: normalized do
@@ -300,7 +332,6 @@ defmodule Cadence.Comms.TransportKinds.TCPSocket do
         "delivery_auth" => value(profile, "delivery_auth"),
         "delivery_credential_ref" =>
           profile |> value("egress", %{}) |> value("delivery_credential_ref"),
-        "listener" => value(diagnostics, "listener"),
         "tls_enabled" => false,
         "ingress_protocol_family" => "tm",
         "ingress_metadata" => %{"frame_size" => frame_bytes, "ocf_length" => 0}

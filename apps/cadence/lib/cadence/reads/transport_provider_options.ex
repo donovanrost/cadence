@@ -88,6 +88,7 @@ defmodule Cadence.Reads.TransportProviderOptions do
     %{
       configuration: configuration_rows(derived.configuration, summary),
       direction_capability: to_string(derived.direction_capability),
+      listener_eligible: summary.mode == "listen" and derived.direction_capability == :inbound,
       provider_version: derived.provider_version,
       summary:
         rows([

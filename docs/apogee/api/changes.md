@@ -245,7 +245,7 @@ and its derived preview; nothing is written.
   "services": [{"id": "service-downlink", "version": 3, "name": "Realtime telemetry"}],
   "deliveries": [{"id": "delivery-cadence", "version": 7, "name": "Cadence primary ingress"}],
   "preview": {"configuration": [{"label": "Endpoint", "value": "127.0.0.1:5100"}, …],
-              "direction_capability": "inbound", "provider_version": 2,
+              "direction_capability": "inbound", "listener_eligible": true, "provider_version": 2,
               "summary": [{"label": "Endpoint", "value": "127.0.0.1:5100"}, …]},
   "errors": []}}
 ```
@@ -255,10 +255,44 @@ and its derived preview; nothing is written.
 - `preview` is `Management.Transports.derive/3` (the derivation a change set's apply stores),
   rendered as rows of strings in display order; `null` until all three are chosen, or when derive
   refuses.
+- `preview.listener_eligible` is true for a derived listening downlink, which can offer the
+  Listener choice from the transport kind schema.
 - `errors`: `[{path, message}]`, `path` one of `mission_provider_id`, `mission_provider_version`,
   `service_profile_ref`, `delivery_profile_ref`, or `null` (a general error). A chosen id that
   isn't on offer is reported on its field.
 - Stage `origin: "provider_managed"`, `display_name`, `mission_provider_id`,
   `mission_provider_version` and the exact refs `service_profile_ref` / `delivery_profile_ref`
-  (`{id, version}`); `configuration` and `direction_capability` are derived, never staged.
+  (`{id, version}`). The change can include `configuration.listener`. The remaining TCP
+  configuration and direction capability come from the provider.
 - Errors: `403 forbidden` without `config.stage`; `422 invalid_params` for a non-text query value.
+
+## TCP listener choice
+
+The transport kind schema exposes `configuration.listener` for TCP Listen and Downlink
+(`configuration.mode == "listen"` and `configuration.direction_capability == "inbound"`).
+The values are `own` (Own listener for each pass) and `shared` (Shared, routed by SCID).
+An omitted choice reads as Own. On create, put the choice in the transport document. On edit,
+stage the `configuration.listener` path with the new value. An edit that makes a stored Shared
+choice unavailable includes an `own` change in the same operation. The mission's approval policy
+governs the change set.
+
+Listener comparison rows carry `before_label` and `after_label` with the option words. A reset
+caused by a mode or direction change adds `note` with the reason.
+
+An invalid choice at stage returns `422 invalid_op` with `details.index` and `details.errors`.
+Preview validation issues carry the same field errors. The errors have `path` set to
+`configuration.listener`, a plain `message`, and one of these `code` values:
+
+| Code | Meaning |
+| --- | --- |
+| `invalid_listener_choice` | The value must be Own or Shared. |
+| `shared_listener_requires_downlink` | Shared requires a listening downlink. |
+| `shared_listener_requires_tm_framing` | Shared requires fixed-size TM frames. |
+| `shared_listener_requires_allowlist` | Plaintext Shared requires valid allowed source addresses. |
+| `shared_listener_requires_mtls` | Sharing across provider bindings requires mTLS. |
+| `shared_listener_unavailable_mtls` | Direct transports cannot use provider delivery credentials. |
+| `listen_endpoint_listener_mismatch` | Claims on one endpoint must agree on Own or Shared. |
+| `shared_listener_bind_mismatch` | Overlapping shared claims must use the same bind address. |
+
+The port field reports cross-mission claims and incompatible authentication modes. Port conflict
+messages omit the identity of other missions and organizations.
