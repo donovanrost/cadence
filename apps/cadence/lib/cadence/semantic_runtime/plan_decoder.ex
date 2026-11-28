@@ -16,45 +16,9 @@ defmodule Cadence.SemanticRuntime.PlanDecoder do
     }
   end
 
-  # The monitoring plan's per-parameter settings (`policies`) and its compiled rule rows (`rules`,
-  # every scope, #451 T2). A rule row belongs to the policy of its parameter (the first one, when a
-  # parameter has several: the compiled shape has one per parameter); a parameter with rule rows and
-  # no policy gets a default one (persistence 1/1), named for the parameter.
-  defp decode_monitoring(plan) do
-    policies = plan |> plan_items("policies", :policies) |> Enum.map(&MonitoringPlan.new/1)
-    rules = plan_items(plan, "rules", :rules)
-
-    case rules do
-      [] -> policies
-      rules -> attach_rules(policies, Enum.group_by(rules, &value(&1, :parameter_id)))
-    end
-  end
-
-  defp attach_rules(policies, rules_by_parameter) do
-    {attached, remaining} =
-      Enum.map_reduce(policies, rules_by_parameter, fn %MonitoringPlan{} = policy, remaining ->
-        case Map.pop(remaining, policy.parameter_id) do
-          {nil, remaining} ->
-            {policy, remaining}
-
-          {rules, remaining} ->
-            {%MonitoringPlan{policy | rules: policy.rules ++ rules}, remaining}
-        end
-      end)
-
-    implicit =
-      remaining
-      |> Enum.sort_by(&elem(&1, 0))
-      |> Enum.map(fn {parameter_id, rules} ->
-        MonitoringPlan.new(%{
-          policy_id: "monitoring:" <> to_string(parameter_id),
-          parameter_id: parameter_id,
-          rules: rules
-        })
-      end)
-
-    attached ++ implicit
-  end
+  # The compiled monitoring plan's entries, one policy per parameter per scope (#451, 12-01).
+  defp decode_monitoring(plan),
+    do: plan |> plan_items("policies", :policies) |> Enum.map(&MonitoringPlan.new/1)
 
   @spec validate(%{optional(atom()) => RuntimePlan.t()}, map()) :: :ok | {:error, term()}
   def validate(plans, registry \\ RegisteredRegistry.configured()) do

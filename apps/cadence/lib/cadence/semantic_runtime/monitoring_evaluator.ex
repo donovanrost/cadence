@@ -85,7 +85,7 @@ defmodule Cadence.SemanticRuntime.MonitoringEvaluator do
 
   def matched_rule(%MonitoringPlan{} = plan, %Update{} = update, context_name) do
     case rules_named(plan, context_name) do
-      {:ok, rules} -> best_match(rules, update, context_name)
+      {:ok, rules} -> rules |> best_match(update, context_name) |> named_by(plan)
       :ambiguous -> nil
     end
   end
@@ -101,6 +101,12 @@ defmodule Cadence.SemanticRuntime.MonitoringEvaluator do
     |> Enum.filter(&rule_matches?(&1, value))
     |> Enum.max_by(&Map.get(@severity_rank, severity(&1), 0), fn -> nil end)
   end
+
+  # A compiled policy is named by its own `rule_id`, stable across edits (#451); an older plan's
+  # rule by a hash of its content. `label` and `kind` keep naming the threshold that matched.
+  defp named_by(nil, _plan), do: nil
+  defp named_by(match, %MonitoringPlan{rule_id: nil}), do: match
+  defp named_by(match, %MonitoringPlan{rule_id: rule_id}), do: %{match | id: rule_id}
 
   defp best_match(rules, update, context_name) do
     rules
