@@ -140,25 +140,23 @@ defmodule Cadence.Reads.DerivedPoints do
   defp cached(key, build) do
     case :ets.whereis(@table) do
       :undefined ->
-        build |> apply([]) |> elem(1)
+        {_keep, points} = build.()
+        points
 
       _table ->
         case :ets.lookup(@table, key) do
-          [{^key, _at, points}] ->
-            points
-
-          [] ->
-            case build.() do
-              {:cache, points} ->
-                GenServer.cast(__MODULE__, {:put, key, points})
-                points
-
-              {:skip, points} ->
-                points
-            end
+          [{^key, _at, points}] -> points
+          [] -> build.() |> keep(key)
         end
     end
   end
+
+  defp keep({:cache, points}, key) do
+    GenServer.cast(__MODULE__, {:put, key, points})
+    points
+  end
+
+  defp keep({:skip, points}, _key), do: points
 
   @doc false
   def start_link(opts \\ []), do: GenServer.start_link(__MODULE__, opts, name: __MODULE__)
