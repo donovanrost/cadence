@@ -267,7 +267,7 @@ Body: the draft plus `preflight_digest` (from the preflight the operator saw) an
   - A replay of a known `operation_id` skips the HOLD check and answers `409 duplicate_operation`.
 - With no second GO required, members are **queued** at once, in stack order per target lane.
   Otherwise the group is `approval_pending`, and `log_entry` is required.
-- `409 preflight_stale`: something changed since that preflight. Re-run it.
+- `409 preflight_stale`: something changed since that preflight. Re-run it. "Something" is what the commands resolve against (#1107): a craft's command plan, configuration revision or bindings, or the members themselves. A generation that changes none of them (a monitoring apply, which moves craft to a new head revision with the same command plan) neither stales a preflight nor voids a pending GO (`command_group_basis_changed`) nor stops a queued request releasing.
 - `409 duplicate_operation` (`details.command_group_id`): this `operation_id` was already
   submitted. To resolve an unclear submit (ux U20), use `GET /command-groups?operation_id=`.
 - `422 preflight_no_go` (`details.identity[]`, `details.catalog[]`), `422 title_required`,

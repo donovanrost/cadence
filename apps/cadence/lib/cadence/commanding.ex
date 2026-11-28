@@ -699,13 +699,7 @@ defmodule Cadence.Commanding do
   # A queued request whose model revision is no longer active can never release. Fail it
   # closed (canceled, `release_basis_changed`) instead of holding its lane forever.
   defp release_basis(organization_id, mission_id, request_row) do
-    case RequestValidation.resolve_basis(
-           organization_id,
-           mission_id,
-           request_row.mission_model_revision_id,
-           request_row.command_id,
-           request_row.source_endpoint_ref
-         ) do
+    case RequestValidation.resolve_basis_of(organization_id, mission_id, request_row) do
       {:error, {:mission_model_revision_mismatch, _requested, _active}} ->
         fail_closed(organization_id, mission_id, request_row)
 

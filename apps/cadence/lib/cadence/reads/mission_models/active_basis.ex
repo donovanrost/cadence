@@ -83,7 +83,8 @@ defmodule Cadence.Reads.MissionModels.ActiveBasis do
 
   defp command_snapshot(activation) do
     with {:ok, basis} <- MissionModelPromotion.command_authoring_basis(activation),
-         {:ok, catalog} <- MissionModelPlanDecoder.command_authoring_catalog(basis.runtime_plans) do
+         {:ok, catalog} <- MissionModelPlanDecoder.command_authoring_catalog(basis.runtime_plans),
+         {:ok, resolved_against} <- command_identity(activation, basis) do
       {:ok,
        %{
          basis: basis,
@@ -91,8 +92,23 @@ defmodule Cadence.Reads.MissionModels.ActiveBasis do
          activation_id: activation.activation_id,
          activation: activation,
          generation: activation.generation,
-         token: AuthoringIdentity.digest({activation, basis.runtime_plans.command})
+         token: AuthoringIdentity.digest({:command_basis, resolved_against})
        }}
+    end
+  end
+
+  # What a command resolves against, not the activation as a whole (#1107): each craft's command
+  # plan, configuration revision and bindings. A generation that leaves those alone (a monitoring
+  # apply, which moves craft to a new head revision with the same command plan) leaves the token
+  # equal, so it doesn't void a pending GO or a create in flight; a change to any of them changes
+  # it. Model approval isn't in it (`ModelApprovalGate` reads the effective statuses).
+  defp command_identity(%{metadata: metadata} = activation, basis) do
+    if FleetSnapshot.fleet?(metadata) do
+      with {:ok, digest} <- FleetSnapshot.command_digest(metadata), do: {:ok, {:fleet, digest}}
+    else
+      # A single-model activation has no per-craft entries to narrow to, and a monitoring apply
+      # only moves a fleet: any new generation of it voids pending work, as before #1107.
+      {:ok, {:single, activation.activation_id, basis.runtime_plans.command.plan_id}}
     end
   end
 

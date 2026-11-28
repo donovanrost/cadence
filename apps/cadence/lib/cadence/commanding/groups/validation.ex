@@ -31,7 +31,6 @@ defmodule Cadence.Commanding.Groups.Validation do
   @payload_keys [
     :source_endpoint_ref,
     :command_id,
-    :mission_model_revision_id,
     :argument_values,
     :resolved_argument_values,
     :significance,
@@ -276,17 +275,25 @@ defmodule Cadence.Commanding.Groups.Validation do
     end)
   end
 
-  @doc "Digest of the snapshot identity and validated member payloads (ids and times excluded)."
+  @doc """
+  Digest of the snapshot's token and the validated member payloads (ids and times excluded).
+
+  What a command resolves against is in it (#1107): the token, and each member's command plan
+  (`validation_basis.runtime_plan_id`, content-derived), not the generation or the revision it
+  happened to be validated on, so a monitoring apply that moves craft to a new head revision with
+  the same command plan leaves the digest equal.
+  """
   @spec digest(map(), [map()]) :: binary()
   def digest(snapshot, members) do
     payloads =
       Enum.map(members, fn member ->
         {member.target_index, member.position, member.target_token,
-         Map.take(member.request, @payload_keys)}
+         Map.take(member.request, @payload_keys), runtime_plan_id(member.request)}
       end)
 
-    AuthoringIdentity.digest(
-      {snapshot.activation_id, snapshot.generation, snapshot.token, payloads}
-    )
+    AuthoringIdentity.digest({snapshot.token, payloads})
   end
+
+  defp runtime_plan_id(request),
+    do: get_in(request.metadata, ["validation_basis", "runtime_plan_id"])
 end
