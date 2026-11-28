@@ -99,7 +99,11 @@ defmodule Cadence.MissionModels do
            result
            | plans: %{
                plans
-               | command: %{base | mission_model_revision_id: result.revision.revision_id}
+               | command: %{
+                   base
+                   | mission_model_revision_id: result.revision.revision_id,
+                     mission_model_content_sha256: result.revision.content_sha256
+                 }
              }
          }},
       else: {:error, :authored_head_changes_command_plan}
