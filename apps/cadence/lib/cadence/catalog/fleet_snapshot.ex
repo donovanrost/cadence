@@ -103,10 +103,10 @@ defmodule Cadence.Catalog.FleetSnapshot do
             [m, e],
             fragment(
               """
-              md5(coalesce(string_agg(? || ':' || jsonb_build_array(
+              encode(sha256(convert_to(coalesce(string_agg(? || ':' || jsonb_build_array(
                 ?->'commanding_enabled', ?->'configuration_revision_id', ?->'configuration_version',
                 ?->'catalog_revision_id', ?->'source_endpoint_ids', ?->'mission_model'->'plans'->'command'->'plan_id'
-              )::text, '|' ORDER BY ?), ''))
+              )::text, '|' ORDER BY ?), ''), 'UTF8')), 'hex')
               """,
               m.spacecraft_id,
               e.entry,

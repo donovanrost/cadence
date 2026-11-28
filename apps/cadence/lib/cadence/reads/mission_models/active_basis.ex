@@ -67,11 +67,13 @@ defmodule Cadence.Reads.MissionModels.ActiveBasis do
   # apply, which moves craft to a new head revision with the same command plan) leaves the token
   # equal, so it doesn't void a pending GO or a create in flight; a change to any of them changes
   # it. Model approval isn't in it (`ModelApprovalGate` reads the effective statuses).
-  defp command_identity(%{metadata: metadata}, basis) do
+  defp command_identity(%{metadata: metadata} = activation, basis) do
     if FleetSnapshot.fleet?(metadata) do
       with {:ok, digest} <- FleetSnapshot.command_digest(metadata), do: {:ok, {:fleet, digest}}
     else
-      {:ok, {:single, basis.runtime_plans.command.plan_id}}
+      # A single-model activation has no per-craft entries to narrow to, and a monitoring apply
+      # only moves a fleet: any new generation of it voids pending work, as before #1107.
+      {:ok, {:single, activation.activation_id, basis.runtime_plans.command.plan_id}}
     end
   end
 
