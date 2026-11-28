@@ -26,6 +26,7 @@ defmodule Cadence.Reads.Passes do
 
   @type filters :: %{
           optional(:spacecraft_id) => binary() | nil,
+          optional(:spacecraft_ids) => [binary()] | nil,
           optional(:station) => binary() | nil,
           optional(:states) => [binary()] | nil,
           optional(:limit) => pos_integer(),
@@ -119,6 +120,35 @@ defmodule Cadence.Reads.Passes do
     |> Map.update!(:passes, &PassGeometry.contacts(organization_id, mission_id, &1))
   end
 
+  @default_pages 40
+
+  @doc """
+  Every pass matching `filters` in the window, paging by the keyset until the read is complete
+  (E2/#1040: a decision such as "this target has no contact" is never made from a truncated read).
+  `{:ok, passes}`, or `{:error, :truncated}` if `max_pages` pages (default #{@default_pages} of the
+  filters' `limit`, 500 by default) still aren't the whole answer. Filter by `spacecraft_ids` to
+  read only a group's targets.
+  """
+  @spec load_all(binary(), binary(), DateTime.t(), DateTime.t(), filters(), pos_integer()) ::
+          {:ok, [map()]} | {:error, :truncated}
+  def load_all(org, mission, from, to, filters \\ %{}, max_pages \\ @default_pages),
+    do: collect(org, mission, from, to, filters, max_pages, [])
+
+  defp collect(_org, _mission, _from, _to, _filters, 0, _acc), do: {:error, :truncated}
+
+  defp collect(org, mission, from, to, filters, pages, acc) do
+    result = load(org, mission, from, to, filters)
+    acc = Enum.reverse(result.passes, acc)
+
+    if result.truncated do
+      last = List.last(result.passes)
+      after_key = {last.starts_at, last.id, kind(last)}
+      collect(org, mission, from, to, Map.put(filters, :after, after_key), pages - 1, acc)
+    else
+      {:ok, Enum.reverse(acc)}
+    end
+  end
+
   # U78: hand-started contacts join only on request (`include=hand_started`), merged in the same
   # order and cut to the same limit, so the kept rows are the first `limit` of the whole list.
   defp with_hand_started(result, org, mission, %{hand_started: true} = filters, limit, order) do
@@ -154,6 +184,7 @@ defmodule Cadence.Reads.Passes do
   defp reservation_opts(filters, states) do
     [
       spacecraft_id: Map.get(filters, :spacecraft_id),
+      spacecraft_ids: Map.get(filters, :spacecraft_ids),
       station_refs: Map.get(filters, :station_refs),
       states: states,
       after: Map.get(filters, :after),
