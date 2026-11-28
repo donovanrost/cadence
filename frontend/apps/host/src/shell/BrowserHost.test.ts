@@ -1,6 +1,5 @@
 import "../module-pages.test-support";
 import { nativeElement, required } from "../../../../test-support/mounted-contract";
-import { directoryFixture as fleetDirectoryFixture } from "../../../../modules/planning-and-contacts/src/features/fleet-planning/fleet-directory.test-support";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils";
 import { createMemoryHistory } from "vue-router";
@@ -34,6 +33,7 @@ vi.mock("./host-browser-history", async () => {
 import { hostBrowserHistory } from "./host-browser-history";
 import BrowserHost from "./BrowserHost.vue";
 import OpsModulePage from "../ops-workspace/features/module-pages/OpsModulePage.vue";
+import type { OpsPageReadRequest } from "@cadence/plugin-sdk/ops-pages";
 
 import { createHostRouter, hostRoute, shellForRoute } from "./host-navigation";
 import routes from "../routes.json";
@@ -68,7 +68,8 @@ function requestedPath(index: number): string {
 let wrapper: VueWrapper | undefined;
 const view = () => required(wrapper);
 /** A mission's neutral host page: an Ops module page that has no page data yet. */
-const missionPage = (mission: string) => `/missions/${mission}/ops/planning/new`;
+const missionPage = (mission: string) =>
+  `/missions/${mission}/ops/commands/requests/neutral-request/history`;
 const neutralPath = missionPage("mission-1");
 const onNeutral = (root: VueWrapper = view()) => root.findComponent(OpsModulePage).exists();
 const hostPath = (root: VueWrapper = view()) =>
@@ -257,20 +258,22 @@ test("late navigation and live-prop responses cannot replace the committed missi
   });
 });
 
-test("compiled contact navigation use the same host guard and query parameters cannot replace path identity", async () => {
+test("compiled resource navigation uses the same host guard and query parameters cannot replace path identity", async () => {
   const app = await start();
-  await click("/missions/mission-a/ops/contacts/records/contact-2");
-  await reply(0, snapshot("/missions/mission-a/ops/contacts/records/contact-2", "mission-a"));
+  const history = (request: string) =>
+    `/missions/mission-a/ops/commands/requests/${request}/history`;
+  await click(history("request-2"));
+  await reply(0, snapshot(history("request-2"), "mission-a"));
   required(app.getComponent(OpsModulePage).props("navigate"))(
-    "/missions/mission-a/ops/contacts/records/contact-1?mission_id=forged&contact_id=forged&application_key=forged",
+    history("request-1") + "?mission_id=forged&command_request_id=forged&application_key=forged",
   );
   await flushHostUpdates();
   const path = requestedPath(1);
   await reply(1, snapshot(path, "mission-a"));
-  expect(app.getComponent(OpsModulePage).props("contributionId")).toBe("planning.contact-record");
+  expect(app.getComponent(OpsModulePage).props("contributionId")).toBe("commanding.history");
   expect(app.getComponent(OpsModulePage).props("context")).toMatchObject({
     missionId: "mission-a",
-    resourceId: "contact-1",
+    resourceId: "request-1",
   });
 });
 
@@ -286,18 +289,18 @@ test("denied context preserves the displayed page and reports a recoverable fail
 test("Back and Forward reenter the guard without replacing the Vue shell", async () => {
   const app = await start();
   const shell = required(nativeElement(app.element));
-  const contactsPath = "/missions/mission-a/ops/contacts";
-  await click(contactsPath);
-  await reply(0, snapshot(contactsPath, "mission-a"));
+  const commandsPath = "/missions/mission-a/ops/commands";
+  await click(commandsPath);
+  await reply(0, snapshot(commandsPath, "mission-a"));
   hostBrowserHistory.go(-1);
   await flushHostUpdates();
   expect(requestedPath(1)).toBe(neutralPath);
   await reply(1, snapshot(neutralPath, "mission-1"));
   hostBrowserHistory.go(1);
   await flushHostUpdates();
-  await reply(2, snapshot(contactsPath, "mission-a"));
+  await reply(2, snapshot(commandsPath, "mission-a"));
   expect(app.element).toBe(shell);
-  expect(app.getComponent(OpsModulePage).props("contributionId")).toBe("planning.contact-schedule");
+  expect(app.getComponent(OpsModulePage).props("contributionId")).toBe("commanding.monitor");
 });
 
 // Only Ops pages are served by this router.
@@ -327,54 +330,41 @@ test("reconnection refreshes the displayed resource rather than the initial tran
   expect(app.text()).toContain("Renamed Mission");
 });
 
-function fleetSnapshot(path: string) {
-  const data = fleetDirectoryFixture();
-  data.context = { organization_id: "org-1", mission_id: "mission-1" };
-  const params = new URL(path, "https://cadence.test").searchParams;
-  data.query.page = Number(params.get("page") ?? 1);
-  data.runs.page = data.query.page;
-  return {
-    ...snapshot(path, "mission-1"),
-    ops_page: {
-      id: "planning.fleet-directory",
-      slot: "ops.page",
-      version: 1,
-      status: "ready",
-      token: "11111111-1111-4111-8111-111111111111",
-      context: { organizationId: "org-1", missionId: "mission-1" },
-      data,
-    },
+test("a captured page read is bound to its page and cannot return after departure", async () => {
+  const app = await start();
+  const path = "/missions/mission-1/ops/commands";
+  const token = "11111111-1111-4111-8111-111111111111";
+  const staleToken = "22222222-2222-4222-8222-222222222222";
+  const page = {
+    id: "commanding.monitor",
+    slot: "ops.page",
+    version: 1,
+    status: "ready",
+    token,
+    context: { organizationId: "org-1", missionId: "mission-1" },
+    data: monitorFixture(),
   };
-}
-test("fleet directory is host-composed and captured reads retain evidence across failures and departure", async () => {
-  await start();
-  const path = "/missions/mission-1/ops/planning?page=2";
   await click(path);
-  await reply(0, fleetSnapshot(path));
-  expect(view().find("#host-route-unavailable").exists()).toBe(false);
-  const rail = view().get("#ops-nav-rail").element;
-  await view().get("#host-page-refresh").trigger("click");
+  await reply(0, { ...snapshot(path, "mission-1"), ops_page: page });
+  const read: (request: OpsPageReadRequest) => Promise<unknown> = required(
+    app.getComponent(OpsModulePage).props("query"),
+  );
+  await expect(read({ id: "commanding.monitor", token: staleToken })).rejects.toThrow(
+    "Inactive Ops page read.",
+  );
+  const fresh = read({ id: "commanding.monitor", token });
   expect(transport.requests[1]).toMatchObject({
     event: "host:ops-page:read",
-    payload: {
-      path,
-      id: "planning.fleet-directory",
-      token: "11111111-1111-4111-8111-111111111111",
-    },
+    payload: { path, id: "commanding.monitor", token },
   });
-  const fresh = fleetSnapshot(path).ops_page;
-  required(fresh.data.runs.entries[0]).id = "fresh-run";
-  await reply(1, fresh);
-  expect(view().find("#fleet-run-fresh-run").exists()).toBe(true);
-  expect(view().get("#ops-nav-rail").element).toBe(rail);
-  await view().get("#host-page-refresh").trigger("click");
-  await reply(2, { ...fresh, status: "unavailable" });
-  expect(view().find("#fleet-run-fresh-run").exists()).toBe(true);
-  await view().get("#host-page-refresh").trigger("click");
+  await reply(1, page);
+  await expect(fresh).resolves.toBeDefined();
+  const late = read({ id: "commanding.monitor", token }).catch((error: unknown) => error);
   await click(neutralPath);
-  await reply(4, snapshot(neutralPath, "mission-1"));
-  await reply(3, fresh);
-  expect(view().find("#ops-fleet-planning-page").exists()).toBe(false);
+  await reply(3, snapshot(neutralPath, "mission-1"));
+  await reply(2, page);
+  expect(await late).toEqual(new Error("Inactive Ops page read response."));
+  expect(view().find("[data-command-request]").exists()).toBe(false);
   expect(onNeutral()).toBe(true);
 });
 
@@ -407,7 +397,10 @@ test.each(hostRoutes)("the host handles $path ($kind)", async (entry) => {
 
 test("an unrecognized catalog kind is contained by the host", async () => {
   const route = required(
-    routes.find((route) => route.path === "/missions/:mission_id/ops/planning/new"),
+    routes.find(
+      (route) =>
+        route.path === "/missions/:mission_id/ops/commands/requests/:command_request_id/history",
+    ),
   );
   const kind = route.kind;
   try {

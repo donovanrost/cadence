@@ -17,9 +17,6 @@
       "path": "./modules/commanding"
     },
     {
-      "path": "./modules/planning-and-contacts"
-    },
-    {
       "path": "./packages/apogee-ui"
     },
     {

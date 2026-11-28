@@ -93,7 +93,7 @@ function clickLink(
 
 test("ordinary links across feature areas are handled by the Vue host", () => {
   const { link, preventedByNavigation } = clickLink(
-    "/missions/m-1/ops/planning",
+    "/missions/m-1/ops/commands/requests/request-1/history",
     'data-phx-link="redirect"',
   );
   expect(link.dataset.phxLink).toBe("redirect");
@@ -101,10 +101,8 @@ test("ordinary links across feature areas are handled by the Vue host", () => {
 });
 
 test("plain remote links and query changes use the same host navigation", () => {
-  expect(clickLink("/missions/m-1/ops/contacts").navigate).toHaveBeenCalledWith(
-    "/missions/m-1/ops/contacts",
-    false,
-  );
+  const history = "/missions/m-1/ops/commands/requests/request-2/history";
+  expect(clickLink(history).navigate).toHaveBeenCalledWith(history, false);
   expect(
     clickLink("/missions/m-1?filter=active", 'data-phx-link-state="replace"').link.dataset
       .phxLinkState,

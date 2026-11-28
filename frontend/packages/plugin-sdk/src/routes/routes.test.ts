@@ -62,16 +62,24 @@ test("links are built from routes, with encoded params and admitted query keys",
       { status: "queued,failed", query: "" },
     ),
   ).toBe("/missions/m/ops/commands?status=queued%2Cfailed");
-  expect(href("/missions/:mission_id/ops/planning", { mission_id: "m" })).toBe(
-    "/missions/m/ops/planning",
-  );
+  expect(
+    href("/missions/:mission_id/applications/:application_key/:surface_id", {
+      mission_id: "m",
+      application_key: "ops_console",
+      surface_id: "data_sources",
+    }),
+  ).toBe("/missions/m/applications/ops_console/data_sources");
   expect(isRouteId("/missions/:mission_id/ops/commands")).toBe(true);
   expect(isRouteId("/missions/:mission_id/ops/nowhere")).toBe(false);
 });
 
 test("route drift is a type error", () => {
   expectTypeOf(
-    href("/missions/:mission_id/ops/planning", { mission_id: "m" }),
+    href("/missions/:mission_id/applications/:application_key/:surface_id", {
+      mission_id: "m",
+      application_key: "ops_console",
+      surface_id: "data_sources",
+    }),
   ).toEqualTypeOf<Href>();
   expectTypeOf<
     RouteHeaderKind<"/missions/:mission_id/ops/commands">

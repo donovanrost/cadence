@@ -15,7 +15,6 @@
   "dependencies": {
     "@cadence/commanding": "workspace:*",
     "@cadence/design-tokens": "workspace:*",
-    "@cadence/planning-and-contacts": "workspace:*",
     "@cadence/plugin-host": "workspace:*",
     "@cadence/plugin-sdk": "workspace:*",
     "@cadence/ui": "workspace:*",

@@ -72,7 +72,7 @@ test("resource pages name themselves and show their status", async () => {
 test("a header claimed for another route is refused and the route's own header stays", async () => {
   const error = vi.spyOn(console, "error").mockImplementation(() => {});
   const page = defineComponent(() => {
-    useOpsHeaders({ "/missions/:mission_id/ops/planning": { description: "Wrong page" } });
+    useOpsHeaders({ [request]: { title: "Wrong page" } });
     return () => h("p");
   });
   const host = render(commands, page);

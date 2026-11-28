@@ -44,15 +44,24 @@ test("a surface standing in for a host page gets that page's host-drawn header",
     props: {
       application: {
         ...application,
-        hostRoute: "/missions/:mission_id/ops/planning/new",
+        surface: {
+          ...application.surface,
+          surfaceId: "data_sources",
+          purpose: "configuration",
+          placement: "ops_workspace",
+          navigation: { label: "Data Sources", order: 10 },
+          dataContract: { id: "cadence.ops.data_sources", version: 1 },
+        },
+        hostRoute: "/missions/:mission_id/applications/:application_key/:surface_id",
       },
       context,
     },
     slots: { default: () => h("p", { id: "surface" }) },
   });
-  expect(wrapper.get("#host-page-heading h1").text()).toBe("Plan Fleet Horizon");
-  expect(wrapper.get(".cd-page-breadcrumbs").text()).toContain("Kestrel");
-  expect(wrapper.get('a[href="/missions/m1/ops/planning"]').text()).toBe("Fleet Planning");
+  // The application-surface route has no title of its own, so the surface's label heads it.
+  expect(wrapper.get("#host-page-heading h1").text()).toBe("Data Sources");
+  expect(wrapper.get(".cd-page-breadcrumbs").text()).toContain("Data Sources");
+  expect(wrapper.get('a[href="/missions/m1"]').text()).toBe("Kestrel");
   expect(wrapper.find("#surface").exists()).toBe(true);
   wrapper.unmount();
 });

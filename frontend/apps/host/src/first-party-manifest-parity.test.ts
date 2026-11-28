@@ -60,76 +60,6 @@ const expected = [
         [],
       ],
       [
-        "contact_schedule",
-        "operations",
-        "mission",
-        "ops_workspace",
-        "Contact Schedule",
-        10,
-        "cadence.ops.contact_schedule",
-        ["validate", "search", "reserve", "cancel"],
-      ],
-      [
-        "contact_plan_show",
-        "subject_detail",
-        "mission",
-        "ops_workspace",
-        "Contact Plan",
-        10,
-        "cadence.ops.contact_plan_show",
-        ["submit-plan", "approve-plan", "reject-plan", "execute-plan"],
-      ],
-      [
-        "contact_detail",
-        "subject_detail",
-        "mission",
-        "ops_workspace",
-        "Contact Detail",
-        10,
-        "cadence.ops.contact_detail",
-        ["approve-provider-change", "reject-provider-change", "acknowledge-provider-change"],
-      ],
-      [
-        "contact_record",
-        "subject_detail",
-        "mission",
-        "ops_workspace",
-        "Contact Record",
-        10,
-        "cadence.ops.contact_record",
-        [],
-      ],
-      [
-        "fleet_planning",
-        "operations",
-        "mission",
-        "ops_workspace",
-        "Fleet Planning",
-        10,
-        "cadence.ops.fleet_planning",
-        ["refresh-planning"],
-      ],
-      [
-        "fleet_planning_new",
-        "configuration",
-        "mission",
-        "ops_workspace",
-        "New Fleet Run",
-        10,
-        "cadence.ops.fleet_planning_new",
-        ["validate-fleet-run", "create-fleet-run"],
-      ],
-      [
-        "fleet_planning_run",
-        "subject_detail",
-        "mission",
-        "ops_workspace",
-        "Fleet Planning Run",
-        10,
-        "cadence.ops.fleet_planning_run",
-        ["refresh-fleet-run", "repair-fleet-run"],
-      ],
-      [
         "commands",
         "operations",
         "mission",
@@ -262,7 +192,7 @@ describe("first-party federated manifest parity", () => {
     // remotes left (35 → 18). #702: the ops-console data_operations and data_operations_manage
     // surfaces left (18 → 16). #672: the Organization Admin remote's notifications bell left
     // (16 → 15). #666/#142/#143: the ops-console timeline, telemetry_explore and alarms surfaces
-    // left (15 → 12).
-    expect(surfaceCount).toBe(12);
+    // left (15 → 12). #665: the ops-console planning and contacts surfaces left (12 → 5).
+    expect(surfaceCount).toBe(5);
   });
 });

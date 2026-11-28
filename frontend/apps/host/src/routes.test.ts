@@ -3,27 +3,6 @@ import { required } from "../../../test-support/required";
 import { expect, test } from "vite-plus/test";
 import routes from "./routes.json";
 import { loadedOpsPages as opsPages } from "./module-pages.test-support";
-test("plan review retains the exact version and independently paged evidence", () => {
-  const route = required(
-    routes.find((r) => r.path === "/missions/:mission_id/ops/plans/:contact_plan_id"),
-  );
-  expect(route).toMatchObject({
-    kind: "ops_module",
-    contribution: "planning.plan-review",
-    resourceParam: "contact_plan_id",
-    scope: "mission",
-  });
-  expect(route.queryKeys).toEqual([
-    "contact_plan_id",
-    "version",
-    "versions_page",
-    "approvals_page",
-    "opportunities_page",
-    "execution_page",
-    "requirements_page",
-    "issues_page",
-  ]);
-});
 test("commands are a compiled read-only mission contribution with explicit navigation", () => {
   const route = required(routes.find((r) => r.path === "/missions/:mission_id/ops/commands"));
   expect(route).toMatchObject({ kind: "ops_module", contribution: "commanding.monitor" });
@@ -53,48 +32,4 @@ test("each core host route resolves to its registered owner", () => {
     }
     throw new Error(`Unregistered core route kind: ${route.kind} (${route.path})`);
   }
-});
-
-test("reservation review forwards selected evidence and independent history cursors", () => {
-  const route = required(
-    routes.find((route) => route.contribution === "planning.reservation-review"),
-  );
-  expect(route.path).toBe("/missions/:mission_id/ops/contacts/:provider_reservation_id");
-  expect(route.queryKeys).toEqual([
-    "provider_reservation_id",
-    "change_id",
-    "before_revision",
-    "before_audit",
-  ]);
-});
-
-test("contact record routing forwards the reviewed revision and each evidence page", () => {
-  const route = required(routes.find((route) => route.contribution === "planning.contact-record"));
-  expect(route.path).toBe("/missions/:mission_id/ops/contacts/records/:contact_id");
-  expect(route.queryKeys).toEqual([
-    "contact_id",
-    "revision",
-    "before_revision",
-    "scheduled_paths_page",
-    "realized_paths_page",
-    "sources_page",
-    "intents_page",
-  ]);
-});
-
-test("contact scheduling captures spacecraft selection and independent ledger pages", () => {
-  const route = required(routes.find((r) => r.contribution === "planning.contact-schedule"));
-  expect(route.scope).toBe("mission");
-  expect(route.path).toBe("/missions/:mission_id/ops/contacts");
-  expect(route.queryKeys).toEqual([
-    "spacecraft_id",
-    "spacecraft_q",
-    "spacecraft_page",
-    "routes_page",
-    "findings_page",
-    "scheduled_page",
-    "realized_page",
-    "reservations_page",
-    "operations_page",
-  ]);
 });
