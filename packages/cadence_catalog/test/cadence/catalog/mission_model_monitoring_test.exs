@@ -133,6 +133,8 @@ defmodule Cadence.Catalog.MissionModelMonitoringTest do
 
     assert Enum.map(crafts, & &1["spacecraft_id"]) == ["sc-1", "sc-2"]
     assert Enum.all?(crafts, &(&1["rule_id"] == mission["rule_id"]))
+    # State, latest alarm state and episodes key on policy_id: the craft's continue.
+    assert Enum.all?(crafts, &(&1["policy_id"] == mission["policy_id"]))
     assert Enum.all?(crafts, &(&1["origin"] == "mission_layer"))
     assert Enum.all?(crafts, &(&1["declaration_id"] != mission["declaration_id"]))
     assert Enum.all?(crafts, &(&1["rule_digest"] != mission["rule_digest"]))

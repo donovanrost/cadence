@@ -19,10 +19,11 @@ defmodule Cadence.Catalog.MissionModel.MonitoringLowering do
       definition's `spacecraft_ids`) becomes one entry per craft.
 
   **Per-craft overrides.** A policy with an `:overrides` reference to another policy replaces that
-  policy for its `spacecraft_ids` only: its entries take the overridden policy's `rule_id`, so the
-  craft's episode continues across the override. An override must name a policy on the same
-  parameter and must list at least one craft (a mission-wide change is a `:replace`, never an
-  override). A partition resolves its craft's effective rules from the whole plan: the spacecraft
+  policy for its `spacecraft_ids` only: its entries take the overridden policy's `rule_id` and
+  `policy_id` (partition state, the latest alarm state and episodes key on it), so the craft's
+  episode continues across the override; `declaration_id` stays the override's own. An override
+  must name a policy on the same parameter and must list at least one craft (a mission-wide change
+  is a `:replace`, never an override). A partition resolves its craft's effective rules from the whole plan: the spacecraft
   entry for a `rule_id` when there is one, else the mission entry.
 
   The plan is compiled once per revision and holds every craft's entries, so a partition never
@@ -91,15 +92,19 @@ defmodule Cadence.Catalog.MissionModel.MonitoringLowering do
        )}
 
   defp override(declaration, base, target, spacecraft_ids) do
-    if parameter_id(target) == base["parameter_id"],
-      do: {:ok, scoped(base, "policy:" <> target.semantic_id, spacecraft_ids)},
-      else:
-        {:error,
-         diagnostic(
-           declaration,
-           "MM_MONITORING_OVERRIDE_PARAMETER",
-           "an override must be on the same parameter as the policy it overrides"
-         )}
+    if parameter_id(target) == base["parameter_id"] do
+      # The craft's state, latest alarm state and episodes key on policy_id: the override is the
+      # target policy for this craft, so it keeps that id (and its own declaration_id).
+      base = Map.put(base, "policy_id", target.semantic_id)
+      {:ok, scoped(base, "policy:" <> target.semantic_id, spacecraft_ids)}
+    else
+      {:error,
+       diagnostic(
+         declaration,
+         "MM_MONITORING_OVERRIDE_PARAMETER",
+         "an override must be on the same parameter as the policy it overrides"
+       )}
+    end
   end
 
   defp base(declaration, origins) do
