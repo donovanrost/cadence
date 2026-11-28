@@ -26,6 +26,12 @@ defmodule Cadence.Configuration.Kinds do
 
   def fetch(_kind), do: {:error, :unknown_kind}
 
+  @doc "The lane a kind's changes stage in, as stored on a change set: `\"configuration\"` unless the kind says otherwise."
+  @spec lane(module()) :: String.t()
+  def lane(kind) when is_atom(kind) do
+    if function_exported?(kind, :lane, 0), do: Atom.to_string(kind.lane()), else: "configuration"
+  end
+
   @spec fetch!(String.t()) :: module()
   def fetch!(kind) do
     {:ok, module} = fetch(kind)

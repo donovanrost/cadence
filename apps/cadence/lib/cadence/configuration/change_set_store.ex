@@ -7,23 +7,43 @@ defmodule Cadence.Configuration.ChangeSetStore do
   alias Cadence.Ids
   alias Cadence.Repo
 
-  @active_states ["open", "in_review"]
+  # The states that make a set its lane's active one (U108): a configuration set is active while
+  # open or in review (it freezes in review); a monitoring set only while open, so review never
+  # closes the monitoring lane.
+  @active_states %{"configuration" => ["open", "in_review"], "monitoring" => ["open"]}
 
-  @doc "The mission's open or in-review set, if any (no lock)."
-  @spec active(String.t()) :: ChangeSetRow.t() | nil
-  def active(mission_id) do
-    ChangeSetRow
-    |> where([set], set.mission_id == ^mission_id and set.state in ^@active_states)
-    |> Repo.one()
+  @doc "The mission's active set in `lane` (configuration by default), if any (no lock)."
+  @spec active(String.t(), String.t()) :: ChangeSetRow.t() | nil
+  def active(mission_id, lane \\ "configuration") do
+    mission_id |> active_query(lane) |> Repo.one()
   end
 
-  @doc "Locks the active set for update. Must run inside a transaction."
-  @spec lock_active(String.t()) :: ChangeSetRow.t() | nil
-  def lock_active(mission_id) do
+  @doc "The mission's monitoring sets in review, oldest first (any number of them, U108)."
+  @spec in_review(String.t(), String.t()) :: [ChangeSetRow.t()]
+  def in_review(mission_id, "monitoring") do
     ChangeSetRow
-    |> where([set], set.mission_id == ^mission_id and set.state in ^@active_states)
-    |> lock("FOR UPDATE")
-    |> Repo.one()
+    |> where(
+      [set],
+      set.mission_id == ^mission_id and set.lane == "monitoring" and set.state == "in_review"
+    )
+    |> order_by([set], asc: set.submitted_at, asc: set.change_set_id)
+    |> Repo.all()
+  end
+
+  @doc "Locks the active set in `lane` for update. Must run inside a transaction."
+  @spec lock_active(String.t(), String.t()) :: ChangeSetRow.t() | nil
+  def lock_active(mission_id, lane \\ "configuration") do
+    mission_id |> active_query(lane) |> lock("FOR UPDATE") |> Repo.one()
+  end
+
+  defp active_query(mission_id, lane) do
+    states = Map.fetch!(@active_states, lane)
+
+    where(
+      ChangeSetRow,
+      [set],
+      set.mission_id == ^mission_id and set.lane == ^lane and set.state in ^states
+    )
   end
 
   @doc "Locks one set of the mission for update. Must run inside a transaction."
@@ -44,10 +64,10 @@ defmodule Cadence.Configuration.ChangeSetStore do
     |> found(:change_set_not_found)
   end
 
-  @doc "Locks the active set, opening a new one on `base_revision` when there is none."
-  @spec lock_or_open(String.t(), String.t(), integer(), map()) :: ChangeSetRow.t()
-  def lock_or_open(organization_id, mission_id, base_revision, actor) do
-    case lock_active(mission_id) do
+  @doc "Locks `lane`'s active set, opening a new one on `base_revision` when there is none."
+  @spec lock_or_open(String.t(), String.t(), integer(), map(), String.t()) :: ChangeSetRow.t()
+  def lock_or_open(organization_id, mission_id, base_revision, actor, lane \\ "configuration") do
+    case lock_active(mission_id, lane) do
       %ChangeSetRow{} = set ->
         set
 
@@ -59,6 +79,7 @@ defmodule Cadence.Configuration.ChangeSetStore do
             change_set_id: Ids.new("change_set"),
             organization_id: organization_id,
             mission_id: mission_id,
+            lane: lane,
             state: "open",
             version: 1,
             base_revision_number: base_revision,
@@ -68,7 +89,7 @@ defmodule Cadence.Configuration.ChangeSetStore do
           on_conflict: :nothing
         )
 
-        lock_active(mission_id)
+        lock_active(mission_id, lane)
     end
   end
 

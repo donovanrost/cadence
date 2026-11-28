@@ -7,19 +7,35 @@ defmodule Cadence.Configuration.Status do
 
   alias Cadence.Configuration.{ActorNames, ChangeSetStore, Document, Ledger}
 
-  @spec current(String.t(), String.t()) :: map()
-  def current(organization_id, mission_id) do
+  @doc """
+  The head and `lane`'s staged bar (ADR-020 P3, #451; U108). `change_set` is the lane's active
+  set: configuration's open or in-review set, or monitoring's open set. A monitoring read also
+  carries `in_review`, its sets in review (any number), oldest first. Both lanes share the head:
+  revisions from both are one sequence.
+  """
+  @spec current(String.t(), String.t(), String.t()) :: map()
+  def current(organization_id, mission_id, lane \\ "configuration") do
     head = Ledger.ensure_head(organization_id, mission_id)
     {:ok, revision} = Ledger.fetch_revision(mission_id, head.revision_number)
 
-    ActorNames.named(
-      %{
-        head: revision_view(revision, head.revision_number),
-        change_set: mission_id |> ChangeSetStore.active() |> change_set_view()
-      },
-      mission_id
-    )
+    %{
+      head: revision_view(revision, head.revision_number),
+      lane: lane,
+      change_set: mission_id |> ChangeSetStore.active(lane) |> change_set_view()
+    }
+    |> put_in_review(mission_id, lane)
+    |> ActorNames.named(mission_id)
   end
+
+  defp put_in_review(view, mission_id, "monitoring"),
+    do:
+      Map.put(
+        view,
+        :in_review,
+        mission_id |> ChangeSetStore.in_review("monitoring") |> Enum.map(&change_set_view/1)
+      )
+
+  defp put_in_review(view, _mission_id, _lane), do: view
 
   @spec change_set(String.t(), String.t()) :: {:ok, map()} | {:error, term()}
   def change_set(mission_id, change_set_id) do
