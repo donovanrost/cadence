@@ -48,6 +48,8 @@ review_url =
       [host: uri.host, scheme: "https", port: uri.port || 443]
   end
 
+config :cadence_web, :review_session_secure?, not is_nil(review_url)
+
 # CADENCE_CI_SERVER=1: the console-e2e CI server only. No code reloader and no Vite or Tailwind
 # watchers. Under concurrent requests the reloader raced Mix's project loading ("Trying to load
 # XTCE.MixProject ... another project with the same name was already defined", run 44741752992),
