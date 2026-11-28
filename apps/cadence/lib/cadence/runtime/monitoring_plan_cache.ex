@@ -78,14 +78,23 @@ defmodule Cadence.Runtime.MonitoringPlanCache do
       key ->
         {:ok, table, empty?} =
           case GenServer.call(server, {:hold, self(), key}, :infinity) do
-            {:ok, table, empty?} ->
-              {:ok, table, empty?}
-
-            :miss ->
-              GenServer.call(server, {:load, self(), key, runtime_plans, registry}, :infinity)
+            {:ok, table, empty?} -> {:ok, table, empty?}
+            :miss -> load(server, key, runtime_plans, registry)
           end
 
         {:ok, PlanIndex.from_cache(table, key, empty?)}
+    end
+  end
+
+  # The load runs in the cache's process; a plan it cannot decode fails the caller (a partition
+  # that cannot run it), and the cache keeps serving the rest.
+  defp load(server, key, runtime_plans, registry) do
+    case GenServer.call(server, {:load, self(), key, runtime_plans, registry}, :infinity) do
+      {:ok, table, empty?} ->
+        {:ok, table, empty?}
+
+      {:error, reason} ->
+        raise ArgumentError, "the monitoring plan cannot be decoded: #{reason}"
     end
   end
 
@@ -126,20 +135,33 @@ defmodule Cadence.Runtime.MonitoringPlanCache do
         {:reply, {:ok, state.table, empty?}, hold(state, pid, key)}
 
       _unloaded ->
-        decoded = PlanDecoder.decode(runtime_plans, registry)
-        entries = PlanIndex.entries(key, decoded.algorithms, decoded.monitoring)
-        Enum.each(entries, &:ets.insert(state.table, &1))
-        empty? = decoded.algorithms == [] and decoded.monitoring == []
-        keys = Enum.map(entries, &elem(&1, 0))
-        plans = Map.put(state.plans, key, %{holders: 0, keys: keys, empty?: empty?})
-        state = %{state | plans: plans}
-        {:reply, {:ok, state.table, empty?}, hold(state, pid, key)}
+        # A plan that cannot be decoded (a value outside the plan vocabulary) is the asking
+        # partition's failure, never the owner's: raising here would drop every plan the node holds.
+        case decode(runtime_plans, registry) do
+          {:ok, decoded} ->
+            entries = PlanIndex.entries(key, decoded.algorithms, decoded.monitoring)
+            Enum.each(entries, &:ets.insert(state.table, &1))
+            empty? = decoded.algorithms == [] and decoded.monitoring == []
+            keys = Enum.map(entries, &elem(&1, 0))
+            plans = Map.put(state.plans, key, %{holders: 0, keys: keys, empty?: empty?})
+            state = %{state | plans: plans}
+            {:reply, {:ok, state.table, empty?}, hold(state, pid, key)}
+
+          {:error, reason} ->
+            {:reply, {:error, reason}, state}
+        end
     end
   end
 
   def handle_call({:release, pid}, _from, state), do: {:reply, :ok, release(state, pid)}
   def handle_call(:loaded, _from, state), do: {:reply, map_size(state.plans), state}
   def handle_call(:table, _from, state), do: {:reply, state.table, state}
+
+  defp decode(runtime_plans, registry) do
+    {:ok, PlanDecoder.decode(runtime_plans, registry)}
+  rescue
+    error -> {:error, Exception.message(error)}
+  end
 
   @impl true
   def handle_info({:DOWN, _ref, :process, pid, _reason}, state),

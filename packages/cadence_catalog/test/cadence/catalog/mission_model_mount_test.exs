@@ -17,7 +17,9 @@ defmodule Cadence.Catalog.MissionModelMountTest do
   # The revision ids are as then. The plan ids are as #443 defines them (from the plan, not the
   # revision), recomputed once. The monitoring plan's moved again with P3 (#451): contract 2, whose
   # entries carry rule_id/rule_digest/origin/scope. These fixtures declare no policy, so only the
-  # contract version changed it.
+  # contract version changed it. The XTCE revision and its algorithm plan moved once more with the
+  # algorithm defaults in the runtime's own vocabulary (time_basis :receipt_time, quality_policy
+  # :worst_input; #451 T4): the YAML database has no algorithm, so it didn't move.
   @golden %{
     yaml: %{
       revision_id:
@@ -40,12 +42,12 @@ defmodule Cadence.Catalog.MissionModelMountTest do
     },
     xtce: %{
       revision_id:
-        "mission_model_revision:d3db142cd502e85ee9df42575d53306617ec4fa6af3bfbb4dc2f9ff9ec28ebc3",
-      content_sha256: "d3db142cd502e85ee9df42575d53306617ec4fa6af3bfbb4dc2f9ff9ec28ebc3",
+        "mission_model_revision:3f76e2a189ef1ee91985ee26ca8f56a386983b9a98d886fd8274dac096c2c8ff",
+      content_sha256: "3f76e2a189ef1ee91985ee26ca8f56a386983b9a98d886fd8274dac096c2c8ff",
       plans: %{
         algorithm:
-          {"mission_model_plan:30ff320a65f391d187eee0b9cbd7093fe84a738d9feb07e5d3480f2c1a28609c",
-           "30ff320a65f391d187eee0b9cbd7093fe84a738d9feb07e5d3480f2c1a28609c"},
+          {"mission_model_plan:7bbbc6b012fb4c6b19d113c39e0050d97b16e939b071a6d40683b099802eb9ac",
+           "7bbbc6b012fb4c6b19d113c39e0050d97b16e939b071a6d40683b099802eb9ac"},
         command:
           {"mission_model_plan:370e10394674778a9cc9a02a43a87e1dce88fb78e0465e55e3c45018c3528162",
            "370e10394674778a9cc9a02a43a87e1dce88fb78e0465e55e3c45018c3528162"},

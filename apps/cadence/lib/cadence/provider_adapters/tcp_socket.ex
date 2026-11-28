@@ -23,6 +23,8 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
   alias Cadence.Ingress.{RawEvidence, ReceiveBackpressure}
   alias Cadence.IngressJournal.FileSystem, as: IngressJournal
   alias Cadence.Platform.SnapshotCall
+  alias Cadence.ProviderAdapters.InboundSocket
+  alias Cadence.ProviderAdapters.InboundSocket.Authorization
   alias Cadence.ProviderAdapters.TCPSocket.{Configuration, IngressDrops, Instrumentation, Session}
 
   alias Cadence.Runtime.{
@@ -36,6 +38,7 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
     TransportRecords
   }
 
+  @max_tls_handshakes 8
   @tcp_socket_buffer 1_048_576
   @tcp_opts [
     :binary,
@@ -172,29 +175,56 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
       last_ingress_at: nil,
       last_ingress_error: nil,
       accept_ref: nil,
+      tls_accepts: %{},
       reads_paused?: false,
       lifecycle_status: :active
     }
 
     base_state = Session.initialize(base_state, opts)
 
-    with :ok <- validate_configuration(configuration, provider_binding_id) do
-      case ensure_ingress_dependencies(base_state) do
+    with :ok <- validate_configuration(configuration, provider_binding_id),
+         {:ok, authorization} <- start_authorization(configuration, opts) do
+      case ensure_ingress_dependencies(
+             Map.put(base_state, :delivery_authorization, authorization)
+           ) do
         {:ok, base_state} ->
           start_socket_provider(configuration, base_state, provider_binding_id)
 
         {:error, reason} ->
           {:stop, {:tcp_provider_missing_ingress_dependency, provider_binding_id, reason}}
       end
+    else
+      {:error, reason} -> {:stop, {:tcp_provider_listen_failed, provider_binding_id, reason}}
+      {:stop, _reason} = stopped -> stopped
     end
   end
 
-  # (#990, DECISIONS #115) A listening endpoint must name the peers it accepts; one without an
-  # allowlist never starts, so no unidentified peer can reach a contact.
-  defp validate_configuration(%{mode: :listen, allowed_peers: []}, provider_binding_id),
-    do:
-      {:stop,
-       {:tcp_provider_invalid_configuration, provider_binding_id, :expected_peer_addresses}}
+  defp start_authorization(%{mode: :listen} = config, opts) do
+    Authorization.start(
+      config.delivery_auth,
+      Keyword.get(opts, :organization_id),
+      Keyword.fetch!(opts, :mission_id),
+      Keyword.get(opts, :provider_binding_metadata, %{}),
+      config
+    )
+  end
+
+  defp start_authorization(_config, _opts), do: {:ok, nil}
+
+  defp validate_configuration(
+         %{mode: :listen, delivery_auth: :plaintext, allowed_peers: []},
+         provider_binding_id
+       ),
+       do:
+         {:stop,
+          {:tcp_provider_invalid_configuration, provider_binding_id, :expected_peer_addresses}}
+
+  defp validate_configuration(%{mode: :listen, invalid_allowlist?: true}, binding),
+    do: {:stop, {:tcp_provider_invalid_configuration, binding, :expected_peer_addresses}}
+
+  defp validate_configuration(%{mode: mode, delivery_auth: auth}, binding)
+       when auth == :unsupported or (auth == :mtls and mode != :listen),
+       do: {:stop, {:tcp_provider_invalid_configuration, binding, :delivery_auth}}
 
   # (api-ops) A profile's quiet_connection_ms must be a positive integer (a numeric string is
   # coerced in normalize_configuration/1); anything else would never compare as quiet.
@@ -231,13 +261,18 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
          %{direction: :downlink} = base_state,
          provider_binding_id
        ) do
-    listen = %{host: configuration.host, port: configuration.port}
+    listen = %{
+      host: configuration.host,
+      port: configuration.port,
+      delivery_auth: configuration.delivery_auth
+    }
 
     registration = %{
       adapter: self(),
       realized_contact_id: base_state.realized_contact_id,
       path_id: base_state.path_id,
       provider_binding_id: provider_binding_id,
+      delivery_authorization: base_state.delivery_authorization,
       scid: base_state.source_endpoint_spacecraft_scid,
       allowed_peers: configuration.allowed_peers,
       frame_size: configuration.fixed_message_bytes
@@ -277,7 +312,14 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
   end
 
   defp start_socket_provider(%{mode: :listen} = configuration, base_state, provider_binding_id) do
-    case :gen_tcp.listen(configuration.port, listen_opts(configuration.host)) do
+    socket_options = [sndbuf: @tcp_socket_buffer, recbuf: @tcp_socket_buffer]
+
+    case InboundSocket.listen(
+           configuration.host,
+           configuration.port,
+           configuration.delivery_auth,
+           socket_options
+         ) do
       {:ok, listener} ->
         port = listener_port(listener, configuration.port)
         state = %{base_state | listener: listener, port: port}
@@ -299,7 +341,7 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
         _from,
         %{socket: socket, session_peer: peer} = state
       )
-      when is_port(socket) and is_binary(peer) do
+      when not is_nil(socket) and is_binary(peer) do
     state =
       Session.warn_peer(
         state,
@@ -462,6 +504,9 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
   end
 
   @impl true
+  def format_status(status), do: Map.update!(status, :state, &Map.drop(&1, [:listener, :socket]))
+
+  @impl true
   def terminate(reason, state) do
     level =
       case reason do
@@ -477,6 +522,8 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
     )
 
     Session.block(state, :provider_stopped)
+    close_socket(state.listener)
+    close_socket(state.socket)
     maybe_stop_socket_receiver(state)
     :ok
   end
@@ -484,29 +531,57 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
   # (#87) The profile acceptor identified this peer as ours: the same connected path as an accept,
   # with the bytes it read to identify it handed to the receiver first.
   @impl true
+  def handle_info(
+        {:peer_accepted, socket, _prefix, _peer, _at},
+        %{lifecycle_status: lifecycle} = state
+      )
+      when lifecycle != :active do
+    close_socket(socket)
+    {:noreply, state}
+  end
+
   def handle_info({:peer_accepted, socket, prefix, peer, read_at}, %{acceptor?: true} = state) do
-    case current_socket(state) do
-      {:ok, _existing_socket} ->
-        state =
-          Session.warn_peer(
-            state,
-            :refused,
-            peer,
-            "TCP provider #{state.provider_binding_id} refused a second connection from " <>
-              "#{peer}; #{state.session_peer} is connected"
-          )
+    case Authorization.stream_allowed?(
+           state.delivery_authorization,
+           InboundSocket.identity(socket)
+         ) do
+      :ok ->
+        accept_shared_peer(state, socket, prefix, peer, read_at)
 
-        :gen_tcp.close(socket)
-        {:noreply, refuse_second_connection(state, peer)}
+      {:error, reason} ->
+        close_socket(socket)
+        {:noreply, count_refusal(state, peer, reason)}
+    end
+  end
 
-      {:error, :tcp_provider_not_connected} ->
-        {:noreply,
-         state
-         |> Map.put(:socket, socket)
-         |> Map.put(:connected_at, DateTime.utc_now())
-         |> Session.connected()
-         |> resolve_refusals()
-         |> start_socket_receiver!(socket, {prefix, read_at})}
+  def handle_info(:refresh_delivery_authorization, state) do
+    Authorization.schedule_refresh()
+    {:noreply, refresh_delivery_authorization(state)}
+  end
+
+  def handle_info({event, org, mission} = message, state)
+      when event in [
+             :provider_delivery_credentials_changed,
+             :configuration_changed,
+             :providers_changed
+           ] and
+             is_binary(org) and is_binary(mission) do
+    if Authorization.invalidation?(state.delivery_authorization, message),
+      do: {:noreply, refresh_delivery_authorization(state)},
+      else: {:noreply, state}
+  end
+
+  def handle_info({:tls_transport_accepted, ref}, %{accept_ref: ref} = state) do
+    {:noreply,
+     state |> put_in([:tls_accepts, ref], true) |> Map.put(:accept_ref, nil) |> schedule_accept()}
+  end
+
+  def handle_info({:tls_transport_accepted, _ref}, state), do: {:noreply, state}
+
+  def handle_info({:accept_result, ref, result}, state) do
+    case consume_accept(state, ref) do
+      {:ok, state} -> handle_accept_result(result, state)
+      :stale -> discard_accept_result(result, state)
     end
   end
 
@@ -532,48 +607,6 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
       do: {:noreply, state}
 
   def handle_info(:reregister, %{acceptor?: true} = state), do: {:noreply, reregister(state)}
-
-  def handle_info(
-        {:accept_result, accept_ref, {:ok, socket, :ok}},
-        %{accept_ref: accept_ref} = state
-      ) do
-    if peer_allowed?(state, socket),
-      do: accept_peer(socket, state),
-      else: {:noreply, refuse_unallowed_peer(socket, %{state | accept_ref: nil})}
-  end
-
-  def handle_info(
-        {:accept_result, accept_ref, {:ok, _socket, {:error, reason}}},
-        %{accept_ref: accept_ref} = state
-      ) do
-    Logger.warning(
-      "TCP provider socket handoff failed for #{state.provider_binding_id}: #{inspect(reason)}"
-    )
-
-    {:noreply, schedule_accept(%{state | accept_ref: nil})}
-  end
-
-  def handle_info(
-        {:accept_result, accept_ref, {:error, reason}},
-        %{accept_ref: accept_ref} = state
-      ) do
-    # The pending accept (#67) ends with :closed when the listener is quiesced: not a fault.
-    if state.lifecycle_status == :active do
-      Logger.warning(
-        "TCP provider accept failed for #{state.provider_binding_id}: #{inspect(reason)}"
-      )
-    end
-
-    {:noreply, %{state | accept_ref: nil}}
-  end
-
-  def handle_info({:accept_result, _stale_ref, {:ok, socket, _handoff}}, state) do
-    close_socket(socket)
-    {:noreply, state}
-  end
-
-  def handle_info({:accept_result, _stale_ref, {:error, _reason}}, state),
-    do: {:noreply, state}
 
   def handle_info({:tcp_receiver_batch, receiver_pid, batch_status}, state) do
     next_state =
@@ -663,20 +696,101 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
     {:noreply, next_state}
   end
 
+  defp consume_accept(%{accept_ref: ref} = state, ref), do: {:ok, %{state | accept_ref: nil}}
+
+  defp consume_accept(state, ref) do
+    if Map.has_key?(state.tls_accepts, ref),
+      do: {:ok, update_in(state.tls_accepts, &Map.delete(&1, ref))},
+      else: :stale
+  end
+
+  defp handle_accept_result(result, %{lifecycle_status: lifecycle} = state)
+       when lifecycle != :active,
+       do: discard_accept_result(result, state)
+
+  defp handle_accept_result(result, %{listener: nil} = state),
+    do: discard_accept_result(result, state)
+
+  defp handle_accept_result({:ok, socket, :ok}, state) do
+    with :ok <-
+           Authorization.stream_allowed?(
+             state.delivery_authorization,
+             InboundSocket.identity(socket)
+           ),
+         true <- peer_allowed?(state, socket) do
+      accept_peer(socket, state)
+    else
+      false ->
+        {:noreply, refuse_unallowed_peer(socket, state)}
+
+      {:error, reason} ->
+        peer = Session.peer_of(socket)
+        close_socket(socket)
+        {:noreply, state |> count_refusal(peer, reason) |> schedule_accept()}
+    end
+  end
+
+  defp handle_accept_result({:refused, peer, reason}, state),
+    do: {:noreply, state |> count_refusal(peer, reason) |> schedule_accept()}
+
+  defp handle_accept_result({:ok, socket, {:error, reason}}, state) do
+    close_socket(socket)
+
+    Logger.warning(
+      "TCP provider socket handoff failed for #{state.provider_binding_id}: #{inspect(reason)}"
+    )
+
+    {:noreply, schedule_accept(state)}
+  end
+
+  defp handle_accept_result({:error, reason}, state) do
+    Logger.warning(
+      "TCP provider accept failed for #{state.provider_binding_id}: #{inspect(reason)}"
+    )
+
+    {:noreply, state}
+  end
+
+  defp discard_accept_result({:ok, socket, _handoff}, state) do
+    close_socket(socket)
+    {:noreply, state}
+  end
+
+  defp discard_accept_result(_result, state), do: {:noreply, state}
+
+  defp accept_shared_peer(state, socket, prefix, peer, read_at) do
+    case current_socket(state) do
+      {:ok, _existing_socket} ->
+        state =
+          Session.warn_peer(
+            state,
+            :refused,
+            peer,
+            "TCP provider #{state.provider_binding_id} refused a second connection from " <>
+              "#{peer}; #{state.session_peer} is connected"
+          )
+
+        close_socket(socket)
+        {:noreply, refuse_second_connection(state, peer)}
+
+      {:error, :tcp_provider_not_connected} ->
+        {:noreply,
+         state
+         |> Map.put(:socket, socket)
+         |> Map.put(:connected_at, DateTime.utc_now())
+         |> Session.connected()
+         |> resolve_refusals()
+         |> start_socket_receiver!(socket, {prefix, read_at})}
+    end
+  end
+
   defp connect_socket(host, port) when is_binary(host) and is_integer(port) do
     :gen_tcp.connect(String.to_charlist(host), port, @tcp_opts)
   end
 
-  defp listen_opts(host) when is_binary(host) do
-    case :inet.parse_address(String.to_charlist(host)) do
-      {:ok, ip} -> [{:ip, ip} | @tcp_opts]
-      {:error, _reason} -> @tcp_opts
-    end
-  end
-
   defp listener_port(listener, fallback_port) do
-    case :inet.sockname(listener) do
-      {:ok, {_address, actual_port}} -> actual_port
+    case InboundSocket.port(listener) do
+      {:ok, actual_port} -> actual_port
       {:error, _reason} -> fallback_port
     end
   end
@@ -695,8 +809,8 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
               "#{Session.peer_of(socket)}; #{state.session_peer} is connected"
           )
 
-        :gen_tcp.close(socket)
-        {:noreply, schedule_accept(%{state | accept_ref: nil})}
+        close_socket(socket)
+        {:noreply, schedule_accept(state)}
 
       {:error, :tcp_provider_not_connected} ->
         # Keep one accept pending while connected, so a later peer is refused (and logged)
@@ -705,7 +819,6 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
          state
          |> Map.put(:socket, socket)
          |> Session.connected()
-         |> Map.put(:accept_ref, nil)
          |> start_socket_receiver!(socket)
          |> schedule_accept()}
     end
@@ -724,36 +837,37 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
         "TCP provider #{state.provider_binding_id} refused #{peer}: not an allowed source address"
       )
 
-    :gen_tcp.close(socket)
+    close_socket(socket)
     state |> count_refusal(peer, :peer_not_allowed) |> schedule_accept()
   end
 
+  defp peer_allowed?(%{allowed_peers: []}, %InboundSocket{}), do: true
+
   defp peer_allowed?(%{allowed_peers: ranges}, socket) do
-    case :inet.peername(socket) do
+    case InboundSocket.peername(socket) do
       {:ok, {ip, _port}} -> PeerAddresses.allowed?(ranges, ip)
       _unknown -> false
     end
   end
 
-  # One accept at a time: a second would leave the first's result stale (and closed).
+  # One transport accept is pending. TLS handshakes use separate bounded slots.
   defp schedule_accept(%{accept_ref: ref} = state) when is_reference(ref), do: state
+
+  defp schedule_accept(%{tls_accepts: accepting} = state)
+       when map_size(accepting) >= @max_tls_handshakes,
+       do: state
 
   defp schedule_accept(%{lifecycle_status: :active, listener: listener} = state)
        when not is_nil(listener) do
     accept_ref = make_ref()
     parent = self()
+    authorization = state.delivery_authorization
 
     Task.start(fn ->
-      result =
-        case :gen_tcp.accept(listener) do
-          {:ok, socket} ->
-            {:ok, socket, :gen_tcp.controlling_process(socket, parent)}
-
-          {:error, reason} ->
-            {:error, reason}
-        end
-
-      send(parent, {:accept_result, accept_ref, result})
+      send(
+        parent,
+        {:accept_result, accept_ref, accept_socket(listener, authorization, parent, accept_ref)}
+      )
     end)
 
     %{state | accept_ref: accept_ref}
@@ -761,8 +875,72 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
 
   defp schedule_accept(state), do: state
 
-  defp current_socket(%{socket: socket}) when is_port(socket), do: {:ok, socket}
+  defp accept_socket(listener, authorization, parent, accept_ref) do
+    with {:ok, socket} <- InboundSocket.transport_accept(listener) do
+      if match?(%InboundSocket{}, socket), do: send(parent, {:tls_transport_accepted, accept_ref})
+      authenticate_peer(socket, authorization, parent)
+    end
+  end
+
+  defp authenticate_peer(socket, authorization, parent) do
+    case InboundSocket.authenticate(socket, &Authorization.authorize(authorization, &1)) do
+      {:ok, connected} ->
+        {:ok, connected, InboundSocket.transfer(connected, parent)}
+
+      {:error, reason} ->
+        peer = Session.peer_of(socket)
+        close_socket(socket)
+        {:refused, peer, reason}
+    end
+  end
+
+  defp current_socket(%{socket: socket}) when not is_nil(socket), do: {:ok, socket}
   defp current_socket(_state), do: {:error, :tcp_provider_not_connected}
+
+  defp refresh_delivery_authorization(state) do
+    policy = state.delivery_authorization
+    Authorization.refresh(policy)
+
+    case Authorization.listener_ready(policy) do
+      {:error, :mode_mismatch} -> close_replaced_listener(state)
+      _result -> recheck_peer(state)
+    end
+  end
+
+  defp close_replaced_listener(state) do
+    close_socket(state.listener)
+
+    if state.acceptor?,
+      do:
+        ProfileAcceptor.close_replaced_listener(
+          acceptor_namespace(state),
+          state.mission_id,
+          state.provider_binding_id
+        )
+
+    state |> Map.merge(%{listener: nil, accept_ref: nil, tls_accepts: %{}}) |> recheck_peer()
+  end
+
+  defp recheck_peer(%{socket: nil} = state), do: state
+
+  defp recheck_peer(state) do
+    case Authorization.stream_allowed?(
+           state.delivery_authorization,
+           InboundSocket.identity(state.socket)
+         ) do
+      :ok ->
+        state
+
+      {:error, reason} ->
+        close_socket(state.socket)
+
+        state
+        |> Session.block(reason)
+        |> maybe_stop_socket_receiver()
+        |> count_refusal(state.session_peer, reason)
+        |> Map.merge(%{socket: nil, session_peer: nil, connected_at: nil})
+    end
+  end
 
   defp decode_payloads(payloads_base64) when is_list(payloads_base64) do
     Enum.reduce_while(payloads_base64, {:ok, [], 0}, fn payload_base64, {:ok, acc, total_bytes} ->
@@ -793,7 +971,8 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
 
   defp send_payloads(state, delivery, socket, payloads) when is_list(payloads) do
     Enum.reduce_while(payloads, :ok, fn payload, :ok ->
-      result = with :ok <- Session.check(state, delivery), do: :gen_tcp.send(socket, payload)
+      result =
+        with :ok <- Session.check(state, delivery), do: InboundSocket.send_data(socket, payload)
 
       case result do
         :ok -> {:cont, :ok}
@@ -817,7 +996,7 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
 
   defp start_socket_receiver!(state, socket, prefix \\ <<>>) do
     state = maybe_stop_socket_receiver(state)
-    receiver_state = socket_receiver_state(state)
+    receiver_state = socket_receiver_state(state, InboundSocket.identity(socket))
 
     receiver_pid =
       spawn(fn ->
@@ -829,7 +1008,7 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
         end
       end)
 
-    :ok = :gen_tcp.controlling_process(socket, receiver_pid)
+    :ok = InboundSocket.transfer(socket, receiver_pid)
     send(receiver_pid, {:socket, socket})
 
     %{
@@ -922,6 +1101,13 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
   defp refusal_scid(_reason), do: nil
 
   defp reregister(state) do
+    case Authorization.listener_ready(state.delivery_authorization) do
+      {:error, :mode_mismatch} -> %{state | acceptor_monitor_ref: nil}
+      _result -> register_again(state)
+    end
+  end
+
+  defp register_again(state) do
     {listen, registration} = state.acceptor_registration
     namespace = acceptor_namespace(state)
 
@@ -979,7 +1165,7 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
 
   defp acceptor_namespace(_state), do: ProcessNamespace.default()
 
-  defp socket_receiver_state(state) do
+  defp socket_receiver_state(state, peer_identity) do
     %{
       provider_pid: self(),
       provider_binding_id: state.provider_binding_id,
@@ -1002,7 +1188,8 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
       ingress_metadata:
         (state.ingress_metadata || %{})
         |> Map.delete(:transport_session_id)
-        |> Map.put("transport_session_id", Cadence.Ids.new("tcp")),
+        |> Map.put("transport_session_id", Cadence.Ids.new("tcp"))
+        |> put_peer_identity(peer_identity),
       socket: nil,
       receive_buffer: <<>>,
       message_remainder_bytes: 0,
@@ -1011,11 +1198,16 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
     }
   end
 
+  defp put_peer_identity(metadata, identity) do
+    metadata = Map.drop(metadata, [:delivery_authentication, "delivery_authentication"])
+    if identity, do: Map.put(metadata, "delivery_authentication", identity), else: metadata
+  end
+
   defp socket_receiver_loop(%{ingress_journal_name: nil} = state) do
     state = maybe_wait_for_executor_capacity(state)
     receive_started_at = System.monotonic_time()
 
-    case :gen_tcp.recv(state.socket, 0) do
+    case InboundSocket.recv(state.socket, 0) do
       {:ok, data} ->
         Instrumentation.record_receive(state, data, elapsed_us(receive_started_at))
         receipt_time = DateTime.utc_now()
@@ -1032,7 +1224,7 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
   defp socket_receiver_loop(state) do
     receive_started_at = System.monotonic_time()
 
-    case :gen_tcp.recv(state.socket, 0) do
+    case InboundSocket.recv(state.socket, 0) do
       {:ok, data} ->
         Instrumentation.record_receive(state, data, elapsed_us(receive_started_at))
         receipt_time = DateTime.utc_now()
@@ -1487,12 +1679,10 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
 
   defp stop_socket_receiver_and_wait(state), do: {:ok, state}
 
-  defp close_socket(socket) when is_port(socket) do
-    _ = :gen_tcp.close(socket)
+  defp close_socket(socket) do
+    _ = InboundSocket.close(socket)
     :ok
   end
-
-  defp close_socket(_socket), do: :ok
 
   defp quiescence_settlement(state) do
     %{
@@ -1505,7 +1695,7 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
       refusals: state.refusals,
       second_connections_refused: state.second_connections_refused,
       shared_listener?: state.acceptor?,
-      connected?: is_port(state.socket),
+      connected?: InboundSocket.connected?(state.socket),
       receiver_stopped?: is_nil(state.socket_receiver_pid)
     }
   end

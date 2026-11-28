@@ -3,6 +3,7 @@ import { mergeSamples, tailPoints } from "./tail.ts";
 import {
   conditionLine,
   howItEnded,
+  occurrenceReader,
   occurrenceSummary,
   peakFrom,
   type Occurrence,
@@ -369,6 +370,15 @@ describe("History tab (Investigate.md §History, api's episode reads)", () => {
     expect(howItEnded(occ())).toBe("Back in limits");
     expect(howItEnded(occ({ ended: "source_stopped" }))).toBe("Source stopped reporting it");
     expect(howItEnded(occ({ ended: null, cleared_at: null }))).toBe("Still open");
+    // #451 T3b: a monitoring change set retired the alarm's policy while it was open.
+    expect(howItEnded(occ({ ended: "rule_retired" }))).toBe("Its rule was retired");
+    expect(howItEnded(occ({ ended: "unrecognized" }))).toBe("Ended");
+    // The wire value decodes; a way of ending this console doesn't know never fails the read.
+    const ended = (v: string) => {
+      const r = decode(occurrenceReader, { ...occ(), ended: v });
+      return r.ok ? r.value.ended : r.error;
+    };
+    expect([ended("rule_retired"), ended("rule_reset")]).toEqual(["rule_retired", "unrecognized"]);
   });
   it("takes PEAK from the chart buckets inside the span, by direction; none for catalog", () => {
     const t = (iso: string) => Date.parse(iso);

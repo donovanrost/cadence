@@ -4,7 +4,7 @@ defmodule CadenceWeb.ControlPlaneMissionDataApiTest do
   @moduletag :runtime
   @moduletag :tmp_dir
 
-  import CadenceWeb.ControlPlaneApiFixtures
+  import CadenceWeb.MissionReadModelFixtures
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet, CapabilityInstance}
   alias Cadence.Auth.ServiceIdentity

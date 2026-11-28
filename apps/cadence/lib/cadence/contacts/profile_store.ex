@@ -25,19 +25,20 @@ defmodule Cadence.Contacts.ProfileStore do
   alias Cadence.Persistence.{BulkInsert, BulkLookup}
   alias Cadence.Repo
 
-  @spec persist_provider_profile(binary(), ProviderProfile.t()) ::
+  @spec persist_provider_profile(binary(), ProviderProfile.t(), keyword()) ::
           {:ok, ProviderProfile.t()} | {:error, term()}
-  def persist_provider_profile(organization_id, %ProviderProfile{} = provider_profile)
+  def persist_provider_profile(organization_id, %ProviderProfile{} = provider_profile, opts \\ [])
       when is_binary(organization_id) do
     # SAFETY: a listen host:port is one mission's (ListenClaims), and a listening profile names
     # the peers it accepts (#990, DECISIONS #115); both fail closed at save.
-    with :ok <- listen_allowlist(provider_profile) do
+    with :ok <- ListenAllowlist.check(provider_profile, organization_id) do
       ListenClaims.guard(
         provider_profile.mission_id,
         claimed_configuration(provider_profile),
         fn ->
           persist_scoped_provider_profile(organization_id, provider_profile)
-        end
+        end,
+        listen_claim_owner(provider_profile, opts[:projecting_transport])
       )
     end
   end
@@ -76,7 +77,8 @@ defmodule Cadence.Contacts.ProfileStore do
         claimed_configuration(provider_profile),
         fn ->
           insert_provider_profile(provider_profile)
-        end
+        end,
+        {:profile, provider_profile.provider_profile_id}
       )
     end
   end
@@ -89,6 +91,12 @@ defmodule Cadence.Contacts.ProfileStore do
     do: config
 
   defp claimed_configuration(%ProviderProfile{}), do: nil
+
+  defp listen_claim_owner(%{metadata: %{"materialized_from_transport_id" => id}}, id)
+       when is_binary(id),
+       do: {:transport, id}
+
+  defp listen_claim_owner(profile, _projection), do: {:profile, profile.provider_profile_id}
 
   defp insert_provider_profile(provider_profile) do
     case Repo.insert(ProviderProfileRow.changeset(provider_profile),
@@ -255,21 +263,16 @@ defmodule Cadence.Contacts.ProfileStore do
   end
 
   @doc """
-  Other missions' provider profiles (any organization) that mention listen port `port`, each at
-  its LATEST version: `[%{lifecycle_state, configuration}]` for `Cadence.Comms.ListenClaims`,
-  which decides whether one still claims the port. A server-internal read: callers mustn't show
-  another mission's profile to a user.
+  Provider profiles (any organization) that mention listen port `port`, each at its latest
+  version, for the node-wide listener claims check.
   """
-  @spec latest_provider_profiles_on_port(binary(), pos_integer()) :: [map()]
-  def latest_provider_profiles_on_port(mission_id, port)
-      when is_binary(mission_id) and is_integer(port) do
+  @spec latest_provider_profiles_on_port(pos_integer()) :: [map()]
+  def latest_provider_profiles_on_port(port) when is_integer(port) do
     port_text = Integer.to_string(port)
 
     candidates =
       from(row in ProviderProfileRow,
-        where:
-          row.mission_id != ^mission_id and
-            fragment("(?->'value'->>'port') = ?", row.configuration, ^port_text),
+        where: fragment("(?->'value'->>'port') = ?", row.configuration, ^port_text),
         select: %{mission_id: row.mission_id, provider_profile_id: row.provider_profile_id},
         distinct: true
       )
@@ -281,7 +284,14 @@ defmodule Cadence.Contacts.ProfileStore do
           candidate.provider_profile_id == row.provider_profile_id,
       distinct: [row.mission_id, row.provider_profile_id],
       order_by: [row.mission_id, row.provider_profile_id, desc: row.version],
-      select: %{lifecycle_state: row.lifecycle_state, configuration: row.configuration}
+      select: %{
+        mission_id: row.mission_id,
+        owner_id: row.provider_profile_id,
+        lifecycle_state: row.lifecycle_state,
+        configuration: row.configuration,
+        materialized_transport:
+          fragment("?->'value'->>'materialized_from_transport_id'", row.metadata)
+      }
     )
     |> Repo.all()
     |> Enum.map(&%{&1 | configuration: JsonDocument.unwrap_value(&1.configuration)})

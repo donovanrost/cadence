@@ -26,9 +26,6 @@
       "path": "./modules/dashboards-and-exploration"
     },
     {
-      "path": "./modules/derived-telemetry"
-    },
-    {
       "path": "./modules/limits-and-alarming"
     },
     {

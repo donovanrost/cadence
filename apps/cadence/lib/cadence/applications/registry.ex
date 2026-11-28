@@ -9,7 +9,6 @@ defmodule Cadence.Applications.Registry do
   alias Cadence.Applications.FixtureContributors
 
   alias Cadence.Applications.{
-    ActionDefinition,
     ApplicationDefinition,
     LifecycleContract,
     ResourceClaimDefinition,
@@ -22,8 +21,6 @@ defmodule Cadence.Applications.Registry do
     TelemetryDecom
   }
 
-  alias Cadence.Extensions.Presentation.ReferenceDefinition
-
   @type fetch_error ::
           :unknown_application
           | :unsupported_application_version
@@ -35,8 +32,6 @@ defmodule Cadence.Applications.Registry do
     do:
       [
         TelemetryDecom.definition(),
-        derived_telemetry(),
-        limits(),
         OpsConsole.definition(),
         cfdp()
       ] ++ Enum.map(FixtureContributors.exporting(:definition, 0), & &1.definition())
@@ -164,156 +159,6 @@ defmodule Cadence.Applications.Registry do
 
   defp definitions do
     Map.new(all(), &{&1.application_key, &1})
-  end
-
-  defp derived_telemetry do
-    %ApplicationDefinition{
-      application_key: "derived_telemetry",
-      version: 1,
-      display_name: "Derived Telemetry",
-      description: "Define and observe calculated telemetry points from canonical mission data.",
-      trust: :first_party,
-      availability: :available,
-      installable_scopes: [:mission],
-      configuration_contract: %{
-        schema_id: "cadence.derived_telemetry.definition",
-        version: 1
-      },
-      resource_contract: %ResourceContract{},
-      lifecycle_contract: %LifecycleContract{},
-      status_query_id: "cadence.derived_telemetry.status",
-      actions: [
-        %ActionDefinition{
-          action_id: "save_definition",
-          version: 1,
-          intent: :configuration,
-          scope: :mission,
-          input_contract: %{
-            schema_id: "cadence.derived_telemetry.definition_input",
-            version: 1
-          },
-          result_contract: %{
-            schema_id: "cadence.derived_telemetry.definition",
-            version: 1
-          },
-          required_permission: "operate_mission",
-          effect: :durable,
-          execution: :immediate,
-          concurrency: %{strategy: :append_version}
-        }
-      ],
-      surfaces: [
-        %SurfaceDefinition{
-          surface_id: "manage",
-          version: 1,
-          purpose: :configuration,
-          scope: :mission,
-          placement: :application_workspace,
-          navigation: %{label: "Manage", order: 10},
-          data_contract: %{
-            query_id: "cadence.derived_telemetry.manage",
-            version: 1
-          },
-          actions: ["save_definition"],
-          refresh: :after_action,
-          renderer: {:trusted, "cadence.derived_telemetry.definitions"}
-        }
-      ],
-      capability_contributions: [
-        %{kind: :projection, family_key: :derived_telemetry}
-      ]
-    }
-  end
-
-  defp limits do
-    %ApplicationDefinition{
-      application_key: "limits",
-      version: 1,
-      display_name: "Limits & Alarming",
-      description: "Govern telemetry thresholds and inspect the mission's current limit posture.",
-      trust: :first_party,
-      availability: :available,
-      installable_scopes: [:mission],
-      configuration_contract: %{
-        schema_id: "cadence.limits.definition",
-        version: 1
-      },
-      resource_contract: %ResourceContract{
-        claims: [
-          %ResourceClaimDefinition{
-            claim_type: :canonical_point,
-            scope: :mission,
-            mode: :shared,
-            description: "Canonical telemetry points referenced by governed limit definitions."
-          }
-        ]
-      },
-      lifecycle_contract: %LifecycleContract{},
-      status_query_id: "cadence.limits.status",
-      actions: [
-        %ActionDefinition{
-          action_id: "save_limit_definition",
-          version: 1,
-          intent: :configuration,
-          scope: :mission,
-          input_contract: %{
-            schema_id: "cadence.limits.definition_input",
-            version: 1
-          },
-          result_contract: %{
-            schema_id: "cadence.limits.definition",
-            version: 1
-          },
-          required_permission: "operate_mission",
-          effect: :durable,
-          execution: :immediate,
-          concurrency: %{strategy: :append_version}
-        }
-      ],
-      surfaces: [
-        %SurfaceDefinition{
-          surface_id: "manage",
-          version: 1,
-          purpose: :configuration,
-          scope: :mission,
-          placement: :application_workspace,
-          navigation: %{label: "Definitions", order: 10},
-          data_contract: %{
-            query_id: "cadence.limits.manage",
-            version: 1
-          },
-          references: %{
-            "point_id" => %ReferenceDefinition{
-              provider_id: "cadence.telemetry.canonical_points",
-              version: 1,
-              mode: :search,
-              result_limit: 20
-            }
-          },
-          actions: ["save_limit_definition"],
-          refresh: :after_action,
-          renderer: {:trusted, "cadence.limits.feature"}
-        },
-        %SurfaceDefinition{
-          surface_id: "activity",
-          version: 1,
-          purpose: :activity,
-          scope: :mission,
-          placement: :application_workspace,
-          navigation: %{label: "Current posture", order: 20},
-          data_contract: %{
-            query_id: "cadence.limits.activity",
-            version: 1
-          },
-          actions: [],
-          refresh: :static,
-          renderer: {:trusted, "cadence.limits.feature"}
-        }
-      ],
-      capability_contributions: [
-        %{kind: :projection, family_key: :limits}
-      ]
-    }
   end
 
   defp cfdp do

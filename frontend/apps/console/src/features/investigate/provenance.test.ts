@@ -2,6 +2,7 @@ import { mount, RouterLinkStub } from "@vue/test-utils";
 import { describe, expect, it } from "vite-plus/test";
 import { spacecraftRow } from "@/features/fleet/index.ts";
 import { episodeFixture } from "@/features/alarms/fixtures.ts";
+import { MONITORING_EDITS_PENDING } from "@/features/telemetry/index.ts";
 import AlarmProvenance from "./AlarmProvenance.vue";
 import { centredWindow } from "./model.ts";
 import { pointId as pointIdReader } from "@/api/index.ts";
@@ -18,7 +19,7 @@ const view = (episode: ReturnType<typeof detail>) =>
   });
 
 describe("B1 provenance (ux U71 A7)", () => {
-  it("names the ground limit, links to its version and to the sample that raised it", () => {
+  it("names the ground limit, says where it's edited (no link) and links the sample that raised it", () => {
     const w = view(
       detail({
         limit_definition_id: "def-1",
@@ -34,22 +35,16 @@ describe("B1 provenance (ux U71 A7)", () => {
       }),
     );
     expect(w.text()).toContain("From ground limit v3 in limit set DEFAULT");
+    // #669: the limits app is gone, so the limit is named, not linked (#451 brings the editor).
+    expect(w.text()).toContain(MONITORING_EDITS_PENDING);
     const links = w.findAllComponents(RouterLinkStub);
-    expect(links.map((l) => l.text())).toEqual([
-      "View limit v3",
-      "Show the sample that raised it (02:08:11Z)",
-    ]);
-    expect(links[0]?.props("to")).toEqual({
-      name: "setup.app",
-      params: { appKey: "limits", surface: "manage" },
-      query: { definition: "def-1", version: "3" },
-    });
-    expect(links[1]?.props("to")).toMatchObject({
+    expect(links.map((l) => l.text())).toEqual(["Show the sample that raised it (02:08:11Z)"]);
+    expect(links[0]?.props("to")).toMatchObject({
       params: { tab: "telemetry" },
       query: { points: "EPS.VBAT", focus: "EPS.VBAT", at: "2026-11-08T02:08:11Z" },
     });
     // ux U80: and opens the Sample aside on it, exactly (its receipt time).
-    expect(links[1]?.props("to")).toMatchObject({
+    expect(links[0]?.props("to")).toMatchObject({
       query: { sample: "s-1", received: "2026-11-08T02:08:11.250Z" },
     });
   });
@@ -67,6 +62,7 @@ describe("B1 provenance (ux U71 A7)", () => {
       }),
     );
     expect(w.text()).toContain("From the catalog's limits");
+    expect(w.text()).not.toContain(MONITORING_EDITS_PENDING);
     expect(w.findAllComponents(RouterLinkStub)).toHaveLength(0);
   });
   it("centres the window on the sample, never past now", () => {

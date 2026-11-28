@@ -11,14 +11,14 @@ defmodule CadenceWeb.Console.OneAPITelemetryTest do
 
   alias Cadence.Auth.ServiceIdentity
   alias CadenceWeb.Console.DevIngestRoutes
-  alias CadenceWeb.{ControlPlaneApiFixtures, TestFixtures}
+  alias CadenceWeb.{MissionReadModelFixtures, TestFixtures}
 
   setup do
     org = TestFixtures.persist_org!()
     user = TestFixtures.persist_user!()
     TestFixtures.grant_membership!(user, org)
     mission = TestFixtures.persist_mission!(org)
-    ControlPlaneApiFixtures.seed_mission_read_models(org.organization_id, mission.mission_id)
+    MissionReadModelFixtures.seed_mission_read_models(org.organization_id, mission.mission_id)
 
     # Ingest needs an active binding set.
     {:ok, _activation} =
@@ -58,13 +58,16 @@ defmodule CadenceWeb.Console.OneAPITelemetryTest do
   defp packet_hex,
     do:
       42
-      |> ControlPlaneApiFixtures.build_space_packet(3, <<12.5::float-32, 1::size(1), 0::size(7)>>)
+      |> MissionReadModelFixtures.build_space_packet(
+        3,
+        <<12.5::float-32, 1::size(1), 0::size(7)>>
+      )
       |> Base.encode16(case: :lower)
 
   defp frame_hex,
     do:
       42
-      |> ControlPlaneApiFixtures.build_tm_single_frame(
+      |> MissionReadModelFixtures.build_tm_single_frame(
         4,
         <<12.5::float-32, 1::size(1), 0::size(7)>>,
         17

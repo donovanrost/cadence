@@ -30,7 +30,7 @@ defmodule Cadence.Comms.ListenClaims do
   @loopback_hosts ["localhost", "127.0.0.1"]
 
   @type endpoint :: %{host: binary(), port: pos_integer()}
-  @type reason :: {:listen_endpoint_claimed, map()}
+  @type reason :: {:listen_endpoint_claimed | :listen_endpoint_mode_mismatch, map()}
 
   @doc "The words a form shows for a refused endpoint (class-level; names no mission)."
   @spec message() :: binary()
@@ -60,43 +60,63 @@ defmodule Cadence.Comms.ListenClaims do
   @spec check(binary(), endpoint() | nil) :: :ok | {:error, reason()}
   def check(_mission_id, nil), do: :ok
 
-  def check(mission_id, %{port: port} = endpoint) when is_binary(mission_id) do
-    claimed? =
-      Enum.any?(
-        profile_claims(mission_id, port) ++ transport_claims(mission_id, port),
-        &overlaps?(&1, endpoint)
-      )
-
-    if claimed?, do: {:error, {:listen_endpoint_claimed, endpoint}}, else: :ok
-  end
+  def check(mission_id, endpoint) when is_binary(mission_id),
+    do: check_claims(mission_id, endpoint, nil, nil)
 
   @doc """
   Runs `write` (a fun returning `{:ok, _} | {:error, _}`) only if `configuration`'s listen
   endpoint, if any, isn't another mission's, holding the port's advisory lock until the write
   commits. An inactive write (a tombstone, an archive) claims nothing and isn't checked.
   """
-  @spec guard(binary(), term(), (-> {:ok, term()} | {:error, term()})) ::
+  @spec guard(binary(), term(), (-> {:ok, term()} | {:error, term()}), term()) ::
           {:ok, term()} | {:error, term()}
-  def guard(mission_id, configuration, write) when is_function(write, 0) do
+  def guard(mission_id, configuration, write, owner \\ nil) when is_function(write, 0) do
     case endpoint(configuration) do
       nil ->
         write.()
 
       endpoint ->
-        Repo.transaction(fn -> locked_write(mission_id, endpoint, write) end)
+        mode = auth_mode(configuration)
+        Repo.transaction(fn -> locked_write(mission_id, endpoint, mode, owner, write) end)
     end
   end
 
-  defp locked_write(mission_id, %{port: port} = endpoint, write) do
+  defp locked_write(mission_id, %{port: port} = endpoint, mode, owner, write) do
     Repo.query!("SELECT pg_advisory_xact_lock(hashtext($1))", ["listen_port:#{port}"])
 
-    with :ok <- check(mission_id, endpoint),
+    with :ok <- check_claims(mission_id, endpoint, mode, owner),
          {:ok, result} <- write.() do
       result
     else
       {:error, reason} -> Repo.rollback(reason)
     end
   end
+
+  defp check_claims(_mission_id, nil, _mode, _owner), do: :ok
+
+  defp check_claims(mission_id, %{port: port} = endpoint, mode, owner) do
+    claims = overlapping_claims(port, endpoint)
+
+    cond do
+      Enum.any?(claims, &(&1.mission_id != mission_id)) ->
+        {:error, {:listen_endpoint_claimed, endpoint}}
+
+      mode && Enum.any?(claims, &conflicting_mode?(&1, owner, mode)) ->
+        {:error, {:listen_endpoint_mode_mismatch, endpoint}}
+
+      true ->
+        :ok
+    end
+  end
+
+  defp overlapping_claims(port, endpoint) do
+    (profile_claims(port) ++ transport_claims(port))
+    |> Enum.filter(&overlaps?(&1.endpoint, endpoint))
+  end
+
+  defp conflicting_mode?(%{projected?: true}, _owner, _mode), do: false
+  defp conflicting_mode?(%{owner: owner}, owner, _mode), do: false
+  defp conflicting_mode?(claim, _owner, mode), do: claim.mode != mode
 
   @doc """
   `check/2` for every listen binding on a contact's paths (fail closed at start). A refusal also
@@ -109,12 +129,14 @@ defmodule Cadence.Comms.ListenClaims do
     paths
     |> Enum.flat_map(&(Map.get(&1, :provider_bindings) || []))
     |> Enum.reduce_while(:ok, fn binding, :ok ->
-      case check(mission_id, endpoint(Map.get(binding, :configuration))) do
+      config = Map.get(binding, :configuration) || %{}
+
+      case check_claims(mission_id, endpoint(config), auth_mode(config), nil) do
         :ok ->
           {:cont, :ok}
 
-        {:error, {:listen_endpoint_claimed, endpoint}} ->
-          {:halt, {:error, {:listen_endpoint_claimed, Map.merge(endpoint, binding_ref(binding))}}}
+        {:error, {reason, endpoint}} ->
+          {:halt, {:error, {reason, Map.merge(endpoint, binding_ref(binding))}}}
       end
     end)
   end
@@ -129,20 +151,17 @@ defmodule Cadence.Comms.ListenClaims do
     }
   end
 
-  # Other missions' latest provider profiles mentioning `port` (ProfileStore owns the rows).
-  defp profile_claims(mission_id, port),
-    do: mission_id |> ProfileStore.latest_provider_profiles_on_port(port) |> claimed_endpoints()
+  defp profile_claims(port),
+    do: port |> ProfileStore.latest_provider_profiles_on_port() |> claimed_endpoints(:profile)
 
-  # Other missions' transports mentioning `port`, at their LATEST version: only one that is
+  # Transports mentioning `port`, at their LATEST version: only one that is
   # still active and still listens there claims it.
-  defp transport_claims(mission_id, port) do
+  defp transport_claims(port) do
     port_text = Integer.to_string(port)
 
     candidates =
       from(row in TransportRow,
-        where:
-          row.mission_id != ^mission_id and
-            fragment("(?->'value'->>'port') = ?", row.configuration, ^port_text),
+        where: fragment("(?->'value'->>'port') = ?", row.configuration, ^port_text),
         select: %{mission_id: row.mission_id, transport_id: row.transport_id},
         distinct: true
       )
@@ -152,19 +171,34 @@ defmodule Cadence.Comms.ListenClaims do
       on: candidate.mission_id == row.mission_id and candidate.transport_id == row.transport_id,
       distinct: [row.mission_id, row.transport_id],
       order_by: [row.mission_id, row.transport_id, desc: row.version],
-      select: %{lifecycle_state: row.lifecycle_state, configuration: row.configuration}
+      select: %{
+        mission_id: row.mission_id,
+        owner_id: row.transport_id,
+        lifecycle_state: row.lifecycle_state,
+        configuration: row.configuration
+      }
     )
     |> Repo.all()
     |> Enum.map(&%{&1 | configuration: JsonDocument.unwrap_value(&1.configuration)})
-    |> claimed_endpoints()
+    |> claimed_endpoints(:transport)
   end
 
-  defp claimed_endpoints(latest_rows) do
-    for %{lifecycle_state: state, configuration: configuration} <- latest_rows,
+  defp claimed_endpoints(latest_rows, kind) do
+    for %{lifecycle_state: state, configuration: configuration} = row <- latest_rows,
         state in ["active", :active],
         endpoint = endpoint(configuration),
         not is_nil(endpoint),
-        do: endpoint
+        do: %{
+          mission_id: row.mission_id,
+          owner: {kind, row.owner_id},
+          projected?: is_binary(Map.get(row, :materialized_transport)),
+          endpoint: endpoint,
+          mode: auth_mode(configuration)
+        }
+  end
+
+  defp auth_mode(configuration) do
+    if get(configuration, :delivery_auth) in ["mtls", :mtls], do: :mtls, else: :plaintext
   end
 
   # Two binds collide on the same port when either is a wildcard or both name the same host.

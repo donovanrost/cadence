@@ -2,10 +2,7 @@ import type { Preview } from "./actions.ts";
 
 export type Dependent = Readonly<{ point_id: string; definition_id: string }>;
 
-/**
- * U42: the derived points a retire would break, once each, so Changes can link each to its definition
- * in the derived_telemetry app's manage surface (`?definition=<id>`, AppSurfaces.md › Deep links).
- */
+/** U42: the derived points a retire would break, once each, for Changes to name under the checks. */
 export function dependents(preview: Preview): readonly Dependent[] {
   const seen = new Map<string, Dependent>();
   for (const check of preview.checks)

@@ -4,8 +4,6 @@ defmodule Cadence.Applications.ReleaseRegistry do
   alias Cadence.Applications.FixtureContributors
 
   alias Cadence.Applications.{
-    DerivedTelemetry,
-    Limits,
     OpsConsole,
     ReleaseContribution,
     TelemetryDecomCatalogContribution
@@ -13,10 +11,8 @@ defmodule Cadence.Applications.ReleaseRegistry do
 
   @max_contributions 128
   @contributors [
-    Limits,
     TelemetryDecomCatalogContribution,
-    OpsConsole,
-    DerivedTelemetry
+    OpsConsole
   ]
 
   @spec all() :: [ReleaseContribution.t()]
