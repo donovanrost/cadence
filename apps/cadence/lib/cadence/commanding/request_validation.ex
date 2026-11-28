@@ -279,7 +279,7 @@ defmodule Cadence.Commanding.RequestValidation do
              mission_id,
              source_endpoint_id
            ),
-         :ok <- exact_revision(runtime_basis, revision_id) do
+         :ok <- exact_revision(runtime_basis, revision_id, organization_id, mission_id) do
       Map.new(command_ids, fn command_id ->
         {command_id, command_resolved(plans, command_id, runtime_basis)}
       end)
@@ -319,13 +319,39 @@ defmodule Cadence.Commanding.RequestValidation do
     end)
   end
 
-  defp exact_revision(%{mission_model_revision_id: revision_id}, revision_id), do: :ok
+  # The revision a request was validated on is still the one its craft runs, or (#1107) another
+  # revision with the very same command plan: a monitoring apply moves craft to a new head
+  # revision, and what a command encodes and verifies against, its command plan, is unchanged, so a
+  # request already queued can still release.
+  defp exact_revision(%{mission_model_revision_id: revision_id}, revision_id, _org, _mission),
+    do: :ok
 
-  defp exact_revision(%{mission_model_revision_id: active}, requested),
-    do: {:error, {:mission_model_revision_mismatch, requested, active}}
+  defp exact_revision(
+         %{mission_model_revision_id: active} = runtime_basis,
+         requested,
+         org,
+         mission
+       ) do
+    if same_command_plan?(runtime_basis, org, mission, requested),
+      do: :ok,
+      else: {:error, {:mission_model_revision_mismatch, requested, active}}
+  end
 
-  defp exact_revision(%{}, requested),
+  defp exact_revision(%{}, requested, _org, _mission),
     do: {:error, {:mission_model_revision_not_active, requested}}
+
+  defp same_command_plan?(%{runtime_plans: %{command: active}}, org, mission, requested) do
+    case MissionModels.fetch_plan(org, mission, requested, :command) do
+      {:ok, plan} ->
+        {plan.plan_id, plan.content_sha256, plan.target_contract_version} ==
+          {active.plan_id, active.content_sha256, active.target_contract_version}
+
+      {:error, _reason} ->
+        false
+    end
+  end
+
+  defp same_command_plan?(_runtime_basis, _org, _mission, _requested), do: false
 
   defp validation_basis(request_basis) do
     %{

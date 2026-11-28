@@ -78,6 +78,54 @@ defmodule Cadence.Catalog.FleetSnapshot do
 
   def fleet_sha256(_metadata), do: nil
 
+  @doc """
+  What commands resolve against in the fleet, as one digest (#1107): per craft, in id order, whether
+  commanding is on, its configuration revision and version, its catalog revision, its source
+  endpoints and its **command** runtime plan's identity. Nothing about its other plans or its model
+  revision's id, so a generation that only moves craft to a new revision with the same command plan
+  (a monitoring apply) leaves it equal. Computed in the database: one read, no entries decoded
+  here, for a fleet of any size. `{:error, :invalid_spacecraft_model_bindings}` when `metadata`
+  isn't a v2 fleet.
+  """
+  @spec command_digest(map()) :: {:ok, String.t()} | {:error, :invalid_spacecraft_model_bindings}
+  def command_digest(%{"spacecraft_configuration_version" => 2, "fleet" => fleet}) do
+    case members_query(fleet) do
+      nil ->
+        {:error, :invalid_spacecraft_model_bindings}
+
+      query ->
+        digest =
+          query
+          |> join(:inner, [m], e in EntryRow,
+            on: e.mission_id == m.mission_id and e.entry_sha256 == m.entry_sha256
+          )
+          |> select(
+            [m, e],
+            fragment(
+              """
+              md5(coalesce(string_agg(? || ':' || jsonb_build_array(
+                ?->'commanding_enabled', ?->'configuration_revision_id', ?->'configuration_version',
+                ?->'catalog_revision_id', ?->'source_endpoint_ids', ?->'mission_model'->'plans'->'command'
+              )::text, '|' ORDER BY ?), ''))
+              """,
+              m.spacecraft_id,
+              e.entry,
+              e.entry,
+              e.entry,
+              e.entry,
+              e.entry,
+              e.entry,
+              m.spacecraft_id
+            )
+          )
+          |> Repo.one()
+
+        {:ok, digest}
+    end
+  end
+
+  def command_digest(_metadata), do: {:error, :invalid_spacecraft_model_bindings}
+
   @doc "Every entry of the fleet (`spacecraft_id => entry`)."
   @spec entries(map()) :: {:ok, map()} | {:error, :invalid_spacecraft_model_bindings}
   def entries(%{"spacecraft_configuration_version" => 2, "fleet" => fleet}) do
