@@ -196,6 +196,24 @@ defmodule Cadence.Reads.CommandGroups.PageTest do
              Page.targets(view(), %{"q" => String.duplicate("a", 101)})
   end
 
+  test "the revision moves when anything a page of targets shows does" do
+    base = %{view() | targets: view().targets}
+    same = Page.first(base).targets_page.revision
+
+    blocked = %{
+      base
+      | targets:
+          List.update_at(base.targets, 2, &%{&1 | blocked: %{reason: :lane_release_uncertain}})
+    }
+
+    refute Page.first(blocked).targets_page.revision == same
+
+    # A member's own facts, with the stage unchanged.
+    member = %{failure_reason: :verify_failed, timed_out_at: ~U[2026-11-28 00:00:00Z]}
+    with_member = %{base | targets: List.update_at(base.targets, 3, &%{&1 | members: [member]})}
+    refute Page.first(with_member).targets_page.revision == same
+  end
+
   test "the revision moves when a target's stage does, and not otherwise" do
     base = view()
     same = Page.first(base).targets_page.revision

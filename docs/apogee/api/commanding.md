@@ -332,7 +332,7 @@ Body: the draft plus `preflight_digest` (from the preflight the operator saw) an
   409, so disable GO up front; NO-GO, send back and abort stay allowed.
 - **Paged targets and events (#795).** Show also carries `targets_page: {total, revision,
   next_cursor}` and `events_page: {total, next_cursor}`: how many there are, and `revision` changes
-  whenever any target's stage does (a live client refetches its pages then, or when
+  whenever anything a page of targets shows does: a target's stage, `blocked`, or a member's facts (a live client refetches its pages then, or when
   `events_page.total` moves). Each target also carries its `index`. Today show still lists every
   target and event (`next_cursor: null`); the console moves to the paged reads below, after which
   show carries only the first 100 targets and the latest 50 events, and the group push omits both.

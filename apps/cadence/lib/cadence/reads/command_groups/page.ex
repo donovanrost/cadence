@@ -57,8 +57,10 @@ defmodule Cadence.Reads.CommandGroups.Page do
     |> Map.put(:events_page, %{total: events.total, next_cursor: events.next_cursor})
   end
 
-  # Changes whenever any target's stage does, so a live client knows when to refetch its pages.
-  defp revision(targets), do: :erlang.phash2(Enum.map(targets, &{&1.index, &1.stage}))
+  # Changes whenever any target, as a page shows it, does: a live client refetches its pages then.
+  # It covers everything a page of targets shows (stage, `blocked`, each member's times, reasons and
+  # release refusal), not just the stage, so a change a client would see on a page it holds moves it.
+  defp revision(targets), do: :erlang.phash2(targets)
 
   @doc "A page of targets. `params`: `limit`, `cursor`, `stage`, `q` (strings, as on the wire)."
   @spec targets(map(), map()) ::
