@@ -52,7 +52,7 @@ defmodule CadenceWeb.Console.CommandGroupController do
            ),
          {:ok, view} <-
            CommandGroups.get(org(conn), mission(conn), group.command_group_id, viewer(conn)) do
-      conn |> put_status(:created) |> json(%{data: CommandGroupJSON.show(view)})
+      conn |> put_status(:created) |> json(%{data: CommandGroupJSON.show_first_page(view)})
     else
       error -> CommandGroupProblems.respond(conn, error)
     end
@@ -151,7 +151,7 @@ defmodule CadenceWeb.Console.CommandGroupController do
     case CommandGroups.get(org(conn), mission(conn), id, viewer(conn)) do
       {:ok, view} ->
         [view] = with_uplink(conn, [view])
-        json(conn, %{data: CommandGroupJSON.show(view)})
+        json(conn, %{data: CommandGroupJSON.show_first_page(view)})
 
       error ->
         CommandGroupProblems.respond(conn, error)

@@ -28,18 +28,6 @@ defmodule Cadence.Reads.CommandGroups.Page do
 
   @type error :: :invalid_cursor | {:invalid_params, map()}
 
-  @doc "The view as it is, with the totals of its targets and events and no cursors."
-  @spec totals(map()) :: map()
-  def totals(view) do
-    view
-    |> Map.put(:targets_page, %{
-      total: length(view.targets),
-      revision: revision(view.targets),
-      next_cursor: nil
-    })
-    |> Map.put(:events_page, %{total: length(view.events), next_cursor: nil})
-  end
-
   @doc "The view with its first pages: the first targets and the latest events, with their totals."
   @spec first(map()) :: map()
   def first(view) do

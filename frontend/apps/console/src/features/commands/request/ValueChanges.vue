@@ -2,7 +2,7 @@
 import { computed, ref } from "vue";
 import { useRemoteQuery } from "@/api/index.ts";
 import { useMissionScope } from "@/shell/index.ts";
-import { ApCallout } from "@/ui";
+import { ApCallout, formatCount } from "@/ui";
 import type { Group } from "../groups/show.ts";
 import { argChanges, fetchBrief, overwriteCallouts, type Brief } from "./brief.ts";
 import OwnValuesTable from "./OwnValuesTable.vue";
@@ -48,7 +48,8 @@ const briefs = useRemoteQuery(key, async (_k, signal) => {
   unread.value = failed;
   return { ok: true as const, value: new Map<number, Brief[]>(byPosition) };
 });
-const nameOf = (id: string) => props.group.targets.find((t) => t.spacecraft_id === id)?.name ?? id;
+const nameOf = (id: string) =>
+  props.group.targets.find((t) => t.spacecraft_id === id)?.name ?? "Unknown spacecraft";
 /** ux C2: targets with their own values; units and ranges come from the catalog's command. */
 const argsOf = useCatalogArgs(
   computed(() => scope.value.mission.id),
@@ -113,8 +114,8 @@ const rows = computed(() => {
     <p v-if="unread" class="m-0 font-mono text-xs text-caution-text">
       Couldn't read current values for {{ unread }} {{ unread === 1 ? "request" : "requests" }}.
     </p>
-    <p v-if="group.targets.length > LIMIT" class="m-0 font-mono text-xs text-text-4">
-      Current values from the first {{ LIMIT }} of {{ group.targets.length }} targets.
+    <p v-if="group.target_count > LIMIT" class="m-0 font-mono text-xs text-text-4">
+      Current values from the first {{ LIMIT }} of {{ formatCount(group.target_count) }} targets.
     </p>
   </div>
 </template>

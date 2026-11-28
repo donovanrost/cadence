@@ -59,7 +59,17 @@ export function headline(group: Group, nameOf: PersonName): string {
   return `${n("verified")} of ${total} verified${tail}`;
 }
 
-/** Abort is offered while some uplink hasn't started to radiate. */
-export const abortable = (group: Group) =>
-  (group.state === "queued" || group.state === "approval_pending") &&
-  group.targets.some((t) => t.members.some((m) => NOT_STARTED.includes(m.stage)));
+/** A target's stage when an earlier member is out but a later one may still wait. */
+const UNDER_WAY: readonly MemberStage[] = ["radiating", "executed", "indeterminate"];
+
+/**
+ * Abort is offered while some uplink hasn't started to radiate (#795: from `progress`, the
+ * server's count of every target by stage, not the targets on screen). A target's stage is its
+ * first unfinished member's, so one under way still has later uplinks waiting when the request
+ * stacks more than one command.
+ */
+export function abortable(group: Group): boolean {
+  if (group.state !== "queued" && group.state !== "approval_pending") return false;
+  const any = (stages: readonly MemberStage[]) => stages.some((s) => (group.progress[s] ?? 0) > 0);
+  return any(NOT_STARTED) || (group.command_count > 1 && any(UNDER_WAY));
+}

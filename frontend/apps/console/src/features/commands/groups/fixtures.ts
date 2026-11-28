@@ -54,8 +54,11 @@ export const showBody = {
       payload: { members: 2, second_go_required: true },
     },
   ],
+  targets_page: { total: 1, revision: 1, next_cursor: null },
+  events_page: { total: 1, next_cursor: null },
   targets: [
     {
+      index: 0,
       spacecraft_id: "sc-1",
       name: "SC-1",
       scid: 7,
@@ -69,6 +72,7 @@ export const showBody = {
           command_name: "FORCE_WATCHDOG",
           stage: "awaiting_go",
           end_reason: null,
+          failure_reason: null,
           verify_by: null,
           occurred_at: null,
         },
@@ -79,8 +83,33 @@ export const showBody = {
   ],
 };
 
+type Raw = Record<string, unknown>;
+const isRaw = (v: unknown): v is Raw => typeof v === "object" && v !== null && !Array.isArray(v);
+const list = (v: unknown): Raw[] => (Array.isArray(v) ? v.filter(isRaw) : []);
+
+/**
+ * A group read for a test. Overridden targets get their `index` (their place) and each member a
+ * null `failure_reason` unless the test sets them, and the page totals follow the lists given
+ * unless set, so a test names only what it's about (#795).
+ */
 export function groupOf(overrides: Record<string, unknown> = {}): Group {
-  const decoded = decode(groupReader, { ...showBody, ...overrides });
+  const body: Raw = { ...showBody, ...overrides };
+  const targets = list(body["targets"]).map((t, i) => ({
+    index: i,
+    ...t,
+    members: list(t["members"]).map((m) => ({ failure_reason: null, ...m })),
+  }));
+  const events = list(body["events"]);
+  const decoded = decode(groupReader, {
+    ...body,
+    targets,
+    targets_page: overrides["targets_page"] ?? {
+      total: targets.length,
+      revision: 1,
+      next_cursor: null,
+    },
+    events_page: overrides["events_page"] ?? { total: events.length, next_cursor: null },
+  });
   if (!decoded.ok) throw decoded.error;
   return decoded.value;
 }

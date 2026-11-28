@@ -2,6 +2,7 @@ import type { MissionId } from "@/api/index.ts";
 import { describeApiError } from "@/api/index.ts";
 import { fetchCommand } from "../api.ts";
 import { textFromJson } from "../args.ts";
+import { fetchAllTargets } from "../groups/pages.ts";
 import { fetchGroup, type Group } from "../groups/show.ts";
 import { newItem, type StackItem } from "./stack.ts";
 
@@ -52,6 +53,8 @@ export function splitArgs(json: string): Record<string, string> | null {
 
 export type Resend = Readonly<{
   group: Group;
+  /** #795: every target, in target order (the group read carries only the first page). */
+  targetIds: readonly string[];
   stack: StackItem[];
   /** Names of commands no longer in the active catalog. */
   missing: string[];
@@ -63,6 +66,8 @@ export async function loadResend(
 ): Promise<{ ok: true; value: Resend } | { ok: false; message: string }> {
   const g = await fetchGroup(missionId, groupId);
   if (!g.ok) return { ok: false, message: describeApiError(g.error) };
+  const all = await fetchAllTargets({ missionId, groupId }, new AbortController().signal);
+  if (!all.ok) return { ok: false, message: describeApiError(all.error) };
   const stack: StackItem[] = [];
   const missing: string[] = [];
   const commands = [...g.value.commands].sort((a, b) => a.position - b.position);
@@ -95,5 +100,6 @@ export async function loadResend(
     }
     stack.push({ ...item, values, perTarget });
   }
-  return { ok: true, value: { group: g.value, stack, missing } };
+  const targetIds = all.value.map((t) => t.spacecraft_id);
+  return { ok: true, value: { group: g.value, targetIds, stack, missing } };
 }
