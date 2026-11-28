@@ -156,6 +156,19 @@ defmodule Cadence.Control.MonitoringGeneration do
     end
   end
 
+  # What the craft runs now: its active entry's document (a profile-framed craft's is derived by
+  # the configuration generation), so the recompiled contribution is the running one's.
+  defp active_document(%{"document" => %{} = document}, _row), do: document
+  defp active_document(_entry, row), do: row.document
+
+  # The craft's active entry with only what the head revision changes: the mission model it runs
+  # and the telemetry capability ids derived from it. Everything else (configuration, framing,
+  # catalog, sources) stays exactly as it runs, which admission holds it to.
+  defp onto_active(item, entry) do
+    moved = Map.take(item.entry, ["mission_model", "telemetry_capability_ids"])
+    %{item | entry: Map.merge(entry, moved)}
+  end
+
   # Each craft on a composition in use, recompiled against its head revision from its existing
   # assignment: inputs once per {catalog, revision} (Review.cached_inputs), sources in one read.
   defp recompile(mission, entries, heads, by_catalog) do
@@ -167,13 +180,16 @@ defmodule Cadence.Control.MonitoringGeneration do
           composition = composition_of(entry, by_catalog),
           is_map_key(heads, composition),
           into: %{},
-          do: {id, Map.put(entry, "composition_id", composition)}
+          do: {id, {entry, composition}}
 
     rows =
       org
       |> Assignments.fetch_many(
         mission_id,
-        on_heads |> Map.values() |> Enum.map(& &1["configuration_revision_id"]) |> Enum.uniq()
+        on_heads
+        |> Map.values()
+        |> Enum.map(fn {entry, _composition} -> entry["configuration_revision_id"] end)
+        |> Enum.uniq()
       )
 
     sources =
@@ -183,15 +199,16 @@ defmodule Cadence.Control.MonitoringGeneration do
 
     on_heads
     |> Enum.sort_by(&elem(&1, 0))
-    |> Enum.reduce_while({:ok, [], %{}}, fn {id, entry}, {:ok, items, cache} ->
+    |> Enum.reduce_while({:ok, [], %{}}, fn {id, {entry, composition}}, {:ok, items, cache} ->
       with %{} = row <-
              Map.get(rows, entry["configuration_revision_id"]) ||
                {:error, :spacecraft_configuration_not_found},
-           revision = Map.fetch!(heads, entry["composition_id"]),
+           revision = Map.fetch!(heads, composition),
            {:ok, inputs, cache} <-
              Review.cached_inputs(cache, mission, entry["catalog_revision_id"], revision),
-           {:ok, item} <- Review.compile(mission, id, row, inputs, Map.get(sources, id, [])) do
-        {:cont, {:ok, [item | items], cache}}
+           running = %{row | document: active_document(entry, row)},
+           {:ok, item} <- Review.compile(mission, id, running, inputs, Map.get(sources, id, [])) do
+        {:cont, {:ok, [onto_active(item, entry) | items], cache}}
       else
         {:error, reason} -> {:halt, {:error, {reason, id}}}
       end
