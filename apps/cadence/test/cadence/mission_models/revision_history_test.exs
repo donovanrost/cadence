@@ -100,10 +100,8 @@ defmodule Cadence.MissionModels.RevisionHistoryTest do
       assert {%{"left" => left, "right" => right}, fleet_query} =
                with_one_query(fn -> MissionModels.revisions_at(org, mission, @first_receipt) end)
 
-      if size == 1_000 do
-        assert_bounded_plan(:revisions_at, fleet_query)
-        assert_bounded_plan(:revision_at, single_query)
-      end
+      assert_bounded_plan(:revisions_at, fleet_query, size)
+      assert_bounded_plan(:revision_at, single_query, size)
 
       assert Enum.sort(left ++ right) == Enum.sort(Map.keys(assignments))
       assert length(left) == div(size, 2)
@@ -181,7 +179,7 @@ defmodule Cadence.MissionModels.RevisionHistoryTest do
     end
   end
 
-  defp assert_bounded_plan(read, %{query: sql, params: params}) do
+  defp assert_bounded_plan(read, %{query: sql, params: params}, size) do
     Repo.query!("PREPARE revision_history_probe AS " <> sql)
 
     try do
@@ -198,13 +196,14 @@ defmodule Cadence.MissionModels.RevisionHistoryTest do
         )
 
       %{rows: [[[%{"Plan" => plan}]]]} = Repo.query!(explain)
-      assert init_plan?(plan), "#{read} must resolve the fleet hash in an init plan"
-
       buffers = plan["Shared Hit Blocks"] + plan["Shared Read Blocks"]
+      ceiling = 8 * size
 
-      # A scoped membership scan plus keyed entry reads touch a few thousand blocks.
-      # This allows spare capacity for cold pages and index depth without a wall-time cap.
-      assert buffers < 30_000, "#{read} touched #{buffers} shared buffers"
+      # Allow room for the membership scan and keyed entry reads at both fleet sizes.
+      assert buffers < ceiling,
+             "#{read} touched #{buffers} shared buffers for #{size} craft (ceiling #{ceiling})"
+
+      assert init_plan?(plan), "#{read} must resolve the fleet hash in an init plan"
     after
       Repo.query!("DEALLOCATE revision_history_probe")
     end
