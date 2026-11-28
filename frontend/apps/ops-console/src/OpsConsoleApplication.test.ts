@@ -1,6 +1,5 @@
 import { required } from "../../../test-support/required";
 import { flushPromises, mount } from "@vue/test-utils";
-import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import { describe, expect, it, vi } from "vite-plus/test";
 import type {
   FullPageSurfaceProps,
@@ -344,11 +343,8 @@ describe("Ops Console federated application", () => {
     );
     const query = vi.fn<TestQuery>().mockResolvedValue(response);
     const baseProps = propsFor(query);
-    // The host draws the title and the mission in its breadcrumbs; the landing describes it.
-    const header = pageHeaderHarness("/missions/:mission_id/ops");
     const wrapper = mount(OpsConsoleApplication, {
       props: { ...baseProps, surface, application: { ...baseProps.application, surface } },
-      global: { provide: header.provide },
     });
 
     expect(wrapper.find("#ops-console-loading").exists()).toBe(true);
@@ -360,7 +356,6 @@ describe("Ops Console federated application", () => {
       context,
     });
     expect(wrapper.find("#ops-console-application").exists()).toBe(true);
-    expect(header.header().description).toBeTypeOf("string");
     wrapper.unmount();
   });
 

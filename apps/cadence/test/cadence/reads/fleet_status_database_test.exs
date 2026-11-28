@@ -146,7 +146,12 @@ defmodule Cadence.Reads.FleetStatusDatabaseTest do
       })
 
     strip = fn fleet ->
-      Enum.map(fleet.spacecraft, &Map.drop(&1, [:in_contact, :next_aos_at, :last_los_at]))
+      Enum.map(fleet.spacecraft, fn row ->
+        row
+        |> Map.drop([:in_contact, :next_aos_at, :last_los_at])
+        # When the evaluation ran is only known to the database read.
+        |> Map.update!(:worst_point, &(&1 && Map.delete(&1, :evaluated_at)))
+      end)
     end
 
     assert strip.(loaded) == strip.(built)

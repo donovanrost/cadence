@@ -2,6 +2,8 @@ defmodule CadenceWeb.Console.FleetAPITest do
   use CadenceWeb.ConnCase, async: true
 
   alias Cadence.Reads.FleetStatus
+  alias Cadence.Repo
+  alias Cadence.SemanticObservations.{FleetAlarms, LatestAlarmStateRow}
   alias CadenceWeb.TestFixtures
 
   setup do
@@ -42,6 +44,57 @@ defmodule CadenceWeb.Console.FleetAPITest do
     assert row["limit_state"] == "no_data"
     assert row["stale"] == false
     assert row["worst_point"] == nil
+  end
+
+  test "a live monitoring alarm shows on the row, labelled by source, with no limit job run", c do
+    at = ~U[2026-11-26 12:00:00.000000Z]
+
+    %{
+      organization_id: c.mission.organization_id,
+      mission_id: c.mission.mission_id,
+      spacecraft_id: c.craft.spacecraft_id,
+      parameter_id: "HEALTH.mode",
+      policy_id: "policy-1",
+      evaluation_id: "eval-1",
+      transition_id: "tr-1",
+      effective_state: "critical",
+      generation_time: at,
+      receipt_time: at
+    }
+    |> LatestAlarmStateRow.changeset()
+    |> Repo.insert!()
+
+    FleetAlarms.refresh(
+      Repo,
+      c.mission.organization_id,
+      c.mission.mission_id,
+      [
+        c.craft.spacecraft_id
+      ]
+    )
+
+    row =
+      c.user
+      |> TestFixtures.member_conn()
+      |> get("/api/v1/missions/#{c.mission.mission_id}/fleet")
+      |> json_response(200)
+      |> get_in(["data", "spacecraft"])
+      |> hd()
+
+    assert row["state"] == "critical"
+    assert row["limit_state"] == "critical"
+    assert row["violating_points"] == 1
+
+    assert %{
+             "source" => "catalog_monitoring",
+             "point_id" => "HEALTH.mode",
+             "point_name" => "HEALTH.mode",
+             "limit_state" => "critical",
+             "value" => nil,
+             "raw_limit_state" => nil,
+             "evaluated_at" => nil,
+             "received_at" => "2026-11-26T12:00:00.000000Z"
+           } = row["worst_point"]
   end
 
   test "is not available for another organization's mission", c do

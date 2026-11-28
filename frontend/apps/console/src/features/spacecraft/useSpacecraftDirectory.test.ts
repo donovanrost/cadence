@@ -34,17 +34,22 @@ function server(total: number, size: number) {
       const body = {
         data: {
           spacecraft: Array.from({ length: to - from }, (_, i) => wireRow(from + i)),
-          summary: {
-            total,
-            profiles: 0,
-            without_profile: total,
-            without_scid: total,
-            without_routing_rule: total,
-            awaiting_first_aos: total,
-          },
           telemetry: "ok",
-          scids_in_use: [],
-          next_free_scid: 1,
+          // The mission's counts and SCIDs come with the first page only (#933).
+          ...(cursor === null
+            ? {
+                summary: {
+                  total,
+                  profiles: 0,
+                  without_profile: total,
+                  without_scid: total,
+                  without_routing_rule: total,
+                  awaiting_first_aos: total,
+                },
+                scids_in_use: [],
+                next_free_scid: 1,
+              }
+            : {}),
         },
         meta: { next_cursor: to < total ? String(to) : null },
       };
@@ -81,7 +86,7 @@ describe("useSpacecraftDirectory (#796)", () => {
     if (first.status !== "ready") throw new Error("not ready");
     expect(first.value.items).toHaveLength(200);
     // The count is the server's: 200 rows shown never reads as the whole fleet.
-    expect(first.value.meta.summary.total).toBe(450);
+    expect(first.value.meta.summary?.total).toBe(450);
     expect(first.value.next).toBe("200");
 
     await dir.more();
@@ -94,6 +99,8 @@ describe("useSpacecraftDirectory (#796)", () => {
     expect(last.value.next).toBeNull();
     expect(urls[0]).toContain("limit=200");
     expect(urls[1]).toContain("cursor=200");
+    // The first page's counts stay while later pages (which send none) are appended.
+    expect(last.value.meta.summary?.total).toBe(450);
     scope.stop();
   });
 

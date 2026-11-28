@@ -6,6 +6,7 @@ defmodule CadenceWeb.Console.CommandGroupJSON do
   """
 
   alias Cadence.Control.Commanding.GroupDecision
+  alias Cadence.Reads.CommandGroups.Page
 
   @doc "M26 verifier series (atoms to strings; values already JSON text)."
   @spec verifier_series(map()) :: map()
@@ -41,8 +42,33 @@ defmodule CadenceWeb.Console.CommandGroupJSON do
   @spec summary(map()) :: map()
   def summary(group), do: encode(group)
 
+  @doc """
+  The group read: the summary, its commands, every target and event, and (#795) `targets_page`
+  (`{total, revision, next_cursor}`) and `events_page` (`{total, next_cursor}`) saying how many
+  there are. `show_first_page/1` is the same read with only the first pages; the console moves
+  onto it with its paging.
+  """
   @spec show(map()) :: map()
-  def show(view) do
+  def show(view), do: view |> Page.totals() |> render()
+
+  @doc "`show/1` with the first targets and the latest events, and a cursor to page the rest."
+  @spec show_first_page(map()) :: map()
+  def show_first_page(view), do: view |> Page.first() |> render()
+
+  @doc """
+  The `group` push for a paged client (#795): `show_first_page/1` without the targets and events,
+  which the client refetches when `targets_page.revision` or `events_page.total` changes.
+  """
+  @spec push(map()) :: map()
+  def push(view), do: view |> Page.first() |> Map.drop([:targets, :events]) |> render()
+
+  @spec targets([map()]) :: [map()]
+  def targets(targets), do: encode(targets)
+
+  @spec events([map()]) :: [map()]
+  def events(events), do: encode(events)
+
+  defp render(view) do
     group = view.group
 
     groups = Map.get(view, :verifier_groups, %{})

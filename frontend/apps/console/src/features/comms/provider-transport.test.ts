@@ -5,7 +5,7 @@ import { blockedReason, formFromDocument, providerOp } from "./provider-transpor
 const options: ProviderOptions = {
   providers: [{ id: "prov_n", version: 3, name: "Northlight" }],
   services: [{ id: "svc_s", version: 2, name: "S-band" }],
-  deliveries: [{ id: "dlv_t", version: 5, name: "TCP to Cadence" }],
+  deliveries: [{ id: "dlv_t", version: 5, name: "TCP to Cadence", egress_addresses_ready: true }],
   preview: {
     configuration: [{ label: "Endpoint", value: "gs.example:7000" }],
     direction_capability: "inbound",

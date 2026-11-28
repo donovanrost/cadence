@@ -5026,7 +5026,8 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
     origin,
     diagnostics,
     signal,
-    `/missions/${encodeURIComponent(missionId)}/ops`,
+    // The LiveView socket assertions below need a legacy host page: the timeline is one.
+    `/missions/${encodeURIComponent(missionId)}/ops/timeline`,
   );
   reportProgress("authenticated browser session ready");
   await waitForExpression(
@@ -5037,13 +5038,12 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
   );
   diagnostics.assertLiveViewWebSocket(origin, { generation: authenticatedGeneration });
   reportProgress("authenticated LiveView websocket asserted");
-  // The shell and socket can be ready while the lazy landing page is still loading.
+  // The shell and socket can be ready while the lazy timeline page is still loading.
   // Finish this visit before navigating away so its module request has a terminal event.
-  // §11c(B): the mission's ops page is the legacy landing (the mission home went to the console).
   await waitForExpression(
     client,
     "Boolean(document.querySelector('main h1') && document.querySelector('#host-page-content > *') && !document.querySelector('[data-host-page-loading], #ops-module-loading'))",
-    "authenticated mission ops landing page",
+    "authenticated mission timeline page",
     { signal },
   );
 
@@ -5067,22 +5067,26 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
     },
     {
       argName: "--ops-url",
-      expectedPath: `/missions/${encodeURIComponent(missionId)}/applications/ops_console/commands/federated`,
+      // OpsConsole's workspace surface (its required application workspace) outlives the ops pages.
+      expectedPath: `/missions/${encodeURIComponent(missionId)}/applications/ops_console/workspace/federated`,
       applicationKey: "ops_console",
-      surfaceId: "commands",
+      surfaceId: "workspace",
       expectedScope: "mission",
       readyExpression: `(() => {
-        const link = document.querySelector('#commands-open-workspace');
-        if (!(link instanceof HTMLAnchorElement)) return false;
-        const destination = new URL(link.href);
-        return Boolean(document.querySelector('#ops-console-application[data-ops-console-surface="commands"]') &&
-          destination.origin === location.origin &&
-          destination.pathname === ${JSON.stringify(`/missions/${encodeURIComponent(missionId)}/ops/commands`)} &&
+        const links = [...document.querySelectorAll('#ops-workspace-landing a')];
+        if (links.length === 0 || !links.every((link) => link instanceof HTMLAnchorElement)) return false;
+        const prefix = ${JSON.stringify(`/missions/${encodeURIComponent(missionId)}/ops/`)};
+        return Boolean(document.querySelector('#ops-console-application[data-ops-console-surface="workspace"]') &&
+          links.every((link) => {
+            const destination = new URL(link.href);
+            return destination.origin === location.origin && destination.pathname.startsWith(prefix);
+          }) &&
+          !document.querySelector('#ops-workspace-landing-unavailable') &&
           !document.querySelector('#ops-console-error') && !document.querySelector('#remote-error'));
       })()`,
       catalogPath: `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/catalog`,
       queryPath: `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/query`,
-      queryId: "cadence.ops.commands",
+      queryId: "cadence.ops.workspace",
       expectedReleaseId: releases.nMinus1.ops_console,
     },
     {

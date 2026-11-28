@@ -31,6 +31,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
+      contents: read
       pull-requests: read
     # Pushes run everything. A PR runs the jobs its paths can affect:
     # - code: anything but docs (browser, console e2e, publication, JS audit)
@@ -41,7 +42,48 @@ jobs:
       code: ${{ github.event_name != 'pull_request' || steps.filter.outputs.code == 'true' }}
       backend: ${{ github.event_name != 'pull_request' || steps.filter.outputs.backend == 'true' }}
       frontend: ${{ github.event_name != 'pull_request' || steps.filter.outputs.frontend == 'true' }}
+      merge_base_warning: ${{ steps.merge-base.outputs.warning }}
     steps:
+      - name: Check PR merge base
+        if: github.event_name == 'pull_request'
+        id: merge-base
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          EVENT_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          repo="repos/$GITHUB_REPOSITORY"
+          printf 'Event base (%s): %s\n' "$BASE_REF" "$EVENT_BASE_SHA"
+
+          # GITHUB_SHA pins the merge commit each test job checks out, including on reruns.
+          if ! merge_base="$(timeout 15s gh api "$repo/git/commits/$GITHUB_SHA" --jq '.parents[0].sha // empty')" || [[ -z "$merge_base" ]]; then
+            echo "::warning title=CI merge base unavailable::Could not read the first parent of $GITHUB_SHA."
+            exit 0
+          fi
+          printf 'Tested merge base: %s\n' "$merge_base"
+
+          if ! tip="$(timeout 15s gh api "$repo/git/ref/heads/$BASE_REF" --jq '.object.sha // empty')" || [[ -z "$tip" ]]; then
+            echo "::warning title=CI merge base unavailable::Could not read the current $BASE_REF tip."
+            exit 0
+          fi
+          printf 'Current %s tip: %s\n' "$BASE_REF" "$tip"
+          if [[ "$merge_base" == "$tip" ]]; then
+            exit 0
+          fi
+
+          age="$(timeout 15s gh api "$repo/git/commits/$merge_base" \
+            --jq '([0, ((now - (.committer.date | fromdateiso8601)) / 60 | floor)] | max | tostring) + "m old"')" || age="age unavailable"
+          commit_count="$(timeout 15s gh api --method GET "$repo/compare/$merge_base...$tip" -f per_page=1 \
+            --jq '.ahead_by | "\(.) commit" + (if . == 1 then "" else "s" end)')" || commit_count=""
+          tip_detail="Current $BASE_REF is $tip. Ahead count unavailable."
+          if [[ -n "$commit_count" ]]; then
+            tip_detail="$BASE_REF is $commit_count ahead at $tip."
+          fi
+
+          warning="CI built on $merge_base ($age). $tip_detail If a failure looks unrelated, rebase onto $BASE_REF and push. A rerun reuses this merge."
+          printf '::warning title=CI merge base is stale::%s\n' "$warning"
+          printf 'warning=%s\n' "$warning" >> "$GITHUB_OUTPUT"
+
       - if: github.event_name == 'pull_request'
         id: filter
         uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
@@ -1092,6 +1134,11 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
+      - name: Report stale PR merge base
+        if: ${{ !cancelled() && needs.changes.outputs.merge_base_warning != '' }}
+        env:
+          MERGE_BASE_WARNING: ${{ needs.changes.outputs.merge_base_warning }}
+        run: printf '%s\n' "$MERGE_BASE_WARNING" >> "$GITHUB_STEP_SUMMARY"
       - name: A draft PR is not checked
         if: github.event_name == 'pull_request' && github.event.pull_request.draft
         run: |

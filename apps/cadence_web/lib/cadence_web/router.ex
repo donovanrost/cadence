@@ -84,6 +84,15 @@ defmodule CadenceWeb.Router do
     plug(:put_secure_browser_headers)
   end
 
+  # Dev only (#745): the mail the Local adapter holds, at /dev/mailbox and /dev/mailbox/json, so a
+  # seed working through the public API can read an invitation link. Compiled in only when
+  # dev.exs sets :dev_routes; there is no such route in test or prod builds.
+  if Application.compile_env(:cadence_web, :dev_routes, false) do
+    scope "/dev" do
+      forward("/mailbox", Plug.Swoosh.MailboxPreview)
+    end
+  end
+
   scope "/", CadenceWeb do
     pipe_through(:frontend_release_artifact)
 
@@ -124,8 +133,6 @@ defmodule CadenceWeb.Router do
     live_session :application,
       on_mount: [{CadenceWeb.UserAuth, :require_user_scope}],
       layout: {CadenceWeb.Layouts, :host} do
-      live("/missions/:mission_id/ops", HostPageLive, :index, metadata: %{host_policy: :ops})
-
       live("/missions/:mission_id/ops/data-operations", HostPageLive, :index,
         metadata: %{host_policy: :ops}
       )
@@ -380,9 +387,12 @@ defmodule CadenceWeb.Router do
       )
 
       post("/command-groups/preflight", CommandGroupController, :preflight)
+      post("/command-endpoints", CommandGroupController, :endpoints)
       get("/command-groups", CommandGroupController, :index)
       post("/command-groups", CommandGroupController, :create)
       get("/command-groups/:command_group_id", CommandGroupController, :show)
+      get("/command-groups/:command_group_id/targets", CommandGroupController, :targets)
+      get("/command-groups/:command_group_id/events", CommandGroupController, :events)
 
       get(
         "/command-groups/:command_group_id/preflight",
@@ -794,29 +804,5 @@ defmodule CadenceWeb.Router do
       ApplicationHostController,
       :actions
     )
-  end
-
-  scope "/api", CadenceWeb do
-    pipe_through([:api, :authenticated_api])
-
-    scope "/organizations/:organization_id" do
-      scope "/missions/:mission_id" do
-        get("/command_stages", CommandStageController, :index)
-        post("/command_stages", CommandStageController, :create)
-        get("/command_stages/:command_stage_id", CommandStageController, :show)
-        patch("/command_stages/:command_stage_id", CommandStageController, :update)
-
-        get("/command_stages/:command_stage_id/items", StagedCommandItemController, :index)
-        post("/command_stages/:command_stage_id/items", StagedCommandItemController, :create)
-
-        get("/staged_command_items/:staged_command_item_id", StagedCommandItemController, :show)
-
-        patch(
-          "/staged_command_items/:staged_command_item_id",
-          StagedCommandItemController,
-          :update
-        )
-      end
-    end
   end
 end

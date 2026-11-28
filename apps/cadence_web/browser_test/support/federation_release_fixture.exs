@@ -57,7 +57,7 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
   @spec prepare_and_activate!(binary(), keyword()) :: map()
   def prepare_and_activate!(app_root, opts \\ []) when is_binary(app_root) do
     sandbox_owner = Keyword.fetch!(opts, :sandbox_owner)
-    ops_surface = Keyword.get(opts, :ops_console_surface, "commands")
+    ops_surface = Keyword.get(opts, :ops_console_surface, "workspace")
     # The console federation smoke adds its test-only surface_fixture application (the caller
     # enables Cadence.Applications.FixtureContributors first): two builds, N-1 and N, that differ.
     surface_fixture? = Keyword.get(opts, :surface_fixture, false)
@@ -667,14 +667,14 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
     )
   end
 
-  defp ops_console_metadata(slot, surface)
-       when surface in ["commands", "contact_schedule"] do
+  # The workspace surface is OpsConsole's required application workspace; it outlives the ops pages.
+  defp ops_console_metadata(slot, "workspace" = surface) do
     metadata(
       "ops_console",
       "cadence.ops_console",
       surface,
       "cadence.ops.#{surface}",
-      if(surface == "contact_schedule", do: ~w(validate search reserve cancel), else: []),
+      [],
       "cadence_ops_console",
       "federation-browser-ops-console-#{slot_name(slot)}",
       released_at(slot)

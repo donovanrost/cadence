@@ -10,8 +10,7 @@ defmodule CadenceWeb.UserMenuIntegrationTest do
     TestFixtures.grant_membership!(user, org)
     mission = TestFixtures.persist_mission!(org)
 
-    # §11c: "/" and the mission home redirect to the console; these host pages remain.
-    for path <- ["/missions/#{mission.mission_id}/ops"] do
+    for path <- ["/missions/#{mission.mission_id}/ops/timeline"] do
       {:ok, view, _html} = live(TestFixtures.member_conn(user), path)
       shell = LiveVue.Test.get_vue(view, id: "application-shell")
       assert shell.component == "BrowserHost"

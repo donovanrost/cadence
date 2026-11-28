@@ -80,14 +80,6 @@ test("each core host route resolves to its registered owner", () => {
       continue;
     }
     if (route.kind === "ops_workspace") {
-      if (route.workspacePage === "landing") {
-        expect(route.path).toBe("/missions/:mission_id/ops");
-        expect(route.scope).toBe("mission");
-        expect(route).not.toHaveProperty("application");
-        expect(route).not.toHaveProperty("surface");
-        expect(route.queryKeys).toEqual([]);
-        continue;
-      }
       expect(route.path).toBe("/missions/:mission_id/ops/timeline");
       expect(route.workspacePage).toBe("timeline");
       expect(route.scope).toBe("mission");

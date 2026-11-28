@@ -85,9 +85,11 @@ describe("directoryPageReader", () => {
     });
   });
 
-  it("refuses a page without a summary or with a negative count", () => {
-    const { summary: _summary, ...bare } = page();
-    expect(decode(directoryPageReader, bare).ok).toBe(false);
+  it("reads a later page without a summary (the first page has it, #933), refusing a negative count", () => {
+    const { summary: _summary, ...later } = page();
+    const read = decode(directoryPageReader, later);
+    expect(read.ok && read.value.meta.summary).toBeNull();
+    expect(read.ok && read.value.meta.scids).toBeNull();
     expect(
       decode(directoryPageReader, page({ summary: { ...summary, without_scid: -1 } })).ok,
     ).toBe(false);

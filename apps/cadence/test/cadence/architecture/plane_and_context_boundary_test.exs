@@ -642,7 +642,7 @@ defmodule Cadence.Architecture.PlaneAndContextBoundaryTest do
     assert [] ==
              PlaneBoundary.findings_for_edge(
                "lib/cadence/management/commanding.ex",
-               "lib/cadence/commanding/stage_store.ex",
+               "lib/cadence/commanding/request_store.ex",
                "runtime"
              )
 

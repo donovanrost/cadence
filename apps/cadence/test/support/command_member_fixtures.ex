@@ -25,6 +25,7 @@ defmodule Cadence.CommandMemberFixtures do
   }
 
   alias Cadence.Commanding.Groups.{Admission, CommandGroup, CommandGroupRow, GroupStore}
+  alias Cadence.Ids
   alias Cadence.Management.Commanding.ApprovedCommand
   alias Cadence.Repo
 
@@ -32,7 +33,7 @@ defmodule Cadence.CommandMemberFixtures do
 
   @doc "A group of `member_count` members in `state`, returning its id."
   def group!(org, mission, state \\ :queued, member_count \\ 1) do
-    id = "command_group_fixture_" <> Integer.to_string(System.unique_integer([:positive]))
+    id = Ids.new("command_group_fixture")
 
     {:ok, _group} =
       GroupStore.insert_group(

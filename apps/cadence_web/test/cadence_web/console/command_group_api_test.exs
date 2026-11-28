@@ -2,6 +2,8 @@ defmodule CadenceWeb.Console.CommandGroupAPITest do
   use CadenceWeb.ConnCase, async: false
 
   alias Cadence.{CommandAuthoringFixtures, ExactCommandAuthoringFixtures}
+  alias Cadence.Reads.CommandGroups
+  alias CadenceWeb.Console.CommandGroupJSON
   alias CadenceWeb.TestFixtures
 
   setup do
@@ -33,6 +35,7 @@ defmodule CadenceWeb.Console.CommandGroupAPITest do
       end
 
     %{
+      org: org,
       requester: requester,
       approver: approver,
       mission: mission,
@@ -335,6 +338,102 @@ defmodule CadenceWeb.Console.CommandGroupAPITest do
     assert is_binary(data["review_token"])
   end
 
+  # #795: the show carries the first pages and their totals; `targets` and `events` page the rest.
+  test "a group's targets and events are paged, filtered, and bound to their group", c do
+    group =
+      c
+      |> create(body(c, "SET_SIGNED", %{"counter" => 1}))
+      |> json_response(201)
+      |> Map.fetch!("data")
+
+    id = group["id"]
+    [{first_id, _}, {second_id, _}] = c.crafts
+
+    assert %{"total" => 2, "next_cursor" => nil, "revision" => revision} = group["targets_page"]
+    assert is_integer(revision)
+    assert [%{"index" => 0, "spacecraft_id" => ^first_id}, %{"index" => 1}] = group["targets"]
+    assert %{"total" => 1, "next_cursor" => nil} = group["events_page"]
+    assert [%{"kind" => "submitted"}] = group["events"]
+
+    # The paged variants the console moves onto: the first pages, and a push without the lists.
+    {:ok, view} =
+      CommandGroups.get(c.org.organization_id, c.mission.mission_id, id, nil)
+
+    assert [%{index: 0}, %{index: 1}] =
+             CommandGroupJSON.show_first_page(view).targets
+
+    pushed = CommandGroupJSON.push(view)
+    refute Map.has_key?(pushed, :targets) or Map.has_key?(pushed, :events)
+    assert %{total: 2} = pushed.targets_page
+    assert %{total: 1} = pushed.events_page
+    assert pushed.progress == %{queued_for_contact: 2}
+
+    page = fn query ->
+      as(c.requester)
+      |> get(base(c) <> "/command-groups/#{id}/targets" <> query)
+      |> json_response(200)
+    end
+
+    assert %{
+             "data" => %{"targets" => [%{"spacecraft_id" => ^first_id}]},
+             "meta" => %{"total" => 2, "next_cursor" => cursor}
+           } = page.("?limit=1")
+
+    assert %{
+             "data" => %{"targets" => [%{"spacecraft_id" => ^second_id}]},
+             "meta" => %{"total" => 2, "next_cursor" => nil}
+           } = page.("?limit=1&cursor=#{cursor}")
+
+    assert %{
+             "data" => %{"targets" => [%{"spacecraft_id" => ^second_id}]},
+             "meta" => %{"total" => 1}
+           } =
+             page.("?stage=queued_for_contact&q=#{second_id}")
+
+    assert %{"data" => %{"targets" => []}, "meta" => %{"total" => 0}} = page.("?stage=verified")
+
+    assert %{"data" => %{"events" => [%{"kind" => "submitted"}]}, "meta" => %{"total" => 1}} =
+             as(c.requester)
+             |> get(base(c) <> "/command-groups/#{id}/events?limit=1")
+             |> json_response(200)
+
+    # A cursor belongs to its group and its list: anywhere else it's a 422, never another page.
+    other =
+      c
+      |> create(body(c, "SET_SIGNED", %{"counter" => 2}, %{"operation_id" => "second"}))
+      |> json_response(201)
+      |> get_in(["data", "id"])
+
+    for path <- ["/command-groups/#{other}/targets", "/command-groups/#{id}/events"] do
+      assert %{"error" => %{"code" => "invalid_params", "details" => %{"cursor" => _}}} =
+               as(c.requester)
+               |> get(base(c) <> path <> "?cursor=#{cursor}")
+               |> json_response(422)
+    end
+
+    assert %{"error" => %{"code" => "invalid_params", "details" => %{"limit" => _}}} =
+             as(c.requester)
+             |> get(base(c) <> "/command-groups/#{id}/targets?limit=0")
+             |> json_response(422)
+
+    assert %{"error" => %{"code" => "command_group_not_found"}} =
+             as(c.requester)
+             |> get(base(c) <> "/command-groups/nope/targets")
+             |> json_response(404)
+
+    # Another mission's group is not found, whatever the cursor.
+    foreign = TestFixtures.persist_mission!(c.org)
+
+    assert %{"error" => %{"code" => code}} =
+             as(c.requester)
+             |> get(
+               "/api/v1/missions/#{foreign.mission_id}/command-groups/#{id}/targets?cursor=#{cursor}"
+             )
+             |> json_response(404)
+
+    assert code in ["command_group_not_found", "mission_not_found"]
+  end
+
   test "per-target values override the command's for those targets and are echoed back", c do
     [{first, _}, {second, _}] = c.crafts
     same = body(c, "SET_SIGNED", %{"counter" => 1})
@@ -497,6 +596,43 @@ defmodule CadenceWeb.Console.CommandGroupAPITest do
 
     assert %{"error" => %{"code" => "command_group_not_found"}} =
              as(c.requester) |> get(base(c) <> "/command-groups/nope") |> json_response(404)
+  end
+
+  test "command endpoints by POST: a list in the body, each id once, no silent cut", c do
+    [{id, endpoint} | _] = c.crafts
+
+    data =
+      as(c.requester)
+      |> post(base(c) <> "/command-endpoints", %{"spacecraft_ids" => [id, id]})
+      |> json_response(200)
+      |> Map.fetch!("data")
+
+    assert [%{"spacecraft_id" => ^id, "endpoints" => [%{"id" => ^endpoint}]}] =
+             data["spacecraft"]
+
+    Application.put_env(:cadence, :command_group_bounds, max_targets: 2)
+    on_exit(fn -> Application.delete_env(:cadence, :command_group_bounds) end)
+
+    assert %{
+             "error" => %{
+               "code" => "command_group_too_large",
+               "details" => %{"max_targets" => 2, "targets" => 3}
+             }
+           } =
+             as(c.requester)
+             |> post(base(c) <> "/command-endpoints", %{"spacecraft_ids" => ["a", "b", "c"]})
+             |> json_response(422)
+
+    assert %{"error" => %{"code" => "invalid_params"}} =
+             as(c.requester)
+             |> post(base(c) <> "/command-endpoints", %{"spacecraft_ids" => ["a", 7]})
+             |> json_response(422)
+
+    # The GET (until the console moves off it) is just as loud.
+    assert %{"error" => %{"code" => "command_group_too_large"}} =
+             as(c.requester)
+             |> get(base(c) <> "/command-endpoints?spacecraft_ids=a,b,c")
+             |> json_response(422)
   end
 
   test "command endpoints: route resolution and candidates per spacecraft", c do

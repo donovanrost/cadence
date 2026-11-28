@@ -88,6 +88,10 @@ defmodule Cadence.Control.Commanding.GroupDecision do
       kind == :go_excluding and Map.get(decision, :excluded, []) == [] ->
         {:error, :exclusions_required}
 
+      # #795: a repeated id is a malformed list, not a smaller one: refuse it rather than count it.
+      repeats?(Map.get(decision, :excluded, [])) ->
+        {:error, {:invalid_params, %{"excluded" => "must not repeat a target"}}}
+
       true ->
         :ok
     end
@@ -161,6 +165,8 @@ defmodule Cadence.Control.Commanding.GroupDecision do
 
   defp stale?(group, decision),
     do: Map.get(decision, :expected_review) not in [nil, review_token(group)]
+
+  defp repeats?(ids), do: length(ids) != length(Enum.uniq(ids))
 
   defp known_targets?(group, excluded) do
     ids = MapSet.new(group.targets, & &1["spacecraft_id"])
@@ -295,9 +301,11 @@ defmodule Cadence.Control.Commanding.GroupDecision do
   defp split(members, _group, %{kind: kind}) when kind in [:send_back, :no_go], do: {[], members}
 
   defp split(members, group, decision) do
+    named = MapSet.new(Map.get(decision, :excluded, []))
+
     excluded =
       group.targets
-      |> Enum.filter(&(&1["spacecraft_id"] in Map.get(decision, :excluded, [])))
+      |> Enum.filter(&MapSet.member?(named, &1["spacecraft_id"]))
       |> MapSet.new(& &1["index"])
 
     Enum.split_with(

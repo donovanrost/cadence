@@ -45,7 +45,7 @@ export const telemetryFreshness = (value: unknown): TelemetryFreshness =>
  */
 export type ServerScids = Readonly<{ next: number | null; inUse: readonly number[] }>;
 
-/** The server's whole-mission counts (the subtitle's numbers), whatever page or filter is shown. */
+/** The server's whole-mission counts (the subtitle's numbers), whatever filter is shown. */
 export type DirectorySummary = Readonly<{
   total: number;
   profiles: number;
@@ -56,9 +56,13 @@ export type DirectorySummary = Readonly<{
   neverHeard: number;
 }>;
 
-/** What every page carries besides its rows. */
+/**
+ * What a page carries besides its rows. The first page has the whole mission's `summary` and the
+ * SCIDs; a later page leaves them out (#933), so they read null there (the list keeps the first
+ * page's).
+ */
 export type DirectoryMeta = Readonly<{
-  summary: DirectorySummary;
+  summary: DirectorySummary | null;
   telemetry: TelemetryFreshness;
   /** null when the server doesn't send them (before #313 S9's server half): the console guesses. */
   scids: ServerScids | null;
@@ -141,7 +145,7 @@ export const DIRECTORY_PAGE_SIZE = 500;
 
 const directoryFields = object({
   spacecraft: array(directoryRow, DIRECTORY_PAGE_SIZE),
-  summary: summaryReader,
+  summary: optional(summaryReader),
   telemetry: telemetryFreshness,
   next_free_scid: optional(nullable(scidValue)),
   scids_in_use: optional(array(scidValue, 1024)),
@@ -162,7 +166,7 @@ export const directoryPageReader: Reader<DirectoryPage> = (value, path = "") => 
   return {
     rows: raw.spacecraft,
     meta: {
-      summary: raw.summary,
+      summary: raw.summary ?? null,
       telemetry: raw.telemetry,
       // Readers first: without the list the console keeps its own guess; with it, the server's next.
       scids:
@@ -206,6 +210,9 @@ export async function fetchDirectoryPage(
     { signal },
   );
   if (!r.ok) return r;
+  // The first page always carries the mission's counts; one without them is malformed.
+  if (cursor === null && r.value.value.meta.summary === null)
+    return { ok: false, error: { kind: "malformed", message: "the first page has no summary" } };
   return {
     ok: true,
     value: { items: r.value.value.rows, next: r.value.nextCursor, meta: r.value.value.meta },

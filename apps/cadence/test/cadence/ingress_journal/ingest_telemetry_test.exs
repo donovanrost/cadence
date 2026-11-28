@@ -89,7 +89,11 @@ defmodule Cadence.IngressJournal.IngestTelemetryTest do
                protocol_family: :tm
              })
 
-    assert_receive {:ingest_event, %{bytes: bytes, oldest_unacked_age_ms: age}, metadata}, 2_000
+    # The journal checkpoints every 5 ms and reports at most once a second, so its first report may
+    # come before the append (an empty backlog); the next one, a second later, shows the entry.
+    {%{bytes: bytes, oldest_unacked_age_ms: age}, metadata} =
+      receive_backlog(&(&1.bytes > 0), 3_000)
+
     assert bytes == entry.end_offset
     assert age >= 3_000
     assert metadata.path_id == ids.path_id
@@ -99,6 +103,18 @@ defmodule Cadence.IngressJournal.IngestTelemetryTest do
 
     # Reported at most once a second: the next report shows the backlog gone.
     assert_receive {:ingest_event, %{bytes: 0, oldest_unacked_age_ms: 0}, _metadata}, 3_000
+  end
+
+  # The first backlog report that matches, skipping the earlier ones, within `timeout_ms` in all.
+  defp receive_backlog(match?, timeout_ms) do
+    deadline = System.monotonic_time(:millisecond) + timeout_ms
+
+    Stream.repeatedly(fn ->
+      remaining = max(deadline - System.monotonic_time(:millisecond), 0)
+      assert_receive {:ingest_event, measurements, metadata}, remaining
+      {measurements, metadata}
+    end)
+    |> Enum.find(fn {measurements, _metadata} -> match?.(measurements) end)
   end
 
   defp ids(name) do

@@ -22,10 +22,6 @@ import {
 } from "./host-navigation";
 import { hostBrowserHistory, ownBrowserHistory } from "./host-browser-history";
 
-const WorkspaceLanding = lazyHostPage(
-  "WorkspaceLanding",
-  () => import("../ops-workspace/features/landing/WorkspaceLanding.vue"),
-);
 const TimelinePage = lazyHostPage(
   "TimelinePage",
   () => import("../ops-workspace/features/timeline/TimelinePage.vue"),
@@ -347,15 +343,6 @@ onBeforeUnmount(() => {
           :guard-navigation="guardNavigation"
           :refresh="reconnect"
           :refreshing="pending"
-        />
-        <WorkspaceLanding
-          v-else-if="
-            route.kind === 'ops_workspace' && route.workspacePage === 'landing' && missionContext
-          "
-          :id="route.mountId"
-          :model="committed.snapshot.ops_landing_page"
-          :organization-id="missionContext.organizationId"
-          :mission-id="missionContext.missionId"
         />
         <TimelinePage
           v-else-if="

@@ -1,19 +1,19 @@
 defmodule CadenceWeb.Console.ElementSetJSON do
   @moduledoc """
   Element sets as the REST API shows them (#889). Contract: docs/apogee/api/element-sets.md.
-  The actor names a response needs are loaded once for all its rows (`ActorDocument.names/2`).
+  The actor names a response needs are loaded once for all its rows (`ActorRef.names/2`).
   """
 
+  alias Cadence.Control.ActorRef
   alias Cadence.GroundNetworks.ElementSet
-  alias CadenceWeb.API.ActorDocument
   alias CadenceWeb.Console.Problem
 
   @doc "The actor names for `rows` of one organization, in one read."
-  @spec names(binary(), [ElementSet.t()]) :: term()
+  @spec names(binary(), [ElementSet.t()]) :: ActorRef.names()
   def names(organization_id, rows),
-    do: ActorDocument.names(organization_id, Enum.map(rows, & &1.created_by))
+    do: ActorRef.names(organization_id, Enum.map(rows, & &1.created_by))
 
-  @spec element_set(ElementSet.t(), term()) :: map()
+  @spec element_set(ElementSet.t(), ActorRef.names()) :: map()
   def element_set(%ElementSet{} = row, names) do
     %{
       id: row.element_set_id,
@@ -38,7 +38,7 @@ defmodule CadenceWeb.Console.ElementSetJSON do
       content_sha256: row.content_sha256,
       raw: row.raw,
       received_at: row.received_at,
-      created_by: ActorDocument.actor(row.created_by, names)
+      created_by: ActorRef.document(row.created_by, names)
     }
   end
 

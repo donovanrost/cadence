@@ -16,6 +16,9 @@ defmodule CadenceWeb.Console.CommandGroupProblems do
 
   def respond(conn, {:error, reason}) when reason in @plain, do: Problem.respond(conn, reason)
 
+  def respond(conn, {:error, :invalid_cursor}),
+    do: Problem.respond(conn, :invalid_params, %{cursor: "is not a valid cursor"})
+
   # #622 (#280, U100): through a service the decider is accountable for, or a service nobody is.
   def respond(conn, {:error, {:command_group_self_approval_not_allowed, %{} = details}}),
     do: Problem.respond(conn, :command_group_self_approval_not_allowed, details)
