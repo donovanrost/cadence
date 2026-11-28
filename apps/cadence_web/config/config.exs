@@ -7,6 +7,7 @@ config :cadence, :organization_invitation_delivery, CadenceWeb.UserNotifier
 import_config "../../cadence/config/config.exs"
 
 config :phoenix, :json_library, Jason
+config :phoenix, :filter_parameters, ~w(password secret token csr_pem certificate_pem private_key)
 config :swoosh, :api_client, false
 
 config :cadence_web, CadenceWeb.Endpoint,

@@ -143,8 +143,14 @@ defmodule Cadence.GroundNetworks.ProviderCapabilities do
   defp normalize_delivery(delivery) do
     with {:ok, kinds} <- Validation.string_list(delivery, "kinds"),
          {:ok, protocols} <- Validation.string_list(delivery, "protocols"),
-         {:ok, directions} <- Validation.string_list(delivery, "directions") do
-      {:ok, %{kinds: kinds, protocols: protocols, directions: directions}}
+         {:ok, directions} <- Validation.string_list(delivery, "directions"),
+         {:ok, auth} <- delivery_auth(delivery["delivery_auth"]) do
+      normalized = %{kinds: kinds, protocols: protocols, directions: directions}
+      {:ok, if(auth, do: Map.put(normalized, :delivery_auth, auth), else: normalized)}
     end
   end
+
+  defp delivery_auth(nil), do: {:ok, nil}
+  defp delivery_auth("mtls"), do: {:ok, :mtls}
+  defp delivery_auth(_other), do: Validation.malformed("delivery_auth")
 end

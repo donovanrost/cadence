@@ -503,6 +503,14 @@ defmodule CadenceWeb.Router do
       post("/providers/:provider_id/sync", MissionProviderController, :sync)
       post("/providers/:provider_id/archive", MissionProviderController, :archive)
 
+      scope "/providers/:provider_id/delivery-credentials/:binding_id" do
+        get("/", ProviderDeliveryCredentialController, :show)
+        post("/issue", ProviderDeliveryCredentialController, :issue)
+        post("/rotate", ProviderDeliveryCredentialController, :rotate)
+        post("/revoke", ProviderDeliveryCredentialController, :revoke)
+        post("/downgrade", ProviderDeliveryCredentialController, :downgrade)
+      end
+
       get(
         "/providers/:provider_id/ephemeris/spacecraft",
         ProviderEphemerisController,
