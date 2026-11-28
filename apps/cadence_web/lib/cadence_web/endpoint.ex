@@ -20,6 +20,11 @@ defmodule CadenceWeb.Endpoint do
     longpoll: false
   )
 
+  @request_cost Application.compile_env(:cadence_web, :request_cost, false)
+  if @request_cost do
+    @before_compile CadenceWeb.Observability.RequestCost
+  end
+
   plug(Plug.RequestId)
   plug(Plug.Telemetry, event_prefix: [:phoenix, :endpoint])
 

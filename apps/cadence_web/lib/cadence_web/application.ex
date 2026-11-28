@@ -3,9 +3,17 @@ defmodule CadenceWeb.Application do
 
   use Application
 
+  alias CadenceWeb.Observability.RequestCost
+
+  @request_cost Application.compile_env(:cadence_web, :request_cost, false)
+
   @impl true
   def start(_type, _args) do
     CadenceWeb.Observability.setup_web_tracing()
+
+    if @request_cost do
+      RequestCost.setup()
+    end
 
     children = [
       {Phoenix.PubSub, name: CadenceWeb.PubSub},
