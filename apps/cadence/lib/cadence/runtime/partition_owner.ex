@@ -41,7 +41,17 @@ defmodule Cadence.Runtime.PartitionOwner do
   }
 
   alias Cadence.SemanticRuntime
-  alias Cadence.SemanticRuntime.{AlarmRules, PlanDecoder, Result, Scope, State, Store, Update}
+
+  alias Cadence.SemanticRuntime.{
+    AlarmRules,
+    Carry,
+    PlanDecoder,
+    Result,
+    Scope,
+    State,
+    Store,
+    Update
+  }
 
   alias Cadence.Platform.ReplayId
 
@@ -717,10 +727,27 @@ defmodule Cadence.Runtime.PartitionOwner do
       {:ok, no_semantic_state()}
     else
       with {:ok, recovered, writer, resume} <- Store.recover(activation, partition_key),
-           {:ok, seeded} <- MonitoringSeed.maybe_seed(activation, partition_key, plan, recovered) do
+           {carried, report} =
+             Carry.carry(recovered, Carry.fingerprints(activation.runtime_plans, plan)),
+           :ok <- announce_carry(activation, partition_key, report),
+           {:ok, seeded} <- MonitoringSeed.maybe_seed(activation, partition_key, plan, carried) do
         {:ok, %{state: seeded, writer: writer, resume: resume, dirty?: seeded != recovered}}
       end
     end
+  end
+
+  # What a new runtime basis kept of the partition's state (#443); nothing to say when the state
+  # was empty or nothing was dropped.
+  defp announce_carry(_activation, _partition_key, %{kept: 0, dropped: 0}), do: :ok
+
+  defp announce_carry(activation, partition_key, report) do
+    :telemetry.execute(
+      [:cadence, :runtime, :partition, :state_carried],
+      %{kept: report.kept, dropped: report.dropped},
+      %{mission_id: activation.mission_id, partition_id: PartitionKey.identifier(partition_key)}
+    )
+
+    :ok
   end
 
   defp no_semantic_state,

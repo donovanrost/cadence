@@ -362,6 +362,43 @@ defmodule Cadence.Runtime.MonitoringReplayIdsE2ETest do
     end)
   end
 
+  # #443: a model or configuration change that leaves the monitored parameters alone gives the
+  # partition a new runtime basis, and the partition keeps what it remembered about them: its
+  # latest values and the alarm's monitoring state, not just the alarm seeded back from the table.
+  test "a new runtime basis keeps the state of what the change did not touch", c do
+    id = {__MODULE__, self()}
+
+    :telemetry.attach(
+      id,
+      [:cadence, :runtime, :partition, :state_carried],
+      fn _, measurements, _, pid -> send(pid, {:carried, measurements}) end,
+      self()
+    )
+
+    on_exit(fn -> :telemetry.detach(id) end)
+
+    {:ok, before_spec} = MissionCoordinator.active_spec(c.mission.mission_id)
+
+    assert transition?(ingest!(evidence(c, frames(mode: 50, aux: 0, sequence: 1), 0)), :critical)
+    snapshot_now!(c)
+    before = semantic_state(c)
+    assert map_size(before.latest) > 0
+    assert map_size(before.monitoring_state) > 0
+
+    apply!(c, [update("spacecraft", c.craft.spacecraft_id, "commanding_enabled", false)])
+    after_spec = readmit!(c)
+    refute after_spec.runtime_basis_sha256 == before_spec.runtime_basis_sha256
+
+    assert_receive {:carried, %{kept: kept, dropped: 0}}, 5_000
+    assert kept > 0
+
+    carried = semantic_state(c)
+    assert carried.latest == before.latest
+    assert carried.monitoring_state == before.monitoring_state
+    assert carried.fingerprints == before.fingerprints
+    assert [%{resume: %{@stream => _offset}}] = snapshot_rows(c)
+  end
+
   # A snapshot when the cadence would not take one yet (60 s, or 2 s idle): the tick says due.
   defp snapshot_now!(c) do
     key = %PartitionKey{affinity: :source_endpoint, value: c.endpoint.source_endpoint_id}
