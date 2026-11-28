@@ -211,6 +211,7 @@ case "$command" in
     wait_http "http://127.0.0.1:$sim_port" simulator
     start_process phoenix "$root" mise run cadence
     wait_http "http://127.0.0.1:$server_port/health/ready" phoenix
+    (cd "$root/frontend" && mise exec -- corepack pnpm install --frozen-lockfile)
     start_process console "$root/frontend" corepack pnpm --filter @cadence/console dev --host 127.0.0.1
     wait_http "http://127.0.0.1:$console_port/console/" console
     if [ "$no_seed" = false ]; then

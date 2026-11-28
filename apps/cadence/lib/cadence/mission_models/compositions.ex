@@ -28,11 +28,12 @@ defmodule Cadence.MissionModels.Compositions do
 
   import Ecto.Query
 
-  alias Cadence.Catalog.MissionModel.{Canonical, Compiler, CompilerResult, Mount, Revision}
+  alias Cadence.Catalog.MissionModel.{Canonical, Compiler, CompilerResult, Layer, Mount, Revision}
   alias Cadence.MissionModels
 
   alias Cadence.MissionModels.{
     AuthoredHead,
+    AuthoredScope,
     CompositionLayerRow,
     CompositionRow,
     EffectiveRevisionRow,
@@ -332,17 +333,85 @@ defmodule Cadence.MissionModels.Compositions do
 
   # The composition's imported layers at their mounts, then the authored head last: an authored
   # layer is never mounted, it addresses the composed tree (Mount, #444).
-  defp compile(composition, head, opts) do
-    imported = Enum.map(composition.imported_layers, & &1.layer_id)
-    layer_ids = if head, do: imported ++ [head], else: imported
+  defp compile(composition, nil, opts) do
+    layer_ids = Enum.map(composition.imported_layers, & &1.layer_id)
     mounts = Map.new(composition.imported_layers, &{&1.layer_id, &1.mount})
 
-    if is_nil(head) and reusable?(Keyword.get(opts, :compiled), layer_ids, mounts),
+    if reusable?(Keyword.get(opts, :compiled), layer_ids, mounts),
       do: {:ok, Keyword.fetch!(opts, :compiled)},
       else:
         MissionModels.compose(composition.organization_id, composition.mission_id, layer_ids,
           mounts: mounts
         )
+  end
+
+  # At a head: the imported layers at their mounts, then the head's declarations scoped to this
+  # composition (M2, AuthoredScope), last and unmounted. The revision still names the head's id.
+  defp compile(composition, head, _opts) do
+    %{organization_id: org, mission_id: mission} = composition
+    imported = Enum.map(composition.imported_layers, & &1.layer_id)
+    mounts = Map.new(composition.imported_layers, &{&1.layer_id, &1.mount})
+
+    with {:ok, layers} <- fetch_layers(org, mission, imported),
+         {:ok, authored} <- MissionModels.fetch_layer(org, mission, head),
+         {:ok, base} <- base_command_plan(composition) do
+      MissionModels.compile_layers(
+        layers ++ [AuthoredScope.for_composition(authored, composition.composition_id)],
+        mounts: mounts,
+        command_plan: base
+      )
+    end
+  end
+
+  # The command plan of the composition's base at this compiler version: a head reuses it (option
+  # B, #451). A head needs a current-compiler base (the v1 rule): none is a refusal.
+  defp base_command_plan(composition) do
+    %{organization_id: org, mission_id: mission, composition_id: id} = composition
+
+    case link(org, mission, id, nil, Compiler.compiler_version()) do
+      %EffectiveRevisionRow{revision_id: base} ->
+        MissionModels.fetch_plan(org, mission, base, :command)
+
+      nil ->
+        {:error, :monitoring_needs_current_compile}
+    end
+  end
+
+  @doc """
+  The blocking diagnostics `composition_id` would have compiled with `authored` (a candidate
+  authored layer, scoped to the composition) last: compiled in memory, nothing written or linked.
+  For a monitoring preview's checks (P3 M2, #451).
+  """
+  @spec check_at(binary(), binary(), binary(), Layer.t()) :: {:ok, [map()]} | {:error, term()}
+  def check_at(organization_id, mission_id, composition_id, %Layer{} = authored) do
+    with {:ok, composition} <- fetch(organization_id, mission_id, composition_id),
+         imported = Enum.map(composition.imported_layers, & &1.layer_id),
+         mounts = Map.new(composition.imported_layers, &{&1.layer_id, &1.mount}),
+         {:ok, layers} <- fetch_layers(organization_id, mission_id, imported),
+         {:ok, %CompilerResult{} = result} <-
+           Compiler.compile(
+             layers ++ [AuthoredScope.for_composition(authored, composition_id)],
+             mounts: mounts
+           ) do
+      {:ok, result |> blocking() |> Enum.map(&Map.take(&1, [:code, :semantic_id, :message]))}
+    end
+  end
+
+  defp blocking(%CompilerResult{revision: revision, plans: plans}) do
+    plan_diagnostics = plans |> Map.values() |> Enum.flat_map(& &1.diagnostics)
+
+    (revision.diagnostics ++ plan_diagnostics)
+    |> Enum.filter(&(&1.severity == :error))
+    |> Enum.uniq_by(&{&1.code, &1.semantic_id})
+  end
+
+  defp fetch_layers(org, mission, layer_ids) do
+    Enum.reduce_while(layer_ids, {:ok, []}, fn layer_id, {:ok, acc} ->
+      case MissionModels.fetch_layer(org, mission, layer_id) do
+        {:ok, layer} -> {:cont, {:ok, acc ++ [layer]}}
+        {:error, reason} -> {:halt, {:error, {layer_id, reason}}}
+      end
+    end)
   end
 
   # Only an unmounted single-layer compile of the same layer is the same compile (#456: one
