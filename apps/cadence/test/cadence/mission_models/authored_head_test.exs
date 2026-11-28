@@ -8,7 +8,7 @@ defmodule Cadence.MissionModels.AuthoredHeadTest do
 
   alias Cadence.Applications.TelemetryDecomFixtures, as: Fixtures
   alias Cadence.Catalog.MissionModel.Layer
-  alias Cadence.Configuration.{ChangeSetRow, ChangeSetStore, Ledger}
+  alias Cadence.Configuration.{ChangeSetRow, ChangeSetStore, Ledger, ReviewRow}
   alias Cadence.Control.AuthoredVersions
   alias Cadence.Control.ModelApprovalGate
   alias Cadence.MissionModelApproval
@@ -41,7 +41,7 @@ defmodule Cadence.MissionModels.AuthoredHeadTest do
     layer
   end
 
-  # An applied monitoring set, as revision 1 unless told otherwise.
+  # An open monitoring set, applied directly by its policy unless told otherwise.
   defp change_set!(c, attrs \\ []) do
     {:ok, set} =
       Repo.transaction(fn ->
@@ -56,25 +56,70 @@ defmodule Cadence.MissionModels.AuthoredHeadTest do
 
     set
     |> Ecto.Changeset.change(
-      Keyword.merge(
-        [
-          state: "applied",
-          applied_revision_number: 1,
-          policy_document: %{"approval_required" => true}
-        ],
-        attrs
-      )
+      Keyword.merge([policy_document: %{"approval_required" => false}], attrs)
     )
     |> Repo.update!()
   end
 
-  defp record!(c, layer, revision_number) do
-    set = change_set!(c, applied_revision_number: revision_number)
+  # What an apply does, in order: record the version for the next revision, write that ledger
+  # revision, mark the set applied as it; then the commit's deferred checks (SET CONSTRAINTS
+  # ALL IMMEDIATE stands in for the commit the sandbox never makes).
+  defp apply!(c, layer, opts \\ []) do
+    set = Keyword.get_lazy(opts, :set, fn -> change_set!(c) end)
 
-    {:ok, version} =
-      AuthoredVersions.record(c.org, c.mid, layer.layer_id, set.change_set_id, revision_number)
+    Repo.transaction(fn ->
+      head = Ledger.lock_head(c.org, c.mid)
+      number = Keyword.get(opts, :revision_number, head.revision_number + 1)
 
+      case AuthoredVersions.record(c.org, c.mid, layer.layer_id, set, number) do
+        {:ok, version} -> finish_apply!(head, set, number, opts, version)
+        {:error, reason} -> Repo.rollback(reason)
+      end
+    end)
+  end
+
+  defp finish_apply!(head, set, number, opts, version) do
+    unless Keyword.get(opts, :skip_ledger), do: write_revision!(head, set)
+
+    unless Keyword.get(opts, :never_applied),
+      do: mark_applied!(set, Keyword.get(opts, :applied_as, number))
+
+    Repo.query!("SET CONSTRAINTS ALL IMMEDIATE")
+    # The sandbox keeps one transaction for the whole test: back to the commit-time default.
+    Repo.query!("SET CONSTRAINTS ALL DEFERRED")
     version
+  end
+
+  defp mark_applied!(set, number) do
+    set
+    |> Ecto.Changeset.change(state: "applied", applied_revision_number: number)
+    |> Repo.update!()
+  end
+
+  defp write_revision!(head, set) do
+    {:ok, revision} =
+      Ledger.record(
+        head,
+        %{
+          kind: "change_set",
+          change_set_id: set.change_set_id,
+          applied_by: %{"kind" => "user", "id" => "u"},
+          submitted_by: %{"kind" => "user", "id" => "u"},
+          applied_at: DateTime.utc_now(),
+          reason: "monitoring",
+          summary: "monitoring"
+        },
+        []
+      )
+
+    revision
+  end
+
+  defp record!(c, layer, _revision_number \\ nil) do
+    case apply!(c, layer) do
+      {:ok, version} -> version
+      other -> flunk("apply failed: #{inspect(other)}")
+    end
   end
 
   test "versions are a sequence; the newest is the head", c do
@@ -91,51 +136,137 @@ defmodule Cadence.MissionModels.AuthoredHeadTest do
              MapSet.new([first.layer_id])
   end
 
-  describe "recording a version is the approval, so it is held to the stores" do
+  describe "recording a version is checked now, and again at commit" do
     setup c do
       Map.put(c, :layer, authored_layer!(c, "held"))
     end
 
-    defp refused(c, set, attrs \\ []) do
-      AuthoredVersions.record(
-        c.org,
-        c.mid,
-        Keyword.get(attrs, :layer_id, c.layer.layer_id),
-        set.change_set_id,
-        Keyword.get(attrs, :revision_number, 1)
-      )
+    test "a direct set records as direct; a reviewed one as reviewed", c do
+      assert {:ok, %{approval: "direct", revision_number: 2}} = apply!(c, c.layer)
+
+      reviewed =
+        change_set!(c, state: "in_review", policy_document: %{"approval_required" => true})
+
+      Repo.insert!(%ReviewRow{
+        review_id: "review:#{System.unique_integer([:positive])}",
+        change_set_id: reviewed.change_set_id,
+        organization_id: c.org,
+        mission_id: c.mid,
+        decision: "approved",
+        actor: %{"kind" => "user", "id" => "reviewer"},
+        decided_at: DateTime.utc_now(),
+        subject_version: reviewed.version,
+        subject_digest: String.duplicate("a", 64),
+        policy_document: %{"approval_required" => true},
+        admin_mode: false
+      })
+
+      assert {:ok, %{approval: "reviewed"}} =
+               apply!(c, authored_layer!(c, "reviewed"), set: reviewed)
     end
 
-    test "a reviewed set says so; a direct one says direct", c do
-      reviewed = change_set!(c)
-      assert {:ok, %{approval: "reviewed"}} = refused(c, reviewed)
+    test "refused now: another lane, another mission, already applied, unsettled approval, the wrong revision",
+         c do
+      mismatch = {:error, :authored_version_change_set_mismatch}
 
-      direct = change_set!(c, policy_document: %{"approval_required" => false})
-
-      assert {:ok, %{approval: "direct"}} =
-               refused(c, direct, layer_id: authored_layer!(c, "direct").layer_id)
-    end
-
-    test "a set that isn't this mission's applied monitoring set, as this revision", c do
-      assert {:error, :authored_version_change_set_mismatch} =
-               refused(c, change_set!(c, state: "in_review"))
-
+      assert apply!(c, c.layer, set: change_set!(c, lane: "configuration")) == mismatch
       Repo.delete_all(ChangeSetRow)
 
-      assert {:error, :authored_version_change_set_mismatch} =
-               refused(c, change_set!(c, lane: "configuration"))
+      # Another mission's set isn't found under this mission's lock.
+      assert apply!(c, c.layer, set: %ChangeSetRow{change_set_id: "change_set:elsewhere"}) ==
+               mismatch
+
+      assert apply!(c, c.layer, set: change_set!(c, state: "applied", applied_revision_number: 1)) ==
+               mismatch
 
       Repo.delete_all(ChangeSetRow)
+      # Needs approval, and nobody approved it.
+      assert apply!(c, c.layer,
+               set: change_set!(c, policy_document: %{"approval_required" => true})
+             ) ==
+               mismatch
 
-      assert {:error, :authored_version_change_set_mismatch} =
-               refused(c, change_set!(c), revision_number: 2)
+      Repo.delete_all(ChangeSetRow)
+      assert apply!(c, c.layer, revision_number: 7) == mismatch
     end
 
-    test "a ledger revision that doesn't exist", c do
-      set = change_set!(c, applied_revision_number: 999)
+    test "refused at commit: never marked applied", c do
+      assert_commit_refused(:authored_version_not_applied, fn ->
+        apply!(c, c.layer, never_applied: true)
+      end)
+    end
 
-      assert {:error, :authored_version_revision_unknown} =
-               refused(c, set, revision_number: 999)
+    test "refused at commit: applied as another revision", c do
+      assert_commit_refused(:authored_version_not_applied, fn ->
+        apply!(c, c.layer, applied_as: 9)
+      end)
+    end
+
+    test "refused at commit: the ledger revision was never written", c do
+      assert_commit_refused(:authored_version_revision_unknown, fn ->
+        apply!(c, c.layer, skip_ledger: true)
+      end)
+    end
+
+    test "checked immediately, the deferred check refuses before the apply finishes", c do
+      set = change_set!(c)
+
+      # The immediate check aborts the transaction, so roll it back to its savepoint, then return
+      # the sandbox's one transaction to the commit-time default.
+      result =
+        Repo.transaction(fn ->
+          Repo.query!("SET CONSTRAINTS ALL IMMEDIATE")
+          head = Ledger.lock_head(c.org, c.mid)
+
+          c.org
+          |> AuthoredVersions.record(
+            c.mid,
+            c.layer.layer_id,
+            set,
+            head.revision_number + 1
+          )
+          |> Repo.rollback()
+        end)
+
+      Repo.query!("SET CONSTRAINTS ALL DEFERRED")
+      # Whichever deferred check fires first: the revision isn't written, nor the set applied.
+      assert {:error, {:error, code}} = result
+      assert code in [:authored_version_revision_unknown, :authored_version_not_applied]
+    end
+
+    test "a rolled-back apply leaves no version and no head", c do
+      set = change_set!(c)
+
+      Repo.transaction(fn ->
+        head = Ledger.lock_head(c.org, c.mid)
+
+        {:ok, _} =
+          AuthoredVersions.record(
+            c.org,
+            c.mid,
+            c.layer.layer_id,
+            set,
+            head.revision_number + 1
+          )
+
+        Repo.rollback(:apply_failed)
+      end)
+
+      assert AuthoredHead.head(c.org, c.mid) == nil
+    end
+
+    test "one set records one version", c do
+      set = change_set!(c)
+      assert {:ok, _} = apply!(c, c.layer, set: set)
+
+      again =
+        ChangeSetRow
+        |> Repo.get!(set.change_set_id)
+        |> Ecto.Changeset.change(state: "open", applied_revision_number: nil)
+        |> Repo.update!()
+
+      assert {:error, :authored_version_already_recorded} =
+               apply!(c, authored_layer!(c, "again"), set: again)
     end
 
     test "a layer that isn't this mission's authored layer", c do
@@ -149,22 +280,13 @@ defmodule Cadence.MissionModels.AuthoredHeadTest do
           })
         )
 
-      assert {:error, :authored_version_layer_mismatch} =
-               refused(c, change_set!(c), layer_id: imported.layer_id)
-
-      Repo.delete_all(ChangeSetRow)
-
-      assert {:error, :authored_version_layer_mismatch} =
-               refused(c, change_set!(c), layer_id: "mission_model_layer:elsewhere")
+      assert {:error, :authored_version_layer_mismatch} = apply!(c, imported)
     end
+  end
 
-    test "one set records one version", c do
-      set = change_set!(c)
-      assert {:ok, _} = refused(c, set)
-
-      assert {:error, :authored_version_already_recorded} =
-               refused(c, set, layer_id: authored_layer!(c, "again").layer_id)
-    end
+  defp assert_commit_refused(code, fun) do
+    error = assert_raise Postgrex.Error, fun
+    assert AuthoredVersions.refusal(error) == code
   end
 
   test "approval_bases maps a head revision to its base and anything else to itself", c do
