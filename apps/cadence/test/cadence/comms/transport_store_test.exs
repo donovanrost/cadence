@@ -199,7 +199,7 @@ defmodule Cadence.Comms.TransportStoreTest do
           transport_kind: :tcp_socket,
           direction_capability: :inbound,
           adapter_key: :tcp_socket,
-          configuration: %{"host" => "must-not-win", "port" => 1},
+          configuration: %{"host" => "must-not-win", "port" => 1, "listener" => "shared"},
           mission_provider_id: provider.provider_id,
           mission_provider_version: provider.version,
           service_profile_ref: %{"id" => "service-downlink", "version" => 3},
@@ -223,6 +223,7 @@ defmodule Cadence.Comms.TransportStoreTest do
       assert persisted.configuration["port"] == 5100
       assert persisted.configuration["fixed_message_bytes"] == 1115
       assert persisted.configuration["ingress_protocol_family"] == "tm"
+      assert persisted.configuration["listener"] == "shared"
 
       assert persisted.configuration["ingress_metadata"] == %{
                "frame_size" => 1115,
@@ -248,6 +249,7 @@ defmodule Cadence.Comms.TransportStoreTest do
       assert runtime_profile.configuration["host"] == "127.0.0.1"
       assert runtime_profile.configuration["direction"] == "downlink"
       assert runtime_profile.configuration["ingress_protocol_family"] == "tm"
+      assert runtime_profile.configuration["listener"] == "shared"
       assert runtime_profile.metadata["transport_origin"] == "provider_managed"
       assert runtime_profile.metadata["mission_provider_id"] == provider.provider_id
 

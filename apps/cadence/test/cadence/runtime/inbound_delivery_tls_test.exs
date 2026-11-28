@@ -130,13 +130,72 @@ defmodule Cadence.Runtime.InboundDeliveryTLSTest do
                %{adapter: self(), realized_contact_id: "other", path_id: "downlink", scid: 7}
              )
 
-    assert {:error, {:listen_endpoint_mode_mismatch, %{port: ^port}}} =
+    assert {:error, {:shared_listener_requires_mtls, %{port: ^port}}} =
              Transports.persist_transport(ctx.org, direct_transport(ctx.mission, port))
 
     {:ok, peer} = connect(port, material, ctx.client)
     assert {:error, :closed} = :ssl.recv(peer, 0, 2_000)
     assert eventually(fn -> reason(adapter) == "peer_not_allowed" end)
     assert :empty = Journal.next_entries(journal, :processing, 10, 16_384)
+  end
+
+  test "shared mTLS claims remain exclusive across organizations using the same CA and SCID", %{
+    material: material
+  } do
+    a = issue_binding!(material, "shared")
+    b = issue_binding!(material, "shared")
+    assert a.org != b.org
+    assert a.mission != b.mission
+
+    first = enable_tls!(a)
+    port = first.configuration["port"]
+
+    assert {:error, {:listen_endpoint_claimed, %{port: ^port}}} = enable_tls(b, port)
+
+    # Each organization can start a binding with the same SCID (7 in start_listener!) using
+    # its CA-issued leaf on its own endpoint.
+    second = enable_tls!(b)
+    assert second.configuration["port"] != port
+
+    for {ctx, transport} <- [{a, first}, {b, second}] do
+      {adapter, _journal, port} = start_listener!(ctx, transport)
+      {:ok, peer} = connect(port, material, ctx.client)
+      :ok = :ssl.send(peer, SharedListenerFixtures.frame(7))
+      assert eventually(fn -> received?(adapter) end)
+      :ssl.close(peer)
+    end
+  end
+
+  test "compatible claims on a mission's shared endpoint keep separate mTLS credentials", %{
+    material: material
+  } do
+    a = issue_binding!(material, "shared")
+    b = issue_binding!(material, "own", nil, {a.org, a.mission, a.scope})
+    first = enable_tls!(a)
+    port = first.configuration["port"]
+
+    assert {:error, {:listen_endpoint_listener_mismatch, %{port: ^port}}} = enable_tls(b, port)
+
+    assert {:ok, second} = enable_tls(%{b | listener: "shared"}, port)
+    assert first.transport_id != second.transport_id
+
+    for {ctx, transport} <- [{a, first}, {b, second}] do
+      assert {:ok, profile} =
+               ProfileStore.fetch_provider_profile(
+                 ctx.org,
+                 ctx.mission,
+                 transport.materialized_provider_profile_id
+               )
+
+      assert %{
+               "listener" => "shared",
+               "port" => ^port,
+               "delivery_auth" => "mtls",
+               "delivery_credential_ref" => ref
+             } = profile.configuration
+
+      assert ref == ctx.client.ref
+    end
   end
 
   test "activating mTLS closes an existing plaintext stream and refuses old registrations", %{
@@ -280,11 +339,8 @@ defmodule Cadence.Runtime.InboundDeliveryTLSTest do
     assert {:error, :stale_index} = Authorization.authorize(authorization, ctx.client.fingerprint)
   end
 
-  defp issue_binding!(material, listener \\ nil, tls_peers \\ nil) do
-    org = Cadence.Ids.new("org")
-    mission = Cadence.Ids.new("mission")
-    %{organization: organization} = persist_mission_scope(org, mission)
-    scope = admin_scope(organization)
+  defp issue_binding!(material, listener \\ nil, tls_peers \\ nil, mission_scope \\ nil) do
+    {org, mission, scope} = mission_scope || new_mission_scope!()
     credential_ref = Cadence.Ids.new("provider_credential")
     account_id = Cadence.Ids.new("provider_account")
 
@@ -390,6 +446,13 @@ defmodule Cadence.Runtime.InboundDeliveryTLSTest do
     }
   end
 
+  defp new_mission_scope! do
+    org = Cadence.Ids.new("org")
+    mission = Cadence.Ids.new("mission")
+    %{organization: organization} = persist_mission_scope(org, mission)
+    {org, mission, admin_scope(organization)}
+  end
+
   defp admin_scope(organization) do
     user =
       User.new(%{
@@ -413,7 +476,7 @@ defmodule Cadence.Runtime.InboundDeliveryTLSTest do
     transport
   end
 
-  defp enable_tls(ctx) do
+  defp enable_tls(ctx, target_port \\ nil) do
     inventory =
       update_in(ctx.provider.inventory_sync_document, ["delivery_profiles", "items"], fn [
                                                                                            delivery
@@ -423,7 +486,7 @@ defmodule Cadence.Runtime.InboundDeliveryTLSTest do
           |> Map.put("version", 8)
           |> Map.put("delivery_auth", "mtls")
           |> put_in(["diagnostics", "frame_bytes"], 10)
-          |> put_in(["diagnostics", "listener"], ctx.listener)
+          |> put_in(["diagnostics", "port"], target_port || delivery["diagnostics"]["port"])
           |> Map.put("egress", %{
             "source_addresses" => ctx.tls_peers,
             "delivery_credential_ref" => ctx.client.ref
@@ -441,6 +504,7 @@ defmodule Cadence.Runtime.InboundDeliveryTLSTest do
     Transports.version_transport(ctx.org, ctx.mission, ctx.transport.transport_id, %{
       origin: :provider_managed,
       mission_provider_id: provider.provider_id,
+      configuration: %{"listener" => ctx.listener},
       delivery_profile_ref: @mtls_ref
     })
   end

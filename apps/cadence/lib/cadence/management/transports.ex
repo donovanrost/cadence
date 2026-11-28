@@ -12,7 +12,15 @@ defmodule Cadence.Management.Transports do
   """
 
   alias Cadence.Auth.{Policy, Scope}
-  alias Cadence.Comms.{ProviderTransportBasis, Transport, TransportKind, TransportStore}
+
+  alias Cadence.Comms.{
+    ListenerChoice,
+    ProviderTransportBasis,
+    Transport,
+    TransportKind,
+    TransportStore
+  }
+
   alias Cadence.GroundNetworks.{MissionProviders, ProviderAudit, ProviderAuditEntry}
   alias Cadence.Management.Providers
   alias Cadence.Platform.ScopedReadUpdates
@@ -169,10 +177,29 @@ defmodule Cadence.Management.Transports do
   """
   @spec derive(binary(), binary(), map()) :: {:ok, derived()} | {:error, [field_error()]}
   def derive(organization_id, mission_id, %{} = document) do
+    derive_with(organization_id, mission_id, document, &basis(organization_id, mission_id, &1))
+  end
+
+  @doc "Derives staged transport choices with one provider lookup for each provider in the set."
+  def derive_many(organization_id, mission_id, documents) do
+    providers =
+      documents
+      |> Map.values()
+      |> Enum.map(& &1["mission_provider_id"])
+      |> Enum.filter(&provider_chosen?/1)
+      |> Enum.uniq()
+      |> Map.new(&{&1, basis(organization_id, mission_id, &1)})
+
+    Map.new(documents, fn {id, document} ->
+      {id, derive_with(organization_id, mission_id, document, &Map.fetch!(providers, &1))}
+    end)
+  end
+
+  defp derive_with(organization_id, mission_id, document, load_basis) do
     provider_id = document["mission_provider_id"]
 
-    with {:provider, true} <- {:provider, is_binary(provider_id) and provider_id != ""},
-         {:ok, basis} <- basis(organization_id, mission_id, provider_id),
+    with {:provider, true} <- {:provider, provider_chosen?(provider_id)},
+         {:ok, basis} <- load_basis.(provider_id),
          {:ok, transport} <-
            TransportStore.derive_provider_transport(
              candidate(organization_id, mission_id, document),
@@ -181,9 +208,11 @@ defmodule Cadence.Management.Transports do
       {:ok, derived(transport)}
     else
       {:provider, false} -> {:error, [error("mission_provider_id", "Choose a provider.")]}
-      {:error, reason} -> {:error, [field_error(reason)]}
+      {:error, reason} -> {:error, [ListenerChoice.field_error(reason) || field_error(reason)]}
     end
   end
+
+  defp provider_chosen?(provider), do: is_binary(provider) and provider != ""
 
   defp candidate(organization_id, mission_id, document),
     do:
@@ -192,6 +221,7 @@ defmodule Cadence.Management.Transports do
         mission_id: mission_id,
         display_name: document["display_name"] || "",
         origin: :provider_managed,
+        configuration: document["configuration"] || %{},
         mission_provider_id: document["mission_provider_id"],
         mission_provider_version: document["mission_provider_version"],
         service_profile_ref: document["service_profile_ref"],

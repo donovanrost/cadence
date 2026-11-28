@@ -14,6 +14,7 @@ defmodule Cadence.Reads.ConfigLabels do
   (`"version"`: show 4 as "v4").
   """
 
+  alias Cadence.Comms.ListenerChoice
   alias Cadence.Configuration.Kinds
   alias Cadence.Reads.ConfigKindSchema
   alias Cadence.SpacecraftStore
@@ -101,7 +102,8 @@ defmodule Cadence.Reads.ConfigLabels do
   defp label_list(item, key, labels) do
     case Map.get(item, key) do
       list when is_list(list) ->
-        Map.put(item, key, Enum.map(list, &label(&1, labels)))
+        labeled = Enum.map(list, &label(&1, labels))
+        Map.put(item, key, listener_labels(labeled, item))
 
       _none ->
         item
@@ -117,6 +119,51 @@ defmodule Cadence.Reads.ConfigLabels do
   end
 
   defp label(entry, _labels), do: entry
+
+  defp listener_labels(fields, %{kind: "transport"} = item) do
+    action = Map.get(item, :action, Map.get(item, :op))
+
+    reset? =
+      Enum.any?(fields, fn
+        %{path: "configuration.mode", after: mode} ->
+          mode in ["connect", :connect]
+
+        %{path: "configuration.direction_capability", after: direction} ->
+          direction in ["outbound", "bidirectional", :outbound, :bidirectional]
+
+        _other ->
+          false
+      end)
+
+    path = ListenerChoice.path()
+
+    Enum.map(fields, fn
+      %{path: ^path, before: before, after: later} = entry ->
+        entry
+        |> Map.put(:before_label, listener_word(before, action in ["create", :create]))
+        |> Map.put(:after_label, listener_word(later, action in ["delete", :delete]))
+        |> listener_reset_note(reset?)
+
+      entry ->
+        entry
+    end)
+  end
+
+  defp listener_labels(fields, _item), do: fields
+
+  defp listener_reset_note(%{before: "shared", after: value} = field, true)
+       when value in [nil, "own"],
+       do: Map.put(field, :note, ListenerChoice.reset_reason())
+
+  defp listener_reset_note(field, _reset?), do: field
+
+  defp listener_word(nil, true), do: nil
+
+  defp listener_word(value, _absent?) do
+    Enum.find_value(ListenerChoice.options(), fn {label, option} ->
+      if option == (value || "own"), do: label
+    end)
+  end
 
   defp names(organization_id, mission_id, items, known) do
     items
