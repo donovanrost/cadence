@@ -319,7 +319,7 @@ defmodule Cadence.GroundNetworks do
   end
 
   defp delivery_profile_summary(%DeliveryProfile{} = profile) do
-    %{
+    summary = %{
       "id" => profile.id,
       "version" => profile.version,
       "display_name" => profile.display_name,
@@ -331,6 +331,10 @@ defmodule Cadence.GroundNetworks do
       "diagnostics" => profile.diagnostics,
       "egress" => profile.egress
     }
+
+    if profile.delivery_auth == :mtls,
+      do: Map.put(summary, "delivery_auth", "mtls"),
+      else: summary
   end
 
   @doc """

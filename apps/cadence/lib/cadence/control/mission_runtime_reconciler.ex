@@ -22,6 +22,8 @@ defmodule Cadence.Control.MissionRuntimeReconciler do
   alias Cadence.Runtime.MissionRuntimeSpec
   alias Cadence.Runtime.Missions, as: RuntimeMissions
   alias Cadence.Runtime.ProcessNamespace, as: RuntimeProcessNamespace
+  alias Cadence.SemanticObservations
+  alias Cadence.SemanticRuntime.PlanDecoder
 
   @default_safety_poll_interval_ms 30_000
 
@@ -300,6 +302,8 @@ defmodule Cadence.Control.MissionRuntimeReconciler do
          {:ok, %GenerationApplied{} = observation} <-
            RuntimeMissions.apply(state.runtime_process_namespace, runtime_spec),
          :ok <- record_receipt(state.applied_basis, activation, observation.applied_at) do
+      retire_dropped_rules(state.applied_basis, activation, runtime_spec, observation.applied_at)
+
       {{:ok, observation},
        %{
          state
@@ -323,6 +327,50 @@ defmodule Cadence.Control.MissionRuntimeReconciler do
              applied_basis: nil,
              last_error: reason
          })}
+    end
+  end
+
+  # A new generation drops the rules its plan no longer has: their open episodes clear with
+  # `rule_retired` and their states go (#451 T3b). Once per generation (the receipt's gate), best
+  # effort: a failure is logged and the next generation's run, or a restart's, repeats it (it is
+  # idempotent), so it never fails the application of a generation. Only a ready monitoring plan
+  # says what is live; a mission model with none (or a legacy activation with no organization)
+  # retires nothing.
+  defp retire_dropped_rules(basis, activation, runtime_spec, applied_at) do
+    if is_nil(basis) or basis.durable != BindingSetActivation.identity(activation) do
+      do_retire_dropped_rules(activation, runtime_spec, applied_at)
+    end
+
+    :ok
+  end
+
+  defp do_retire_dropped_rules(%BindingSetActivation{organization_id: nil}, _spec, _at), do: :ok
+
+  defp do_retire_dropped_rules(activation, runtime_spec, applied_at) do
+    case runtime_spec.runtime_plans do
+      %{monitoring: %{status: :ready}} = plans ->
+        live =
+          plans |> PlanDecoder.decode() |> Map.fetch!(:monitoring) |> Enum.map(& &1.policy_id)
+
+        case SemanticObservations.retire_rules(
+               activation.organization_id,
+               activation.mission_id,
+               Enum.uniq(live),
+               activation.activation_id,
+               applied_at,
+               activation.generation
+             ) do
+          {:ok, _counts} ->
+            :ok
+
+          {:error, reason} ->
+            Logger.warning(
+              "retiring dropped rules failed for #{activation.mission_id}: #{inspect(reason)}"
+            )
+        end
+
+      _no_ready_monitoring_plan ->
+        :ok
     end
   end
 

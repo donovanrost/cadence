@@ -37,6 +37,7 @@ defmodule Cadence.Reads.ActionQueue do
     CommandGroups,
     Commands,
     FleetStatus,
+    MonitoredParameters,
     Readiness
   }
 
@@ -93,7 +94,7 @@ defmodule Cadence.Reads.ActionQueue do
       groups_awaiting:
         CommandGroups.list(organization_id, mission_id, viewer_user_id, awaiting_me: true),
       viewer_user_id: viewer_user_id,
-      limits_configured?: Cadence.Limits.list_limit_definitions(mission_id) != [],
+      limits_configured?: MonitoredParameters.configured?(organization_id, mission_id),
       findings: Readiness.evaluate(organization_id, mission_id).findings,
       now: now,
       failure_lookback_s: lookback_s
@@ -281,10 +282,8 @@ defmodule Cadence.Reads.ActionQueue do
       |> Map.get(:findings, [])
       |> Enum.filter(&(&1.severity in @setup_severities))
 
-    limits_app_missing? = Enum.any?(findings, &(&1.cause == :"app_not_installed:limits"))
-
     limits =
-      if Map.get(input, :limits_configured?, true) or limits_app_missing? do
+      if Map.get(input, :limits_configured?, true) do
         []
       else
         [

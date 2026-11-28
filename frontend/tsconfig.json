@@ -11,9 +11,6 @@
       "path": "./apps/ops-console"
     },
     {
-      "path": "./apps/organization-admin"
-    },
-    {
       "path": "./apps/surface-fixture"
     },
     {
@@ -24,9 +21,6 @@
     },
     {
       "path": "./modules/dashboards-and-exploration"
-    },
-    {
-      "path": "./modules/derived-telemetry"
     },
     {
       "path": "./modules/limits-and-alarming"

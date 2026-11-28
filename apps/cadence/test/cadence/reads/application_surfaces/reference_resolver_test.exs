@@ -23,7 +23,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.ReferenceResolverTest do
   test "rejects an unsupported provider version" do
     assert {:error, :unsupported_reference_provider_version} =
              resolve_reference(%ReferenceDefinition{
-               provider_id: "cadence.telemetry.canonical_points",
+               provider_id: "cadence.catalog.telemetry_revisions",
                version: 2
              })
   end
@@ -35,7 +35,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.ReferenceResolverTest do
   test "rejects a search result limit above the host bound" do
     assert {:error, :invalid_reference_search_limit} =
              resolve_reference(%ReferenceDefinition{
-               provider_id: "cadence.telemetry.canonical_points",
+               provider_id: "cadence.catalog.telemetry_revisions",
                version: 1,
                mode: :search,
                result_limit: 51

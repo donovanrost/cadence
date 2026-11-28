@@ -162,8 +162,9 @@ defmodule Cadence.CommandGroupFixtures do
         })
       )
 
-    # An applied monitoring change set approved the layer: what an apply does, in order, is record
-    # the version for the next ledger revision, write that revision and mark the set applied as it.
+    # A monitoring change set applied directly approved the layer: recorded during its apply, as
+    # the revision the apply writes, and held to the applied set at commit (#451 M2; the
+    # sandbox never commits, so SET CONSTRAINTS ALL IMMEDIATE stands in).
     Ledger.ensure_head(c.org, c.mission)
 
     {:ok, set} =
@@ -182,15 +183,13 @@ defmodule Cadence.CommandGroupFixtures do
       |> Ecto.Changeset.change(policy_document: %{"approval_required" => false})
       |> Repo.update!()
 
-    {:ok, _} =
+    {:ok, {:ok, _version}} =
       Repo.transaction(fn ->
         head = Ledger.lock_head(c.org, c.mission)
         number = head.revision_number + 1
+        result = AuthoredVersions.record(c.org, c.mission, layer.layer_id, set, number)
 
-        {:ok, _version} =
-          AuthoredVersions.record(c.org, c.mission, layer.layer_id, set, number)
-
-        {:ok, _revision} =
+        {:ok, revision} =
           Ledger.record(
             head,
             %{
@@ -206,12 +205,15 @@ defmodule Cadence.CommandGroupFixtures do
           )
 
         set
-        |> Ecto.Changeset.change(state: "applied", applied_revision_number: number)
+        |> Ecto.Changeset.change(
+          state: "applied",
+          applied_revision_number: revision.revision_number
+        )
         |> Repo.update!()
 
-        # The commit's deferred checks (the sandbox never commits).
         Repo.query!("SET CONSTRAINTS ALL IMMEDIATE")
         Repo.query!("SET CONSTRAINTS ALL DEFERRED")
+        result
       end)
 
     {:ok, head_revision} =

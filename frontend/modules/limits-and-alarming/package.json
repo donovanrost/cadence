@@ -4,9 +4,6 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
-    "./definitions": "./src/definitions.ts",
-    "./posture": "./src/posture.ts",
     "./alarm-conditions": "./src/alarm-conditions.ts"
   },
   "scripts": {

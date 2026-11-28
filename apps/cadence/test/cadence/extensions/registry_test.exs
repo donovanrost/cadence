@@ -251,9 +251,9 @@ defmodule Cadence.Extensions.RegistryTest do
     assert :ok = ExtensionCatalog.validate()
 
     assert ExtensionCatalog.inventory() == %{
-             packages: 10,
-             applications: 5,
-             available_applications: 4,
+             packages: 9,
+             applications: 3,
+             available_applications: 2,
              capabilities: 5,
              transport_kinds: 1,
              provider_connectors: 1,
@@ -266,24 +266,15 @@ defmodule Cadence.Extensions.RegistryTest do
              ["telemetry_decom"]
 
     assert Enum.map(ExtensionCatalog.applications_for_scope(:mission), & &1.application_key) ==
-             [
-               "derived_telemetry",
-               "limits",
-               "ops_console",
-               "cfdp"
-             ]
+             ["ops_console", "cfdp"]
 
     assert Enum.map(
              ExtensionCatalog.available_applications_for_scope(:mission),
              & &1.application_key
-           ) == [
-             "derived_telemetry",
-             "limits",
-             "ops_console"
-           ]
+           ) == ["ops_console"]
 
-    assert {:ok, %{application_key: "derived_telemetry", version: 1}} =
-             ExtensionCatalog.fetch_available_application("derived_telemetry", 1)
+    assert {:ok, %{application_key: "ops_console", version: 1}} =
+             ExtensionCatalog.fetch_available_application("ops_console", 1)
 
     assert {:ok, %{application_key: "cfdp", availability: :roadmap}} =
              ExtensionCatalog.fetch_application("cfdp")
@@ -292,7 +283,7 @@ defmodule Cadence.Extensions.RegistryTest do
              ExtensionCatalog.fetch_available_application("cfdp")
 
     assert {:error, :unsupported_application_contribution_version} =
-             ExtensionCatalog.fetch_application("derived_telemetry", 99)
+             ExtensionCatalog.fetch_application("ops_console", 99)
 
     assert {:error, :unknown_application_contribution} =
              ExtensionCatalog.fetch_application("not_registered")
@@ -370,7 +361,7 @@ defmodule Cadence.Extensions.RegistryTest do
       },
       contributions: [
         %ApplicationContribution{
-          application_key: "derived_telemetry",
+          application_key: "ops_console",
           application_version: 99
         }
       ]
@@ -387,7 +378,7 @@ defmodule Cadence.Extensions.RegistryTest do
         compatibility: %{cadence_application_contract: 1},
         contributions: [
           %ApplicationContribution{
-            application_key: "derived_telemetry",
+            application_key: "ops_console",
             application_version: 1
           }
         ]
@@ -526,18 +517,6 @@ defmodule Cadence.Extensions.RegistryTest do
 
     assert {:error, :invalid_extension_package} =
              ExtensionCatalog.validate_package(invalid_catalog_importer)
-  end
-
-  test "mission assurance is an application-only package over the existing limits domain" do
-    assert {:ok, %ExtensionPackage{} = package} =
-             ExtensionCatalog.fetch("cadence.mission-assurance")
-
-    assert package.contributions == [
-             %ApplicationContribution{
-               application_key: "limits",
-               application_version: 1
-             }
-           ]
   end
 
   test "resolves required and optional package dependencies without recursive registry calls" do

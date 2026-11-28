@@ -26,7 +26,7 @@ test("account switching and sign-out retain native methods and CSRF across updat
     "delete",
   );
 });
-test("an invalid account document contains its effects and a failed bell leaves account actions usable", async () => {
+test("an invalid account document contains its effects and a valid one restores account actions", async () => {
   wrapper = mount(AccountMenu, { props: { context, id: "account-user" } });
   for (const bad of [
     { ...context, version: 2 },
@@ -36,8 +36,7 @@ test("an invalid account document contains its effects and a failed bell leaves 
     expect(wrapper.find("form").exists()).toBe(false);
     expect(wrapper.find("#account-user-unavailable").exists()).toBe(true);
   }
-  await wrapper.setProps({ context: { ...context, notifications: null } });
-  expect(wrapper.find("#account-user-notifications-unavailable").exists()).toBe(true);
+  await wrapper.setProps({ context });
   await wrapper.get("#account-user-user").trigger("click");
   expect(wrapper.find("#account-user-sign-out").exists()).toBe(true);
 });

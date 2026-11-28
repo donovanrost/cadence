@@ -455,9 +455,6 @@ importers:
       '@cadence/dashboards-and-exploration':
         specifier: workspace:*
         version: link:../../modules/dashboards-and-exploration
-      '@cadence/derived-telemetry':
-        specifier: workspace:*
-        version: link:../../modules/derived-telemetry
       '@cadence/design-tokens':
         specifier: workspace:*
         version: link:../../packages/design-tokens
@@ -467,58 +464,6 @@ importers:
       '@cadence/planning-and-contacts':
         specifier: workspace:*
         version: link:../../modules/planning-and-contacts
-      '@cadence/plugin-host':
-        specifier: workspace:*
-        version: link:../host
-      '@cadence/plugin-sdk':
-        specifier: workspace:*
-        version: link:../../packages/plugin-sdk
-      '@cadence/ui':
-        specifier: workspace:*
-        version: link:../../packages/ui
-      reka-ui:
-        specifier: 'catalog:'
-        version: 2.10.3(vue@3.5.45(typescript@6.0.3))
-      vue:
-        specifier: 'catalog:'
-        version: 3.5.45(typescript@6.0.3)
-    devDependencies:
-      '@module-federation/vite':
-        specifier: 'catalog:'
-        version: 1.20.7(@voidzero-dev/vite-plus-core@0.2.9(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(typescript@6.0.3))(typescript@6.0.3)(vue-tsc@3.3.11(typescript@6.0.3))
-      '@types/node':
-        specifier: 'catalog:'
-        version: 24.13.3
-      '@vitejs/plugin-vue':
-        specifier: 'catalog:'
-        version: 6.0.8(@voidzero-dev/vite-plus-core@0.2.9(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(typescript@6.0.3))(vue@3.5.45(typescript@6.0.3))
-      '@vue/test-utils':
-        specifier: 'catalog:'
-        version: 2.4.11(@vue/compiler-dom@3.5.45)(@vue/server-renderer@3.5.45)(vue@3.5.45(typescript@6.0.3))
-      '@vue/tsconfig':
-        specifier: 'catalog:'
-        version: 0.9.1(typescript@6.0.3)(vue@3.5.45(typescript@6.0.3))
-      happy-dom:
-        specifier: 'catalog:'
-        version: 20.11.6
-      typescript:
-        specifier: 'catalog:'
-        version: 6.0.3
-      vite:
-        specifier: npm:@voidzero-dev/vite-plus-core@0.2.9
-        version: '@voidzero-dev/vite-plus-core@0.2.9(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(typescript@6.0.3)'
-      vite-plus:
-        specifier: 'catalog:'
-        version: 0.2.9(@types/node@24.13.3)(@vitest/browser-playwright@4.1.10)(@voidzero-dev/vite-plus-core@0.2.9(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(typescript@6.0.3))(esbuild@0.28.2)(happy-dom@20.11.6)(jiti@2.7.0)(typescript@6.0.3)
-      vue-tsc:
-        specifier: 'catalog:'
-        version: 3.3.11(typescript@6.0.3)
-
-  apps/organization-admin:
-    dependencies:
-      '@cadence/design-tokens':
-        specifier: workspace:*
-        version: link:../../packages/design-tokens
       '@cadence/plugin-host':
         specifier: workspace:*
         version: link:../host
@@ -690,46 +635,6 @@ importers:
         version: 3.3.11(typescript@6.0.3)
 
   modules/dashboards-and-exploration:
-    dependencies:
-      '@cadence/plugin-sdk':
-        specifier: workspace:*
-        version: link:../../packages/plugin-sdk
-      '@cadence/ui':
-        specifier: workspace:*
-        version: link:../../packages/ui
-      vue:
-        specifier: 'catalog:'
-        version: 3.5.45(typescript@6.0.3)
-    devDependencies:
-      '@types/node':
-        specifier: 'catalog:'
-        version: 24.13.3
-      '@vitejs/plugin-vue':
-        specifier: 'catalog:'
-        version: 6.0.8(@voidzero-dev/vite-plus-core@0.2.9(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(typescript@6.0.3))(vue@3.5.45(typescript@6.0.3))
-      '@vue/test-utils':
-        specifier: 'catalog:'
-        version: 2.4.11(@vue/compiler-dom@3.5.45)(@vue/server-renderer@3.5.45)(vue@3.5.45(typescript@6.0.3))
-      '@vue/tsconfig':
-        specifier: 'catalog:'
-        version: 0.9.1(typescript@6.0.3)(vue@3.5.45(typescript@6.0.3))
-      happy-dom:
-        specifier: 'catalog:'
-        version: 20.11.6
-      typescript:
-        specifier: 'catalog:'
-        version: 6.0.3
-      vite:
-        specifier: npm:@voidzero-dev/vite-plus-core@0.2.9
-        version: '@voidzero-dev/vite-plus-core@0.2.9(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(typescript@6.0.3)'
-      vite-plus:
-        specifier: 'catalog:'
-        version: 0.2.9(@types/node@24.13.3)(@vitest/browser-playwright@4.1.10)(@voidzero-dev/vite-plus-core@0.2.9(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(typescript@6.0.3))(esbuild@0.28.2)(happy-dom@20.11.6)(jiti@2.7.0)(typescript@6.0.3)
-      vue-tsc:
-        specifier: 'catalog:'
-        version: 3.3.11(typescript@6.0.3)
-
-  modules/derived-telemetry:
     dependencies:
       '@cadence/plugin-sdk':
         specifier: workspace:*
@@ -3518,9 +3423,11 @@ packages:
 
   yuku-codegen@0.5.48:
     resolution: {integrity: sha512-p7HxD5Xl4jzDzqMrGePAOeSHmRY4g58h4HuGq15weQFPxuPWd/W6e7nqp/+Lea6JfpOdBwJOAyXFqIZ/J9Zfnw==}
+    deprecated: 'Yuku is now one package with one core. Use "yuku" instead: https://yuku.fyi/javascript/. Existing installs keep working but get no more fixes.'
 
   yuku-parser@0.5.48:
     resolution: {integrity: sha512-OWBfhrpgK9+/4+IXG9oT8Bao4AhViQA7vdyNNH7EUg8dQYgwa70XtIBWTpCEme1P1ECyoDNYkn0wT63f8XRcVA==}
+    deprecated: 'Yuku is now one package with one core. Use "yuku" instead: https://yuku.fyi/javascript/. Existing installs keep working but get no more fixes.'
 
   zod-to-json-schema@3.25.2:
     resolution: {integrity: sha512-O/PgfnpT1xKSDeQYSCfRI5Gy3hPf91mKVDuYLUHZJMiDFptvP41MSnWofm8dnCm0256ZNfZIM7DSzuSMAFnjHA==}

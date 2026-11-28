@@ -382,6 +382,8 @@ defmodule Cadence.Dashboards.DataLinkResolver do
   defp point_rows(point) do
     [
       row("Point", point.point_id),
+      row("Parameter", derived(point, :qualified_name)),
+      row("Source", derived(point, "Derived (algorithm output)")),
       row("Packet", Map.get(point, :packet_name)),
       row("Field", Map.get(point, :field_name)),
       row("Unit", Map.get(point, :unit)),
@@ -389,6 +391,11 @@ defmodule Cadence.Dashboards.DataLinkResolver do
       row("Description", Map.get(point, :description))
     ]
   end
+
+  # A derived point (#451 T4b) has no packet or field; it is named by its parameter.
+  defp derived(%{source: :derived} = point, key) when is_atom(key), do: Map.get(point, key)
+  defp derived(%{source: :derived}, text) when is_binary(text), do: text
+  defp derived(_point, _value), do: nil
 
   defp telemetry_sample_rows(sample) do
     [

@@ -1,7 +1,6 @@
 export const developmentPorts = Object.freeze({
   host: 5173,
   "telemetry-decom": 4174,
-  "organization-admin": 4178,
   "ops-console": 4180,
   console: 5181,
 });

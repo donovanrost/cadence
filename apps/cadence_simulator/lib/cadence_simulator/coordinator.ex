@@ -151,6 +151,7 @@ defmodule CadenceSimulator.Coordinator do
       send_buffer_opts =
         [
           output: output,
+          delivery_tls: Keyword.get(opts, :delivery_tls),
           runtime_resolver: Keyword.get(opts, :runtime_resolver),
           batch_timeout: send_batch_timeout,
           batch_size: send_batch_size,
@@ -292,6 +293,10 @@ defmodule CadenceSimulator.Coordinator do
   def handle_info({:send_buffer_status, status}, state) do
     {:noreply, maybe_apply_send_buffer_status(state, status)}
   end
+
+  def handle_info({:delivery_failed, reason}, state)
+      when reason in [:delivery_tls_credential_unavailable, :delivery_tls_handshake_failed],
+      do: {:stop, {:shutdown, reason}, state}
 
   def handle_info(:generate, state) do
     {outputs, total_bytes, next_state} = generate_steps(state, state.steps_per_tick)

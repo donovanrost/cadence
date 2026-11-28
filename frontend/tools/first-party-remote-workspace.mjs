@@ -7,11 +7,6 @@ const DEFAULT_FRONTEND_ROOT = resolve(import.meta.dirname, "..");
 
 export const APPROVED_FIRST_PARTY_REMOTES = Object.freeze([
   {
-    directoryName: "organization-admin",
-    bundle: "organization-admin",
-    remoteName: "cadence_organization_admin",
-  },
-  {
     directoryName: "telemetry-decom",
     bundle: "telemetry-decom",
     remoteName: "cadence_telemetry_decom",

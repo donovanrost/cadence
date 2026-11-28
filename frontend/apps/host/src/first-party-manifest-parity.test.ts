@@ -6,7 +6,6 @@ import {
   type FederatedSurfaceDefinition,
 } from "@cadence/plugin-sdk";
 import { manifest as opsConsole } from "../../ops-console/src/federated-application";
-import { manifest as organizationAdmin } from "../../organization-admin/src/federated-application";
 
 type SurfaceRow = readonly [
   surfaceId: string,
@@ -225,27 +224,6 @@ const expected = [
       ],
     ] as SurfaceRow[],
   },
-  {
-    name: "organization_admin",
-    manifest: organizationAdmin,
-    package: { packageId: "cadence.organization-admin", version: 1 },
-    displayName: "Organization Administration",
-    description: "Show your notifications and mark them read.",
-    installableScopes: ["user"] as const,
-    releaseId: () => "organization-admin-v1",
-    surfaces: [
-      [
-        "notifications_bell",
-        "activity",
-        "user",
-        "application_workspace",
-        "Notifications Bell",
-        60,
-        "cadence.organization.notifications_bell",
-        ["mark_notification_read"],
-      ],
-    ] as SurfaceRow[],
-  },
 ] as const;
 
 function expectedSurfaces(rows: readonly SurfaceRow[]) {
@@ -312,7 +290,8 @@ describe("first-party federated manifest parity", () => {
     // organization-admin notifications page left (37 → 36); the ops-console
     // activation_requests surface left (36 → 35). #671: the Mission Catalog (8) and Spacecraft (9)
     // remotes left (35 → 18). #702: the ops-console data_operations and data_operations_manage
-    // surfaces left (18 → 16).
-    expect(surfaceCount).toBe(16);
+    // surfaces left (18 → 16). #672: the Organization Admin remote's notifications bell left
+    // (16 → 15).
+    expect(surfaceCount).toBe(15);
   });
 });

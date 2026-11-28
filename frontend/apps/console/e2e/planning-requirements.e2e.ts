@@ -4,15 +4,11 @@ import { DEMO, storageStateFor } from "./support/env.ts";
 import { allow, expect, test } from "./support/fixtures.ts";
 
 // CP1 · Contact planning requirements + template detail (fe-setup). Seed: 10 recurring downlink
-// templates (one per EARENDIL-001…010), 5-min contacts every 6 h (dev/reflect_orbital_planning.exs).
+// templates (one per EARENDIL-001…010), 5-min contacts every 6 h (dev/seed/planning.exs).
 const screen = missionPath("setup/contact-planning");
 const quiet = allow(/\/contact-planning -> 404/, /status of 404/);
 
 test.describe("Contact planning requirements, organization admin", () => {
-  test.skip(
-    !!process.env["CI"],
-    "#638: console-e2e's CI seed leaves contact planning not set up (no policy or templates)",
-  );
   test.use({ allowedDiagnostics: quiet });
 
   test("states coverage honestly and lists the seeded templates", async ({ page }) => {
