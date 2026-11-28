@@ -71,7 +71,7 @@ defmodule Cadence.MissionModels.AuthoredHeadTest do
       head = Ledger.lock_head(c.org, c.mid)
       number = Keyword.get(opts, :revision_number, head.revision_number + 1)
 
-      case AuthoredVersions.record(c.org, c.mid, layer.layer_id, set.change_set_id, number) do
+      case AuthoredVersions.record(c.org, c.mid, layer.layer_id, set, number) do
         {:ok, version} -> finish_apply!(head, set, number, opts, version)
         {:error, reason} -> Repo.rollback(reason)
       end
@@ -222,7 +222,7 @@ defmodule Cadence.MissionModels.AuthoredHeadTest do
           |> AuthoredVersions.record(
             c.mid,
             c.layer.layer_id,
-            set.change_set_id,
+            set,
             head.revision_number + 1
           )
           |> Repo.rollback()
@@ -245,7 +245,7 @@ defmodule Cadence.MissionModels.AuthoredHeadTest do
             c.org,
             c.mid,
             c.layer.layer_id,
-            set.change_set_id,
+            set,
             head.revision_number + 1
           )
 

@@ -43,7 +43,7 @@ defmodule Cadence.Control.MonitoringGeneration do
              org,
              mission_id,
              layer.layer_id,
-             set.change_set_id,
+             set,
              input.revision
            ) do
       generate(mission, input, active, {compositions, by_catalog}, layer.layer_id)

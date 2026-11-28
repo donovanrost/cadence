@@ -34,12 +34,17 @@ defmodule Cadence.Control.AuthoredVersions do
     "mission_model_authored_versions_revision_fk" => :authored_version_revision_unknown
   }
 
-  @spec record(binary(), binary(), binary(), binary(), pos_integer()) ::
+  @doc """
+  Records `layer_id` for `applying`, the set as the apply holds it: its row is locked and checked
+  in the database, and its policy (`policy_document`) is the one the apply validated, which a
+  direct apply carries in memory before the set is written.
+  """
+  @spec record(binary(), binary(), binary(), ChangeSetRow.t(), pos_integer()) ::
           {:ok, AuthoredHead.version()} | {:error, term()}
-  def record(organization_id, mission_id, layer_id, change_set_id, revision_number)
-      when is_binary(layer_id) and is_binary(change_set_id) and is_integer(revision_number) do
+  def record(organization_id, mission_id, layer_id, %ChangeSetRow{} = applying, revision_number)
+      when is_binary(layer_id) and is_integer(revision_number) do
     with {:ok, set, approval} <-
-           applying_set(organization_id, mission_id, change_set_id, revision_number) do
+           applying_set(organization_id, mission_id, applying, revision_number) do
       AuthoredHead.insert_version(organization_id, mission_id, layer_id, %{
         change_set_id: set.change_set_id,
         revision_number: revision_number,
@@ -58,14 +63,14 @@ defmodule Cadence.Control.AuthoredVersions do
 
   def refusal(_error), do: nil
 
-  defp applying_set(organization_id, mission_id, change_set_id, revision_number) do
+  defp applying_set(organization_id, mission_id, applying, revision_number) do
     head = Ledger.lock_head(organization_id, mission_id)
 
     with {:ok, %ChangeSetRow{organization_id: ^organization_id, lane: "monitoring"} = set} <-
-           ChangeSetStore.lock_set(mission_id, change_set_id),
+           ChangeSetStore.lock_set(mission_id, applying.change_set_id),
          true <- is_nil(set.applied_revision_number),
          true <- revision_number == head.revision_number + 1,
-         {:ok, approval} <- approval(set) do
+         {:ok, approval} <- approval(%{set | policy_document: applying.policy_document}) do
       {:ok, set, approval}
     else
       _other -> {:error, :authored_version_change_set_mismatch}

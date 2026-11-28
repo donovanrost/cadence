@@ -678,7 +678,7 @@ defmodule Cadence.Control.ConfigurationGeneration do
            ),
          {:ok, fleet} <- FleetSnapshot.store(mission_id, Map.merge(active.entries, changed)),
          {:ok, change_set} <- store_changed(input, changed),
-         metadata = metadata(fleet, change_set),
+         metadata = metadata(fleet, Map.put(change_set, "lane", input.set.lane)),
          {:ok, request} <-
            ManagementActivations.request_from_change_set(%{
              binding_set: binding_set,
