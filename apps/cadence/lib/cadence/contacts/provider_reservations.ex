@@ -427,24 +427,6 @@ defmodule Cadence.Contacts.ProviderReservations do
     |> Enum.map(&ProviderReservationRow.to_domain/1)
   end
 
-  @doc "A bounded current reservation ledger page inside its mission."
-  def list_mission_page(org, mission, page) when is_integer(page) and page in 1..1_000_000 do
-    rows =
-      ProviderReservationRow
-      |> where([r], r.organization_id == ^org and r.mission_id == ^mission)
-      |> order_by([r], desc: r.starts_at, desc: r.provider_reservation_id)
-      |> offset(^((page - 1) * 25))
-      |> limit(26)
-      |> Repo.all()
-
-    {:ok,
-     %{
-       page: page,
-       more: length(rows) > 25,
-       entries: rows |> Enum.take(25) |> Enum.map(&ProviderReservationRow.to_domain/1)
-     }}
-  end
-
   @doc "Reservations whose window overlaps `[from, to)`; see `PassWindows.reservations/5`."
   defdelegate list_in_window(org, mission, from, to, opts \\ []),
     to: Cadence.Contacts.PassWindows,

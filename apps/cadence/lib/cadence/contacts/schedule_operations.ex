@@ -83,33 +83,6 @@ defmodule Cadence.Contacts.ScheduleOperations do
 
   def request(_, _, _, _), do: {:error, :malformed_action_request}
 
-  def page(scope, mission, page) do
-    case authorize(scope, mission, "read") do
-      :ok ->
-        rows =
-          Repo.all(
-            from(r in scoped(scope, mission),
-              order_by: [desc: r.inserted_at, desc: r.operation_id],
-              offset: ^((page - 1) * 10),
-              limit: 11
-            )
-          )
-
-        %{
-          contract_version: 2,
-          actor_id: scope.user.user_id,
-          operations: %{
-            page: page,
-            more: length(rows) > 10,
-            entries: rows |> Enum.take(10) |> Enum.map(&projection(reconcile(&1)))
-          }
-        }
-
-      _ ->
-        nil
-    end
-  end
-
   def fetch(scope, mission, id) do
     with :ok <- authorize(scope, mission, "read"),
          {:ok, ^id} <- Ecto.UUID.cast(id),

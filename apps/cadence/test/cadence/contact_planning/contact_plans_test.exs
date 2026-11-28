@@ -108,17 +108,6 @@ defmodule Cadence.ContactPlanning.ContactPlansTest do
              )
            )
 
-    assert {:ok, %{entries: [_, %{disposition: :rejected, snapshot: review_rejected}]}} =
-             ContactPlans.list_opportunities_page(
-               @organization_id,
-               @mission_id,
-               plan.contact_plan_id,
-               1,
-               1
-             )
-
-    assert review_rejected.evaluation_document == rejected.evaluation_document
-
     assert version.requirement_refs_document == %{
              "requirements" => [
                %{
