@@ -95,7 +95,9 @@ const elapsed = computed(() =>
         {{ formatCount(view.demand.contacts_needed) }} contacts needed
         <template v-if="view.demand.without_rule > 0">
           ·
-          <RouterLink :to="{ name: 'setup.contact-planning' }" class="max-md:hit-44 text-readout"
+          <RouterLink
+            :to="{ name: 'setup.contact-planning' }"
+            class="max-md:hit-44 text-readout underline"
             >{{ formatCount(view.demand.without_rule) }} have no rule →</RouterLink
           ></template
         >

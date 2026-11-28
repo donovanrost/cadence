@@ -20,7 +20,7 @@ const columns: readonly ApColumn[] = [
       Take a snapshot from the dashboard: set the range, then
       <RouterLink
         :to="{ name: 'ops.dashboard', params: { dashboardId } }"
-        class="text-readout hover:underline"
+        class="text-readout underline"
         >⋯ › Take snapshot</RouterLink
       >.
     </p>
