@@ -6,12 +6,12 @@ defmodule Cadence.Reads.SpacecraftLive do
     * `type` is `numeric | enum | text`: from the catalog type's `base_type` when the active
       revision declares one (`enumerated` and boolean are `enum`), else from the decoded field's
       `data_type`.
-    * `limit_state` maps the latest limit evaluation: red → `critical`, yellow → `caution`,
-      green and blue (no violation) → `nominal`, none evaluated → `nil`.
+    * `limit_state` is the point's alarm level on this spacecraft (`Reads.PointLimitState`):
+      `critical`, `caution`, or `nominal`, and `nil` when nothing monitors the point there.
   """
 
   alias Cadence.Ops.PointCatalog
-  alias Cadence.Reads.{CatalogDeclarations, Limits, Telemetry}
+  alias Cadence.Reads.{CatalogDeclarations, PointLimitState, Telemetry}
 
   @max_points 200
 
@@ -70,12 +70,13 @@ defmodule Cadence.Reads.SpacecraftLive do
     wanted = MapSet.new(point_ids)
 
     limits =
-      org
-      |> Limits.latest_states_for_mission(mission,
-        point_ids: point_ids,
-        spacecraft_id: spacecraft_id
+      PointLimitState.load(
+        org,
+        mission,
+        spacecraft_id,
+        PointCatalog.list_points(org, mission),
+        point_ids
       )
-      |> Map.new(&{&1.point_id, limit_state(&1.normalized_state)})
 
     org
     |> Telemetry.latest_values_for_mission(mission, spacecraft_id: spacecraft_id)
@@ -87,7 +88,7 @@ defmodule Cadence.Reads.SpacecraftLive do
          value_json: Jason.encode!(value(sample)),
          generation_time: sample.generation_time,
          received_at: sample.receipt_time,
-         limit_state: Map.get(limits, sample.point_id)
+         limit_state: limits |> Map.get(sample.point_id) |> limit_state()
        }}
     end)
   end
@@ -103,10 +104,8 @@ defmodule Cadence.Reads.SpacecraftLive do
   defp type(_base_type, data_type) when data_type in [:string, :binary], do: "text"
   defp type(_base_type, _data_type), do: nil
 
-  defp limit_state(:red), do: "critical"
-  defp limit_state(:yellow), do: "caution"
-  defp limit_state(state) when state in [:green, :blue], do: "nominal"
-  defp limit_state(_state), do: nil
+  defp limit_state(nil), do: nil
+  defp limit_state(state), do: Atom.to_string(state)
 
   defp blank_to_nil(value) when is_binary(value) and value != "", do: value
   defp blank_to_nil(_value), do: nil

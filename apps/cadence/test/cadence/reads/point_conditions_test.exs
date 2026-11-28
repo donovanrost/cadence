@@ -7,11 +7,10 @@ defmodule Cadence.Reads.PointConditionsTest do
   """
   use Cadence.DataCase, async: false
 
-  alias Cadence.Limits.{Event, Store}
   alias Cadence.MonitoringPlanFixtures
   alias Cadence.Reads.PointConditions
   alias Cadence.SemanticObservations.LatestAlarmStateRow
-  alias Cadence.SemanticRuntime.{PlanDecoder, ThresholdLimits}
+  alias Cadence.SemanticRuntime.PlanDecoder
   alias Cadence.Spacecraft
   alias Cadence.SpacecraftStore
   alias Cadence.Telemetry.{CurrentValueStore, Sample, SampleRecords}
@@ -66,31 +65,23 @@ defmodule Cadence.Reads.PointConditionsTest do
       )
   end
 
+  # A state of a second policy on the point, older than `live!`'s: `:green`/`:blue` are normal,
+  # `:yellow_*` a warning, `:red_*` critical (the words the ground limits used, kept so the tests
+  # read as they did, now that a point's rows are one per policy).
   defp ground!(craft, point, state, opts \\ []) do
-    at = Keyword.get(opts, :at, DateTime.add(@now, -600, :second))
-
-    event = %Event{
-      limit_event_id: "ev-#{craft}-#{point}-#{state}",
-      mission_id: Keyword.get(opts, :mission, @mission),
-      spacecraft_id: craft,
-      point_id: point,
-      point_name: "name #{point}",
-      source_sample_type: :telemetry_sample,
-      sample_id: "s-#{point}",
-      limit_definition_id: "d",
-      limit_definition_version: 1,
-      limit_set_name: "d",
-      evaluated_value: 5,
-      limit_state: state,
-      normalized_state: ThresholdLimits.normalize_state(state),
-      violation: ThresholdLimits.violation?(state),
-      generation_time: nil,
-      receipt_time: at,
-      provenance: %{}
-    }
-
-    {:ok, _} = Store.persist_latest_states(Repo, [event])
+    live!(
+      craft,
+      point,
+      effective(state),
+      opts
+      |> Keyword.put_new(:at, DateTime.add(@now, -600, :second))
+      |> Keyword.put(:policy, "pol-g")
+    )
   end
+
+  defp effective(state) when state in [:green, :blue], do: "normal"
+  defp effective(state) when state in [:yellow_high, :yellow_low], do: "warning"
+  defp effective(state) when state in [:red_high, :red_low], do: "critical"
 
   defp live!(craft, parameter, state, opts \\ []) do
     at = Keyword.get(opts, :at, DateTime.add(@now, -300, :second))
@@ -144,6 +135,7 @@ defmodule Cadence.Reads.PointConditionsTest do
   end
 
   defp ids(result), do: Enum.map(result.points, &{&1.point_id, &1.source})
+  defp keys(result), do: Enum.map(result.points, &{&1.point_id, &1.policy_id})
 
   test "a live alarm shows with no ground job having run, labelled by its source" do
     heard!("sc-1", "HK.mode", 10)
@@ -160,7 +152,7 @@ defmodule Cadence.Reads.PointConditionsTest do
     assert row.freshness == :fresh
   end
 
-  test "a point in both stores has one row per source, adjacent, worst first" do
+  test "a point with two policies has a row for each, adjacent, worst first" do
     heard!("sc-1", "HK.a", 10)
     heard!("sc-1", "HK.b", 10)
     ground!("sc-1", "HK.a", :green)
@@ -168,14 +160,15 @@ defmodule Cadence.Reads.PointConditionsTest do
     ground!("sc-1", "HK.b", :green)
 
     assert ids(load()) == [
-             {"HK.a", :ground_limit},
              {"HK.a", :catalog_monitoring},
-             {"HK.b", :ground_limit}
+             {"HK.a", :catalog_monitoring},
+             {"HK.b", :catalog_monitoring}
            ]
 
-    [ground, live, _b] = load().points
-    assert {ground.condition, live.condition} == {:nominal, :caution}
-    assert ground.evaluated_at != nil
+    [first, second, _b] = load().points
+    assert {first.policy_id, first.condition} == {"pol-1", :caution}
+    assert {second.policy_id, second.condition} == {"pol-g", :nominal}
+    assert first.evaluated_at == nil
   end
 
   test "critical first, then caution, then stale, then the healthy; a stale critical stays critical" do
@@ -323,13 +316,6 @@ defmodule Cadence.Reads.PointConditionsTest do
     end
   end
 
-  test "ground rows with no evaluation history before them say the entry time is a lower bound" do
-    heard!("sc-1", "HK.a", 10)
-    ground!("sc-1", "HK.a", :red_high)
-
-    assert [%{entered_at: nil, entered_at_is_lower_bound: true}] = load().points
-  end
-
   test "another spacecraft's and another mission's rows never appear, and an unknown one is refused" do
     heard!("sc-1", "HK.a", 10)
     ground!("sc-2", "HK.b", :red_high)
@@ -337,7 +323,7 @@ defmodule Cadence.Reads.PointConditionsTest do
     live!("sc-1", "HK.x", "critical", mission: "#{@mission}-other")
 
     assert ids(load()) == []
-    assert ids(load("sc-2")) == [{"HK.b", :ground_limit}, {"HK.c", :catalog_monitoring}]
+    assert ids(load("sc-2")) == [{"HK.b", :catalog_monitoring}, {"HK.c", :catalog_monitoring}]
 
     assert {:error, :spacecraft_not_found} = PointConditions.load(@org, @mission, "sc-nope")
   end
@@ -349,7 +335,7 @@ defmodule Cadence.Reads.PointConditionsTest do
     ground!("sc-1", "HK.c", :green)
 
     assert load("sc-1", state: "attention").points |> Enum.map(& &1.point_id) == ["HK.b"]
-    assert load("sc-1", query: "name HK.c").points |> Enum.map(& &1.point_id) == ["HK.c"]
+    assert load("sc-1", query: "HK.c").points |> Enum.map(& &1.point_id) == ["HK.c"]
     assert load("sc-1", query: "hk.a").counts.total == 1
   end
 
@@ -372,11 +358,11 @@ defmodule Cadence.Reads.PointConditionsTest do
 
         cursor ->
           page = load("sc-1", limit: 3, cursor: if(cursor == :start, do: nil, else: cursor))
-          {ids(page), page.next_cursor || :done}
+          {keys(page), page.next_cursor || :done}
       end)
       |> Enum.concat()
 
-    assert paged == ids(all)
+    assert paged == keys(all)
     assert length(paged) == length(Enum.uniq(paged))
 
     assert {:error, :invalid_cursor} =

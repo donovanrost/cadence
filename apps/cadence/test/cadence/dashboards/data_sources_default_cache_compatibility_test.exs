@@ -53,7 +53,7 @@ defmodule Cadence.Dashboards.DataSourcesDefaultCacheCompatibilityTest do
     assert limits_binding.realm == :flight
     assert limits_binding.logical_source == :limits
     assert limits_binding.data_source_id == "managed_limits_projection"
-    assert limits_binding.dataset == "telemetry_latest_limit_states"
+    assert limits_binding.dataset == "semantic_latest_alarm_states"
     assert limits_binding.metadata["bootstrap_default?"]
 
     assert events_source =
@@ -106,7 +106,7 @@ defmodule Cadence.Dashboards.DataSourcesDefaultCacheCompatibilityTest do
     assert limits_resolved.binding.binding_id == "default_flight_limits"
     assert limits_resolved.data_source.data_source_id == "managed_limits_projection"
     assert limits_resolved.realm == :flight
-    assert limits_resolved.dataset == "telemetry_latest_limit_states"
+    assert limits_resolved.dataset == "semantic_latest_alarm_states"
 
     assert {:ok, events_resolved} =
              DataSourceRegistry.resolve(
@@ -149,7 +149,7 @@ defmodule Cadence.Dashboards.DataSourcesDefaultCacheCompatibilityTest do
         binding_id: "mission-flight-limits",
         data_source_id: "mission-limits",
         realm: :flight,
-        dataset: "telemetry_latest_limit_states"
+        dataset: "semantic_latest_alarm_states"
       )
 
     limits_frame_key = dashboard_frame_key(limits_key, "frame-limits")

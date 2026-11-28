@@ -18,7 +18,9 @@ suppression, escalation timers, paging. `L` = `apps/cadence/lib/cadence`.
      (`semantic_alarm_transitions`, `semantic_latest_alarm_states`). It even has an
      acknowledgement table that nothing calls.
   2. **Ground limits** (the Limits & Alarming app, `governed_limit_definitions` →
-     `telemetry_latest_limit_states`). This is **batch-only** today: the state is written by
+     `telemetry_latest_limit_states`; **retiring with #452**: no reader of Fleet, the point
+     conditions, the alarm list or the dashboards limits source reads it any more, #451 T3).
+     This is **batch-only** today: the state is written by
      evaluation/refresh jobs (`telemetry_limit_evaluation`, `telemetry_latest_limit_state_refresh`),
      not per sample. It is also what `Reads.Alarms` and the Ops alarm page show.
 - **Decision needed (director/fe-ops):** the Now/Investigate "alarm" should be an episode from
@@ -74,6 +76,7 @@ previous and next subject state and returns Multi steps.
 | alarm → lower non-normal severity | `deescalated`; the ack is kept |
 | the rules in force on the parameter change while the episode is open (#451) | `rule_changed`, once per (episode, rule ids, digest pair); the episode is untouched |
 | alarm → normal | `cleared`, state = cleared (auto-clear) |
+| the rule is turned off for the spacecraft (a disabled override, #451) | `cleared` with cause `rule_disabled`, when the policy's state becomes `disabled` |
 | a generation drops the rule that raised it (#451) | `cleared` with cause `rule_retired`, once per episode when the generation is applied; its latest alarm state is removed |
 | alarm → alarm, same severity | update last_value / last_evaluated_at only (no event) |
 

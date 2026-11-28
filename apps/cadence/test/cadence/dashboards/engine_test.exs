@@ -80,7 +80,7 @@ defmodule Cadence.Dashboards.EngineTest do
     assert limits_provenance.logical_source == :limits
     assert limits_provenance.binding_id == "default_flight_limits"
     assert limits_provenance.data_source_id == "managed_limits_projection"
-    assert limits_provenance.dataset == "telemetry_latest_limit_states"
+    assert limits_provenance.dataset == "semantic_latest_alarm_states"
 
     assert %{"placement_battery_voltage" => placement_frames} = result.frames_by_placement
 

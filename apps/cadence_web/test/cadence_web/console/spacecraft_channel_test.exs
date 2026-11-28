@@ -46,8 +46,28 @@ defmodule CadenceWeb.Console.SpacecraftChannelTest do
   end
 
   test "selected points: the first push has current values, then only changes", c do
-    # Ingests one HK packet for spacecraft-001 (HK.counter = 30, a caution limit).
+    # Ingests one HK packet for spacecraft-001 (HK.counter = 30), whose parameter the runtime has in
+    # a warning (a caution).
     MissionReadModelFixtures.seed_mission_read_models(c.org.organization_id, c.mission.mission_id)
+
+    # The points come from the active binding set's catalog.
+    {:ok, _activation} =
+      Cadence.Activations.record_binding_set_activation(
+        c.org.organization_id,
+        c.mission.mission_id,
+        "read-models",
+        1,
+        binding_set_content_sha256: String.duplicate("0", 64)
+      )
+
+    Cadence.MonitoringPlanFixtures.alarm_state!(
+      c.org.organization_id,
+      c.mission.mission_id,
+      "spacecraft-001",
+      "HK.counter",
+      "warning"
+    )
+
     topic = "spacecraft:#{c.mission.mission_id}:spacecraft-001"
 
     assert {:ok, %{points: [%{point_id: "HK.counter", type: type}, %{point_id: "HK.nope"}]},

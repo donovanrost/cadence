@@ -33,7 +33,7 @@ defmodule Cadence.Dashboards.DataSourceRegistryTest do
     assert resolved.binding.binding_id == "default_flight_limits"
     assert resolved.binding.realm == :flight
     assert resolved.binding.logical_source == :limits
-    assert resolved.binding.dataset == "telemetry_latest_limit_states"
+    assert resolved.binding.dataset == "semantic_latest_alarm_states"
     assert resolved.data_source.data_source_id == "managed_limits_projection"
     assert resolved.data_source.kind == :projection
     assert resolved.data_source.adapter == Cadence.Dashboards.Sources.Limits

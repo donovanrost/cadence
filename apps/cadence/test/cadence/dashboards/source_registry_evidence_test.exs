@@ -197,7 +197,7 @@ defmodule Cadence.Dashboards.SourceRegistryEvidenceTest do
 
     assert_receive {:limits_latest, "org-1", "mission-1", "HK.counter", latest_opts}
     assert latest_opts[:data_source_id] == "managed_limits_projection"
-    assert latest_opts[:dataset] == "telemetry_latest_limit_states"
+    assert latest_opts[:dataset] == "semantic_latest_alarm_states"
 
     assert_receive {:limits_intervals, "org-1", "mission-1", "HK.counter", interval_opts}
     assert interval_opts[:data_source_id] == "managed_limits_projection"

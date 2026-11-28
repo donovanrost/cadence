@@ -17,10 +17,13 @@ defmodule Cadence.Reads.PointInfo do
 
   @type info :: %{unit: binary() | nil, description: binary() | nil}
 
-  @doc "Unit and description for every point of the mission's operator point catalog."
-  @spec by_id(binary(), binary()) :: %{binary() => info()}
-  def by_id(organization_id, mission_id) do
-    points = PointCatalog.list_points(organization_id, mission_id)
+  @doc """
+  Unit and description for every point of the mission's operator point catalog. A caller that
+  already read the catalog passes its `points`.
+  """
+  @spec by_id(binary(), binary(), [map()] | nil) :: %{binary() => info()}
+  def by_id(organization_id, mission_id, points \\ nil) do
+    points = points || PointCatalog.list_points(organization_id, mission_id)
 
     # A derived point's unit already comes from its declaration; only packet fields fall back.
     missing =

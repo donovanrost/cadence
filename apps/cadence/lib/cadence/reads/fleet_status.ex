@@ -4,15 +4,14 @@ defmodule Cadence.Reads.FleetStatus do
 
   A spacecraft's `state` is its worst condition, in precedence order
   `critical > caution > stale > nominal`. `never_heard` means no telemetry or
-  limit evaluation has ever been received for it. Limit severities come from the
-  latest limit-state projection (`red` is critical, `yellow` is caution,
-  `green`/`blue` are nominal); freshness comes from the newest receipt time
-  across the spacecraft's current telemetry values and limit evaluations,
-  judged against a server-side `stale_after_s`.
+  alarm state has ever been received for it. Limit severities come from the runtime's latest alarm
+  states (`AlarmLevel`: caution and critical; #451 T3d, it also counted the ground limit states);
+  freshness comes from the newest receipt time across the spacecraft's current telemetry values
+  and alarm states, judged against a server-side `stale_after_s`.
 
   **Cost (#798).** `load/3` never reads the mission's latest limit states or current values whole
   (200,000 of each at 1,000 spacecraft x 200 points: 4.8 s). The limit conditions per spacecraft are
-  one row each in a summary the limit-state writers keep (`Cadence.Limits.Store.FleetSummary`, #849), each spacecraft's newest
+  one row each in a summary the alarm-state writers keep (`SemanticObservations.FleetAlarms`, #871), each spacecraft's newest
   telemetry receipt comes from the current-value store, which keeps it as values are recorded
   (`CurrentValueStore.last_receipts/2`), and the durable history receipts come from a cache
   (`durable_receipts_ttl_ms`, 60 s) refreshed off the read's path. The number of queries is
@@ -26,7 +25,6 @@ defmodule Cadence.Reads.FleetStatus do
 
   alias Cadence.Control.Contacts
   alias Cadence.Limits.Event
-  alias Cadence.Limits.Store.FleetSummary
   alias Cadence.Reads.DurableReceiptCache
   alias Cadence.Reads.SpacecraftMetadata
   alias Cadence.Reads.Telemetry, as: TelemetryReads
@@ -82,23 +80,18 @@ defmodule Cadence.Reads.FleetStatus do
   end
 
   # What the live read needs of limits and telemetry, from the database and the cache and never by
-  # reading every value (#798): the limit conditions per spacecraft (`FleetSummary`, one
+  # reading every value (#798): the limit conditions per spacecraft (`FleetAlarms`, one
   # statement over a row per spacecraft), each spacecraft's newest receipt (the current-value
   # store keeps it as values are recorded) and the durable history's. A fixed number of reads
   # however large the fleet is.
   defp live_inputs(organization_id, mission_id) do
-    summaries = FleetSummary.load(organization_id, mission_id)
     alarms = FleetAlarms.load(organization_id, mission_id)
     durable = durable(organization_id, mission_id)
 
-    limits =
-      (Map.keys(summaries) ++ Map.keys(alarms))
-      |> Enum.uniq()
-      |> Map.new(fn id -> {id, combine(Map.get(summaries, id), Map.get(alarms, id))} end)
+    limits = Map.new(alarms, fn {id, alarm} -> {id, alarm_facts(alarm)} end)
 
     received =
       merge_newest([
-        Map.new(summaries, fn {id, summary} -> {id, summary.last_received_at} end),
         Map.new(alarms, fn {id, alarm} -> {id, alarm.last_received_at} end),
         TelemetryReads.last_receipts(organization_id, mission_id),
         durable.receipts
@@ -107,34 +100,8 @@ defmodule Cadence.Reads.FleetStatus do
     {limits, received, durable.telemetry}
   end
 
-  # A spacecraft's limit facts from both sources, the worst wins (DECISIONS #17, #871): the ground
-  # limits the batch evaluations wrote and the live catalog monitoring alarms the runtime keeps. On a
-  # tie the live alarm is the worst point (it is the current one); violating counts both.
-  defp combine(ground, nil), do: ground_facts(ground)
-
-  defp combine(nil, alarm), do: alarm_facts(alarm)
-
-  defp combine(ground, alarm) do
-    ground = ground_facts(ground)
-    alarm = alarm_facts(alarm)
-
-    winner =
-      if Map.fetch!(@limit_rank, alarm.limit_state) >= Map.fetch!(@limit_rank, ground.limit_state),
-        do: alarm,
-        else: ground
-
-    %{winner | violating: ground.violating + alarm.violating}
-  end
-
-  defp ground_facts(summary) do
-    %{
-      limit_state: summary.limit_state,
-      violating: summary.violating,
-      worst: summary.worst,
-      worst_evaluated_at: summary.worst_evaluated_at
-    }
-  end
-
+  # A spacecraft's limit facts from the live catalog monitoring alarms the runtime keeps (#451 T3d;
+  # the ground limits of the batch evaluations no longer count).
   defp alarm_facts(alarm) do
     %{
       limit_state: alarm.limit_state,
@@ -282,7 +249,7 @@ defmodule Cadence.Reads.FleetStatus do
   end
 
   # Per-spacecraft limit facts from the latest limit states themselves (the pure builders' input;
-  # `FleetSummary` produces the same shape in the database).
+  # `FleetAlarms` produces the same shape in the database).
   defp limit_facts(limit_states) do
     limit_states
     |> Enum.group_by(& &1.spacecraft_id)

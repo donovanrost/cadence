@@ -12,6 +12,9 @@ defmodule Cadence.MonitoringPlanFixtures do
 
   alias Cadence.Catalog.MissionModel.{Declaration, Layer}
   alias Cadence.MissionModels
+  alias Cadence.Persistence.JsonDocument
+  alias Cadence.Repo
+  alias Cadence.SemanticObservations.LatestAlarmStateRow
 
   @doc """
   The runtime plans of a revision compiled from `catalog` (the imported policies) and `authored`
@@ -62,12 +65,59 @@ defmodule Cadence.MonitoringPlanFixtures do
     plans
   end
 
+  @doc """
+  One latest alarm state of the runtime (`semantic_latest_alarm_states`), as a transition writes it:
+  `parameter` in `state` (`"warning"`, `"critical"`, `"normal"`, ...) on `spacecraft_id`, entered
+  `seconds_ago` seconds ago (default 60) or at `at:`; the spacecraft's fleet summary is refreshed.
+  """
+  @spec alarm_state!(binary(), binary(), binary(), binary(), binary(), keyword()) :: :ok
+  def alarm_state!(organization_id, mission_id, spacecraft_id, parameter, state, opts \\ []) do
+    now = DateTime.utc_now()
+
+    at =
+      Keyword.get_lazy(opts, :at, fn ->
+        DateTime.add(now, -Keyword.get(opts, :seconds_ago, 60), :second)
+      end)
+
+    {1, _} =
+      Repo.insert_all(LatestAlarmStateRow, [
+        %{
+          organization_id: organization_id,
+          mission_id: mission_id,
+          spacecraft_scope_id: spacecraft_id,
+          spacecraft_id: spacecraft_id,
+          parameter_id: parameter,
+          policy_id: Keyword.get(opts, :policy_id, "policy-#{parameter}"),
+          evaluation_id: "eval-#{spacecraft_id}-#{parameter}",
+          transition_id: "transition-#{spacecraft_id}-#{parameter}",
+          effective_state: state,
+          generation_time: at,
+          receipt_time: at,
+          state_document: JsonDocument.wrap_value(%{}),
+          inserted_at: now,
+          updated_at: now
+        }
+      ])
+
+    :ok =
+      Cadence.SemanticObservations.FleetAlarms.refresh(Repo, organization_id, mission_id, [
+        spacecraft_id
+      ])
+  end
+
   defp imported_layer(organization_id, mission_id, catalog) do
+    # `parameter_id:` in a policy's options names its parameter's semantic id (the one a decoded
+    # field's catalog point carries), so reads that map a point to its parameter find it.
     parameters =
       catalog
-      |> Enum.map(&elem(&1, 1))
+      |> Enum.map(fn {_name, parameter, opts} ->
+        {parameter, Keyword.get(opts, :parameter_id)}
+      end)
       |> Enum.uniq()
-      |> Enum.map(&%{kind: :parameter, qualified_name: &1})
+      |> Enum.map(fn
+        {parameter, nil} -> %{kind: :parameter, qualified_name: parameter}
+        {parameter, id} -> %{kind: :parameter, qualified_name: parameter, semantic_id: id}
+      end)
 
     policies =
       for {name, parameter, opts} <- catalog do

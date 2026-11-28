@@ -9,7 +9,6 @@ defmodule Cadence.Reads.FleetStatusDatabaseTest do
   alias Cadence.Limits.Store.{FleetSummary, LatestStateRow}
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Reads.FleetStatus
-  alias Cadence.Reads.Limits, as: LimitReads
   alias Cadence.Spacecraft
   alias Cadence.SpacecraftStore
 
@@ -115,49 +114,6 @@ defmodule Cadence.Reads.FleetStatusDatabaseTest do
       assert Map.keys(FleetSummary.load(@org, @mission)) == ["sc-1"]
       assert FleetSummary.load("none", "none") == %{}
     end
-  end
-
-  test "load agrees with the pure builder fed the same limit states, spacecraft by spacecraft" do
-    for n <- 1..6, do: craft(n)
-
-    seed(
-      for n <- 1..5,
-          {point, i} <- Enum.with_index(["HK.a", "HK.b", "HK.c", "HK.d"]) do
-        state =
-          cond do
-            rem(n + i, 5) == 0 -> "red"
-            rem(n + i, 3) == 0 -> "yellow"
-            true -> "green"
-          end
-
-        state_row(n, point, state, n * 3 + i)
-      end
-    )
-
-    loaded = FleetStatus.load(@org, @mission, now: @now)
-
-    built =
-      FleetStatus.build(%{
-        spacecraft: SpacecraftStore.list_spacecraft(@org, @mission),
-        limit_states: LimitReads.latest_states_for_mission(@org, @mission, []),
-        samples: [],
-        now: @now,
-        stale_after_s: FleetStatus.stale_after_s()
-      })
-
-    strip = fn fleet ->
-      Enum.map(fleet.spacecraft, fn row ->
-        row
-        |> Map.drop([:in_contact, :next_aos_at, :last_los_at])
-        # When the evaluation ran is only known to the database read.
-        |> Map.update!(:worst_point, &(&1 && Map.delete(&1, :evaluated_at)))
-      end)
-    end
-
-    assert strip.(loaded) == strip.(built)
-    assert loaded.counts.total == 6
-    # SC-6 has no limit state at all.
-    assert Enum.find(loaded.spacecraft, &(&1.id == "sc-6")).limit_state == :no_data
   end
 
   test "the read costs the same number of queries for a small fleet and a large one" do

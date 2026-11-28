@@ -1772,7 +1772,7 @@ Limits warnings:
 
 v0 implementation boundary:
 
-- **Supported:** latest state overlays from `telemetry_latest_limit_states`.
+- **Supported:** latest state overlays from `semantic_latest_alarm_states` (the runtime's alarm states; #451 T3e, they were `telemetry_latest_limit_states`), the point's event history from `semantic_alarm_transitions`, and their watermark. Limit bands (definition intervals) are empty for monitoring rules until #1127; the source says so with an `unknown_limit_definition` info warning.
 - **Supported:** planning limits as separate `:limits` source requests and
   fanning returned frames into `PlacementFrames.overlays.limits`.
 - **Supported:** capped observed event history from `telemetry_limit_events`.

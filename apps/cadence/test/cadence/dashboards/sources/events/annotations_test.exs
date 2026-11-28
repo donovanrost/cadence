@@ -201,7 +201,7 @@ defmodule Cadence.Dashboards.Sources.Events.AnnotationsTest do
       data_source_id: "managed-limits",
       source_binding_id: "flight-limits",
       realm: :flight,
-      dataset: "telemetry_latest_limit_states"
+      dataset: "semantic_latest_alarm_states"
     }
   end
 
