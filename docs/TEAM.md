@@ -45,7 +45,8 @@ own lines; Platform (backend) or Console (frontend) reviews.
 
 - Total live agents across both machines: **16**, including the CTO. Per machine: **6** on laptop 1 (it
   swaps under load, which skewed ground's timings 4-12x, so it takes no more), **10** on laptop 2.
-- **Headcount is frozen at 16** (CTO, 2026-11-28): no new hires on either laptop. legacy-eng is fired when #672 lands.
+- **Headcount is frozen at 16** (CTO, 2026-11-28): no new hires on either laptop. legacy-eng builds the #451 monitoring screen (12-04 to 12-06) and leaves on 12-06 (12-09 only if
+  D4 needs a second screen); headcount then drops to 15.
 - **Codex** may be hired for backend, infra, CI, data and scale work. **Never for frontend or UX.**
 - Pick model and effort for the job: Heads and design/security work on Claude Opus, high effort. Well-scoped
   frontend work on Claude Sonnet or Opus. Backend implementation work: Codex (high) or Claude Sonnet.
