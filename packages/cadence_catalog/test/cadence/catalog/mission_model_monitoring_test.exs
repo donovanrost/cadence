@@ -108,6 +108,94 @@ defmodule Cadence.Catalog.MissionModelMonitoringTest do
     assert same["rule_digest"] == before["rule_digest"]
   end
 
+  test "a description edit leaves the digest alone; a threshold edit moves it" do
+    layer = catalog()
+    target = catalog_policy(layer)
+    [before] = entries([layer])
+
+    described =
+      Declaration.new(%{
+        kind: :monitoring_policy,
+        qualified_name: target.qualified_name,
+        operation: :extend,
+        expected_fingerprint: Declaration.fingerprint(target),
+        definition: %{"description" => "bus temperature"}
+      })
+
+    [after_description] = entries([layer, authored([described])])
+    assert after_description["rule_digest"] == before["rule_digest"]
+
+    [after_threshold] = entries([layer, authored([replace(target, 35)])])
+    assert after_threshold["rule_digest"] != before["rule_digest"]
+  end
+
+  test "a replace and an override for other craft compile together" do
+    layer = catalog()
+    target = catalog_policy(layer)
+
+    policies =
+      entries([layer, authored([replace(target, 35), override("/monitoring/t_sc_1", ["sc-1"])])])
+
+    assert [%{"scope" => "mission"}, %{"scope" => "spacecraft", "spacecraft_id" => "sc-1"}] =
+             Enum.sort_by(policies, & &1["scope"])
+  end
+
+  describe "overrides that leave a craft without one rule are refused" do
+    test "an override of an override (a chain)" do
+      first = override("/monitoring/o1", ["sc-1"])
+
+      second =
+        override("/monitoring/o2", ["sc-2"], "/monitoring/o1")
+
+      assert_codes([first, second], "MM_MONITORING_OVERRIDE_CHAIN")
+    end
+
+    test "two overrides naming each other (a cycle)" do
+      a = override("/monitoring/c1", ["sc-1"], "/monitoring/c2")
+      b = override("/monitoring/c2", ["sc-1"], "/monitoring/c1")
+
+      assert_codes([a, b], "MM_MONITORING_OVERRIDE_CHAIN")
+    end
+
+    test "an override of a spacecraft-scoped policy" do
+      scoped =
+        policy("/monitoring/scoped", @temperature, 20, %{
+          definition: %{"spacecraft_ids" => ["sc-1"]}
+        })
+
+      assert_codes(
+        [scoped, override("/monitoring/o_scoped", ["sc-2"], "/monitoring/scoped")],
+        "MM_MONITORING_OVERRIDE_CHAIN"
+      )
+    end
+
+    test "two overrides of one policy for the same craft" do
+      assert_codes(
+        [override("/monitoring/d1", ["sc-1"]), override("/monitoring/d2", ["sc-1", "sc-2"])],
+        "MM_MONITORING_OVERRIDE_DUPLICATE"
+      )
+    end
+  end
+
+  defp override(path, crafts, target \\ "/monitoring/temperature") do
+    policy(path, @temperature, 30, %{
+      references: [
+        %{expected_kind: :parameter, source_ref: @temperature, role: :parameter},
+        %{expected_kind: :monitoring_policy, source_ref: target, role: :overrides}
+      ],
+      definition: %{
+        "spacecraft_ids" => crafts,
+        "default_rules" => [%{"kind" => "range", "max" => 30, "severity" => "warning"}]
+      }
+    })
+  end
+
+  defp assert_codes(declarations, code) do
+    assert {:ok, result} = Compiler.compile([catalog(), authored(declarations)])
+    assert result.plans.monitoring.status == :blocked
+    assert code in Enum.map(result.plans.monitoring.diagnostics, & &1.code)
+  end
+
   test "a per-craft override takes the overridden rule_id, one entry per craft" do
     layer = catalog()
 
