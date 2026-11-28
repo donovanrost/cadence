@@ -18,6 +18,11 @@ export type CompositionActor = Decoded<typeof compositionActor>;
 const layer = d.object({
   layer_id: d.token,
   mount: d.string,
+  /**
+   * D4 (#545): the layer's content digest, for the composed header (name, mount, digest). Readers
+   * first: absent until mission-model's composition_views change (12-05), then always sent.
+   */
+  content_sha256: d.optional(d.string),
   catalog_revision: d.nullable(
     d.object({
       id: d.token,

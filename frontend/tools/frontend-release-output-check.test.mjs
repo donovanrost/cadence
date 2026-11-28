@@ -374,41 +374,6 @@ void test("accepts statically bounded worker references", async () => {
   });
 });
 
-void test("only an explicitly authoritative host publication may contain runtime URLs", () => {
-  const files = new Set(["host.js"]);
-  const options = { authoritativeHostPublication: true };
-  /** @param {string} source */
-  const assertAuthoritativeHostSource = (source) =>
-    assert.doesNotThrow(() =>
-      assertImportReferences(source, "host.js", files, repositoryRoot, new Set(), options),
-    );
-
-  assertAuthoritativeHostSource("function mutable(value) { return new URL(value); }\n");
-
-  assert.throws(
-    () =>
-      assertImportReferences(
-        "function mutable(value) { return new URL(value); }\n",
-        "host.js",
-        files,
-        repositoryRoot,
-        new Set(),
-      ),
-    /unresolved dynamic local asset URL/,
-  );
-  assert.throws(
-    () =>
-      assertImportReferences(
-        "function lf(e, t) { let n = t; return new URL(`__module_federation_remote__${cf(e)}`, n); }\n",
-        "host.js",
-        files,
-        repositoryRoot,
-        new Set(),
-      ),
-    /unresolved dynamic local asset URL/,
-  );
-});
-
 void test("accepts generated federation navigation URLs based on browser location", () => {
   const files = new Set(["federated-application.js"]);
   assert.doesNotThrow(() =>

@@ -613,6 +613,9 @@ Rules (v1), by area:
   actor: {name} | null}]`. `[]` when nothing has been applied yet (show the panel empty, or omit
   it). `version_label` is the revision number; open `GET /config/revisions/:n` for the detail.
   It's `null` only if the revisions can't be read.
+- `permissions` (#1160): `["catalog.import"] | []`, the header's Import catalog, from the check
+  an import makes (`Catalog.Upload.authorize/2`, `:operate_mission`). Add spacecraft reads
+  `config.stage` from `GET /config` instead.
 
 ## `GET /api/v1/missions/:mission_id/profiles/:profile_id`
 
@@ -685,6 +688,10 @@ The shape is setup-shapes.md §C1. `?database_id=` selects a database (default: 
 `database` is `null` when the mission has none. Refetch on `invalidate` with `catalog`.
 
 - `revisions`: newest first, at most 50. `import_runs`: newest first, at most 20.
+- `permissions` (#1160): `["catalog.import"] | []`, whether the caller may import. It comes from
+  the check the upload and a reimport make (`Catalog.Upload.authorize/2`: any mission operator;
+  the candidate revision still needs an organization admin's approval, `:approve_mission_model`).
+  C3 and the source-file page send the same.
 - `revisions[].declaration_count` comes from the producing import run. `current_revision`
   also has `command_count` and `telemetry_count` (commands and telemetry parameters in its
   declarations); they're `null` only when the revision's model can't be read. Revisions in the
@@ -748,6 +755,7 @@ The shape is setup-shapes.md §C3, plus `declaration_count`.
   `revision_number` below its own), or `null` (first revision, or no revision produced). It's the
   same base as the revision read's `breaking_base` (the model approval gate above).
 - `requested_by`: as the index's run row (C1 above).
+- `permissions` (#1160): as C1's; Replace file starts a new import.
 - `diff` (DECISIONS #9 v1, from the two revisions alone): `null` when there's no base or either
   revision can't be read: it has no model, its model revision isn't stored for this mission, or its
   declarations can't be queried (#367: a missing model is never read as an empty one, which would
@@ -1251,7 +1259,9 @@ sources come first, then by name.
     - `credentials_ref`: the reference with its middle elided, never material, or `null`.
   - `kind` is a closed set: `managed_tsdb | byo_tsdb | postgres | object_archive | projection`.
   - `permissions: ["data_sources.manage"]` (top level) when the caller passes the check the
-    writes use (`operate_mission` today), else `[]`.
+    writes use (`Actions.may_manage?/3`: `operate_mission` and an organization admin, #1160), else `[]`. A
+    member who can operate the mission but isn't an organization admin gets `[]`, and their writes
+    are `403`.
 
 ### Data sources (L11): writes, and the reads behind them
 
@@ -1476,8 +1486,10 @@ section refuses), `409 version_conflict` (with `details.expected_version`, the s
 version; also when another save lands between the read and the write), `409
 settings_enforced_by_organization`, `404 settings_section_not_found`, `403 forbidden`, and
 `422 settings_write_unconfirmed` / `422 settings_unavailable` when the section's owner fails or
-can't be read (retry). Edit needs `settings.edit` (any mission operator
-today, from the enforcing check).
+can't be read (retry). Edit needs `settings.edit`, derived from the enforcing check
+(`:manage_settings`, #1159): a mission operator for a mission's settings, an **organization admin**
+for the organization's (`GET /organizations/:id/settings` sends `permissions: []` to a member, whose
+`PUT` is `403 forbidden`). Reading is any active member's.
 
 The approval setting adds two 403s (#233; ux U96 words, by the level saved). A refused change
 writes nothing:

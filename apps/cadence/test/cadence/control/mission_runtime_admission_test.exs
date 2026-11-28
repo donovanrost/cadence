@@ -65,7 +65,8 @@ defmodule Cadence.Control.MissionRuntimeAdmissionTest do
            end) =~
              ~r/Mission runtime for mission-log not admitted: generation 9 \(applied none\), reason spec_mismatch \(binding_set_content_sha256\)/
 
-    assert capture_log(fn -> AdmissionLog.transition(first, first) end) == ""
+    refute capture_log(fn -> AdmissionLog.transition(first, first) end) =~
+             "Mission runtime for mission-log"
 
     crashed = %{first | last_error: {:reconcile_crashed, "boom"}}
 

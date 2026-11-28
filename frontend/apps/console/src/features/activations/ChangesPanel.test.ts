@@ -157,7 +157,7 @@ describe("#235 What changes panel", () => {
       configuration_changes: changes,
     };
     const w = mount(ActivationDecide, {
-      props: { requestKey, request, viewer: { userId: "u2", orgAdmin: true }, index: "R3" },
+      props: { requestKey, request, viewer: { userId: "u2" }, index: "R3" },
       global: { stubs },
     });
     await w.find("textarea").setValue("Looks right.");

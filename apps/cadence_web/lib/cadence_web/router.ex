@@ -8,13 +8,10 @@ defmodule CadenceWeb.Router do
   pipeline :browser do
     plug(CadenceWeb.Plugs.BrowserAccepts)
     plug(:fetch_session)
-    plug(:fetch_live_flash)
-    plug(:put_root_layout, html: {CadenceWeb.Layouts, :root})
     plug(CadenceWeb.Plugs.ApplicationHostCSRF)
     plug(:protect_from_forgery)
     plug(:put_secure_browser_headers)
     plug(CadenceWeb.Plugs.FetchBrowserCurrentScope)
-    plug(CadenceWeb.Plugs.AssignUserMenuContext)
   end
 
   pipeline :require_authenticated_scope do
@@ -120,26 +117,6 @@ defmodule CadenceWeb.Router do
 
     get("/", SPAController, :index)
     get("/*path", SPAController, :index)
-  end
-
-  scope "/", CadenceWeb do
-    pipe_through([:browser, :require_authenticated_scope])
-
-    live_session :application,
-      on_mount: [{CadenceWeb.UserAuth, :require_user_scope}],
-      layout: {CadenceWeb.Layouts, :host} do
-      live("/missions/:mission_id/ops/alarms", HostPageLive, :index,
-        metadata: %{host_policy: :ops}
-      )
-
-      live("/missions/:mission_id/ops/timeline", HostPageLive, :index,
-        metadata: %{host_policy: :ops}
-      )
-
-      live("/missions/:mission_id/ops/explore", HostPageLive, :show,
-        metadata: %{host_policy: :ops}
-      )
-    end
   end
 
   # L5 auth JSON (owner: api-ops). Contract: docs/apogee/api/session.md

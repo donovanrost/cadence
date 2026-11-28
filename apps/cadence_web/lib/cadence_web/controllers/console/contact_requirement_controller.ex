@@ -6,13 +6,20 @@ defmodule CadenceWeb.Console.ContactRequirementController do
   use CadenceWeb, :controller
 
   alias Cadence.ContactPlanning.ContactPlans
-  alias Cadence.Control.PlanningRequirements
+  alias Cadence.Control.{PlanningPolicy, PlanningRequirements}
   alias Cadence.Reads.ContactPlanOverview
   alias CadenceWeb.Console.{ConfigJSON, Problem}
 
   # todo(authz): reads are open to the mission's console members (the plan reads are too);
   # writes are authorized by ContactRequirements (operate_mission). Cedar should decide both.
-  def schema(conn, _params), do: ok(conn, PlanningRequirements.schema())
+  # #1160 row 4: the form's schema and one requirement carry `planning.requirement.edit`, from the
+  # check the writes make (`PlanningPolicy.permissions/2`), so New and Edit, Close, Cancel follow it.
+  def schema(conn, _params),
+    do:
+      ok(
+        conn,
+        Map.put(PlanningRequirements.schema(), :permissions, requirement_permissions(conn))
+      )
 
   def index(conn, params) do
     case PlanningRequirements.list(org_id(conn), mission_id(conn), params) do
@@ -30,8 +37,14 @@ defmodule CadenceWeb.Console.ContactRequirementController do
 
   def show(conn, %{"requirement_id" => id}) do
     case PlanningRequirements.get(org_id(conn), mission_id(conn), id) do
-      {:ok, requirement} -> ok(conn, Map.put(requirement, :held_by, held_by(conn, id)))
-      {:error, reason} -> error(conn, reason)
+      {:ok, requirement} ->
+        requirement
+        |> Map.put(:held_by, held_by(conn, id))
+        |> Map.put(:permissions, requirement_permissions(conn))
+        |> then(&ok(conn, &1))
+
+      {:error, reason} ->
+        error(conn, reason)
     end
   end
 
@@ -107,6 +120,12 @@ defmodule CadenceWeb.Console.ContactRequirementController do
   end
 
   defp ok(conn, data), do: json(conn, %{data: ConfigJSON.encode(data)})
+
+  defp requirement_permissions(conn) do
+    conn.assigns.current_scope
+    |> PlanningPolicy.permissions(mission_id(conn))
+    |> Enum.filter(&(&1 == "planning.requirement.edit"))
+  end
 
   defp error(conn, {:invalid_params, details}),
     do: Problem.respond(conn, :invalid_params, details)

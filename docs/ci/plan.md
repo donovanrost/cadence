@@ -36,7 +36,7 @@ Reference timings from this repo's own Actions history (4-vCPU runners, **no war
 | | all suites (smaller codebase then) | 2:24 |
 | Frontend, 2026-11-08 | `mix setup --check-locked` | 1:55 |
 | | `pnpm test:producers` (cold test compile + producer tests) | 7:03 |
-| | `mix test.browser.federation` | 4:57 (failed) |
+| | `mix test.browser.federation` (alias and job removed in #1075) | 4:57 (failed) |
 | | `pnpm verify` | 4:31 |
 
 ## Job graph
@@ -132,7 +132,8 @@ written.
   within each shard. The first green run prints `--slowest-modules 10` per shard, and I tune N
   from that (one matrix number per app).
 - Browser-tagged tests stay excluded (`test_helper.exs` already excludes `:browser` and
-  `:browser_smoke`); the federation browser job in `frontend.yml` owns them.
+  `:browser_smoke`). The federation browser job that ran them was removed in #1075 (2026-11-28);
+  its node contract tests run in Frontend quality's `test:transport`.
 - Postgres 17 service with its data dir on tmpfs (`--tmpfs /var/lib/postgresql/data`), plus
   `fsync=off` and `synchronous_commit=off` via `ALTER SYSTEM` + reload in a step (service
   containers can't take `command:` args).

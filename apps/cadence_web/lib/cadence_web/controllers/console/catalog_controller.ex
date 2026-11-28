@@ -6,9 +6,8 @@ defmodule CadenceWeb.Console.CatalogController do
 
   use CadenceWeb, :controller
 
-  alias Cadence.Auth.Policy
   alias Cadence.Catalog
-  alias Cadence.Catalog.{Artifact, Reimport}
+  alias Cadence.Catalog.{Artifact, Reimport, Upload}
 
   alias Cadence.Reads.{
     CatalogApids,
@@ -23,13 +22,16 @@ defmodule CadenceWeb.Console.CatalogController do
   def index(conn, params) do
     database_id = if is_binary(params["database_id"]), do: params["database_id"]
     overview = CatalogOverview.index(org_id(conn), mission_id(conn), database_id)
-    json(conn, %{data: ConfigJSON.encode(overview)})
+    json(conn, %{data: ConfigJSON.encode(Map.put(overview, :permissions, permissions(conn)))})
   end
 
   def import_run(conn, %{"import_run_id" => import_run_id}) do
     case CatalogOverview.import_run(org_id(conn), mission_id(conn), import_run_id) do
-      {:ok, run} -> json(conn, %{data: ConfigJSON.encode(run)})
-      {:error, :import_run_not_found} -> Problem.respond(conn, :import_run_not_found)
+      {:ok, run} ->
+        json(conn, %{data: ConfigJSON.encode(Map.put(run, :permissions, permissions(conn)))})
+
+      {:error, :import_run_not_found} ->
+        Problem.respond(conn, :import_run_not_found)
     end
   end
 
@@ -146,14 +148,10 @@ defmodule CadenceWeb.Console.CatalogController do
     end
   end
 
-  # todo(authz): importing is any mission operator today (Catalog.Reimport, the upload path).
-  defp permissions(conn) do
-    params = %{organization_id: org_id(conn), mission_id: mission_id(conn)}
-
-    if Policy.authorize(conn.assigns.current_scope, :operate_mission, params) == :ok,
-      do: ["catalog.import"],
-      else: []
-  end
+  # Importing is any mission operator: it yields a candidate revision that only an organization
+  # admin can approve (`:approve_mission_model`), so the human decision sits at the approval
+  # (#1160). `catalog.import` comes from the check the upload and reimport make (`Upload.authorize/2`).
+  defp permissions(conn), do: Upload.permissions(conn.assigns.current_scope, mission_id(conn))
 
   defp org_id(conn), do: conn.assigns.current_scope.organization_id
   defp mission_id(conn), do: conn.assigns.current_mission.mission_id

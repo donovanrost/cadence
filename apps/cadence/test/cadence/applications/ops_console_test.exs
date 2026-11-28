@@ -13,13 +13,12 @@ defmodule Cadence.Applications.OpsConsoleTest do
            |> Enum.map(&{&1.surface_id, &1.placement, &1.data_contract}) == [
              {"workspace", :application_workspace,
               %{query_id: "cadence.ops.workspace", version: 1}},
-             {"telemetry_explore", :ops_workspace,
-              %{query_id: "cadence.ops.telemetry_explore", version: 1}}
+             {"data_sources", :ops_workspace, %{query_id: "cadence.ops.data_sources", version: 1}}
            ]
 
-    assert length(definition.surfaces) == 7
-    assert length(definition.actions) == 17
-    assert Enum.count(definition.surfaces, &(&1.placement == :ops_workspace)) == 6
+    assert length(definition.surfaces) == 4
+    assert length(definition.actions) == 11
+    assert Enum.count(definition.surfaces, &(&1.placement == :ops_workspace)) == 3
 
     assert Enum.uniq(Enum.map(definition.surfaces, & &1.surface_id)) ==
              Enum.map(definition.surfaces, & &1.surface_id)
@@ -30,7 +29,7 @@ defmodule Cadence.Applications.OpsConsoleTest do
   test "contributes exact release identity for each surface" do
     contributions = OpsConsole.release_contributions()
 
-    assert length(contributions) == 7
+    assert length(contributions) == 4
 
     assert Enum.take(contributions, 1) |> Enum.map(&ReleaseContribution.key/1) == [
              {"ops_console", 1, "workspace", 1}
@@ -58,11 +57,11 @@ defmodule Cadence.Applications.OpsConsoleTest do
              Cadence.Applications.Registry.fetch_surface(
                definition,
                :mission,
-               "telemetry_explore"
+               "data_sources"
              )
 
     assert surface.placement == :ops_workspace
-    assert surface.surface_id == "telemetry_explore"
+    assert surface.surface_id == "data_sources"
   end
 
   test "keeps query contributions and the action seam domain-owned" do
@@ -120,8 +119,6 @@ defmodule Cadence.Applications.OpsConsoleTest do
            end) == [
              {"workspace", :overview, :mission, :application_workspace, "cadence.ops.workspace",
               []},
-             {"telemetry_explore", :operations, :mission, :ops_workspace,
-              "cadence.ops.telemetry_explore", ["apply_filters", "apply_question"]},
              {"data_sources", :configuration, :mission, :ops_workspace,
               "cadence.ops.data_sources",
               [
@@ -152,11 +149,7 @@ defmodule Cadence.Applications.OpsConsoleTest do
                 "rotate-source-credential",
                 "retry-deployment-run",
                 "requeue-deployment-run"
-              ]},
-             {"alarms", :operations, :mission, :ops_workspace, "cadence.ops.alarms",
-              ["filter", "reset_filters"]},
-             {"timeline", :activity, :mission, :ops_workspace, "cadence.ops.timeline",
-              ["apply_timeline_filters", "clear_timeline_selection"]}
+              ]}
            ]
   end
 end

@@ -33,7 +33,7 @@ const result = decode(policyReader, {
   pending: null,
   schema: [field("horizon.days", "horizon", false), field("scoring.cost_weight", "scoring", true)],
   defaults: { horizon: { days: 3 }, scoring: { cost_weight: 1 } },
-  permissions: ["planning.edit"],
+  permissions: ["fleet_planning_policy.manage"],
 });
 if (!result.ok) throw result.error;
 const policy = result.value;
@@ -74,7 +74,7 @@ describe("money fields (DECISIONS #63, U34)", () => {
       field("scoring.cost_efficiency_weight", "scoring", true),
     ],
     defaults: null,
-    permissions: ["planning.edit"],
+    permissions: ["fleet_planning_policy.manage"],
   });
   if (!withMoney.ok) throw withMoney.error;
   const p = withMoney.value;

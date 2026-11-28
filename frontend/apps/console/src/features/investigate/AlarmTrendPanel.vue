@@ -15,15 +15,11 @@ import {
   ApStatTile,
 } from "@/ui";
 import {
-  formatLimitLike,
-  formatValue,
   conditionWords,
-  crossedCondition,
-  crossedLimit,
   AlarmsMore,
+  lastValueReadout,
   type Alarm,
   type AlarmsPage,
-  valueLabel,
   type Episode,
   type EpisodeDetail,
 } from "@/features/alarms/index.ts";
@@ -44,7 +40,10 @@ import {
 } from "./model.ts";
 import { usePointTrend } from "./useInvestigate.ts";
 
-/** B1 · Alarm trend: readouts (Now, Limit, Rate), range, chart. Spec: Investigate.md §B1. */
+/**
+ * B1 · Alarm trend: readouts (the episode's last value with its time, Rate), range, chart. Spec:
+ * Investigate.md §B1. An alarm row carries no value or limits (#1117); the episode does.
+ */
 const props = defineProps<{
   sc: FleetSpacecraft;
   alarms: RemoteState<AlarmsPage>;
@@ -53,7 +52,7 @@ const props = defineProps<{
   alarm: Alarm | null;
   /** U13: without ground limits, "no active alarm" is unknown, not nominal (qa #9). */
   limitsConfigured: boolean;
-  /** Lifecycle episode for the shown alarm, when one exists (label: Now vs At evaluation). */
+  /** Lifecycle episode for the shown alarm, when one exists: its last value, state and limits. */
   episode?: EpisodeDetail | null;
   /** No active alarm: the latest cleared episode, shown back in limits (§B1). */
   resolved?: Episode | null;
@@ -72,8 +71,10 @@ const partial = computed(() => {
 
 const subject = computed(() => {
   const a = props.alarm;
-  if (a)
-    return { id: a.point.id, name: a.point.name, unit: a.point.unit, thresholds: a.thresholds };
+  if (a) {
+    const thresholds = props.episode?.thresholds ?? null;
+    return { id: a.point.id, name: a.point.name, unit: a.point.unit, thresholds };
+  }
   const r = props.resolved;
   return r
     ? { id: r.point.id, name: r.point.name, unit: r.point.unit, thresholds: r.thresholds }
@@ -155,16 +156,16 @@ const tone = computed(() =>
       ? "caution"
       : undefined,
 );
-const condition = computed(() => (props.alarm ? crossedCondition(props.alarm) : null));
 /** Words only (ids are never case-transformed; the literal id goes in the meta, untransformed). */
 const title = computed(() =>
   props.alarm
-    ? `${props.alarm.point.subsystem ?? "Point"} · ${conditionWords(condition.value) ?? "out of limits"}`
+    ? `${props.alarm.point.subsystem ?? "Point"} · ${conditionWords(props.episode?.source_state ?? null) ?? "out of limits"}`
     : props.resolved
       ? "Last alarm · back in limits"
       : "Alarm trend",
 );
-const limit = computed(() => (props.alarm ? crossedLimit(props.alarm) : null));
+/** #1117: never a live reading; absent (no tile) without the episode's value. */
+const last = computed(() => lastValueReadout(props.episode));
 const ranges = RANGES.map((r) => ({ value: r.value, label: r.label }));
 </script>
 
@@ -201,20 +202,16 @@ const ranges = RANGES.map((r) => ({ value: r.value, label: r.label }));
           <ApCallout v-if="!alarm" tone="nominal" class="flex-1">
             Resolved at {{ resolvedAt ?? "an unknown time" }} · back in limits.
           </ApCallout>
-          <ApStatStrip v-else :columns="3" label="Readouts" class="min-w-[360px] flex-1">
+          <ApStatStrip v-else :columns="last ? 2 : 1" label="Readouts" class="min-w-[240px] flex-1">
             <ApStatTile
-              :label="valueLabel(episode ?? null)"
-              :value="formatValue(alarm.value)"
+              v-if="last"
+              :label="last.label"
+              :value="last.value"
+              :caption="last.caption"
               :unit="alarm.point.unit ?? undefined"
               :state="tone ?? 'neutral'"
             />
             <ApStatTile
-              :label="condition?.startsWith('red') ? 'Red limit' : 'Limit'"
-              :value="formatLimitLike(limit, alarm.value)"
-              :unit="alarm.point.unit ?? undefined"
-            />
-            <ApStatTile
-              class="max-md:col-span-2"
               label="Rate"
               :value="view?.rate == null ? null : formatRate(view.rate)"
               :caption="

@@ -7,14 +7,11 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
   alias Cadence.Applications.OpsConsole, as: OpsDefinition
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Reads.ApplicationSurfaces.OpsConsole.Presentation
-
-  alias Cadence.Reads.LimitAlarmConditions
   alias Cadence.Reads.OpsWorkspace.Landing
 
   @application_key "ops_console"
   @application_version 1
   @surface_version 1
-  @exploration_query_keys ~w(point_id spacecraft_id scope_kind scope_id time_mode time_axis from to replay_run_id order limit selection_view data_view validity_state realm logical_source data_source_id source_binding_id source_dashboard_id sample_id selected_time question limit_mode)
 
   @impl true
   def application_key, do: @application_key
@@ -69,30 +66,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
       %{id: _id} = spec -> {:ok, spec}
       nil -> {:error, :unsupported_application_surface_query}
     end
-  end
-
-  defp validate_params(%{id: "telemetry_explore"}, params) do
-    with true <- Enum.all?(Map.keys(params), &(&1 in ["mission_id" | @exploration_query_keys])),
-         true <- Enum.all?(Map.values(params), &exploration_value?/1),
-         :ok <- JSONBoundary.validate(params) do
-      :ok
-    else
-      _ -> {:error, :invalid_application_surface_query}
-    end
-  end
-
-  defp validate_params(%{id: "alarms"}, params) do
-    case LimitAlarmConditions.admit_query(Map.delete(params, "mission_id")) do
-      {:ok, _} -> :ok
-      _ -> {:error, :invalid_application_surface_query}
-    end
-  end
-
-  defp validate_params(%{id: "timeline"}, params) do
-    if Enum.all?(params, fn {key, value} ->
-         key in ~w(mission_id category kind severity spacecraft_id from to event_id source_dashboard_id before_at before_id) and
-           is_binary(value) and byte_size(value) <= 512
-       end), do: :ok, else: {:error, :unsupported_application_surface_query}
   end
 
   defp validate_params(_spec, params) do
@@ -197,8 +170,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
   end
 
   defp dispatch("workspace", scope, mission, _params), do: landing(scope, mission)
-  defp dispatch("alarms", scope, mission, params), do: alarms(scope, mission, params)
-  defp dispatch("timeline", scope, mission, params), do: timeline(scope, mission, params)
 
   defp dispatch("data_sources", scope, mission, params),
     do: envelope("OpsDataSources", Presentation.data_sources(scope, mission, params, :reader))
@@ -209,8 +180,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
 
   defp dispatch("data_source_settings", scope, mission, params),
     do: envelope("OpsDataSources", Presentation.data_sources(scope, mission, params, :settings))
-
-  defp dispatch(surface_id, _scope, mission, params), do: generic(surface_id, mission, params)
 
   defp landing(scope, mission) do
     case Landing.load(scope, mission.mission_id) do
@@ -227,73 +196,4 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
         "presentation" => %{"component" => component, "props" => props}
       }
     }
-
-  defp generic(surface_id, mission, params) do
-    id = "ops-#{surface_id}-page"
-    page = page(id, title(surface_id), mission, params)
-
-    props = generic_props(surface_id, page, params)
-
-    envelope(component_name(surface_id), props)
-  end
-
-  defp generic_props("telemetry_explore", page, params), do: telemetry_props(page, params)
-
-  defp alarms(_scope, mission, params) do
-    envelope("OpsAlarms", %{
-      "mission_id" => mission.mission_id,
-      "query" => Map.delete(params, "mission_id")
-    })
-  end
-
-  defp timeline(_scope, mission, params) do
-    envelope("OpsTimeline", %{
-      "mission_id" => mission.mission_id,
-      "query" =>
-        Map.take(
-          params,
-          ~w(category kind severity spacecraft_id from to event_id source_dashboard_id before_at before_id)
-        )
-    })
-  end
-
-  defp page(id, title, mission, params),
-    do: %{
-      "id" => id,
-      "mission_id" => mission.mission_id,
-      "header" => %{
-        "eyebrow" => "Mission operations",
-        "title" => title,
-        "heading" => title,
-        "description" => "Phoenix-owned mission-scoped #{title} data and controls.",
-        "copy" => "Phoenix remains authoritative for this route-level surface."
-      },
-      "subject" => Map.values(params) |> Enum.find(&is_binary/1)
-    }
-
-  defp component_name("workspace"), do: "OpsConsoleLanding"
-  defp component_name("telemetry_explore"), do: "OpsTelemetryExplore"
-  defp component_name("data_sources"), do: "OpsDataSources"
-  defp component_name("data_source_registration"), do: "OpsDataSourceRegistration"
-  defp component_name("data_source_settings"), do: "OpsDataSourceSettings"
-  defp component_name("alarms"), do: "OpsAlarms"
-  defp component_name("timeline"), do: "OpsTimeline"
-
-  defp telemetry_props(page, params),
-    do: %{
-      "mission_id" => page["mission_id"],
-      "query" => Map.take(params, @exploration_query_keys)
-    }
-
-  defp exploration_value?(value) when is_binary(value) and byte_size(value) <= 256,
-    do: String.valid?(value) and not Regex.match?(~r/[\x00-\x1f\x7f]/u, value)
-
-  defp exploration_value?(_), do: false
-
-  defp title(surface_id),
-    do:
-      surface_id
-      |> String.replace("_", " ")
-      |> String.split()
-      |> Enum.map_join(" ", &String.capitalize/1)
 end

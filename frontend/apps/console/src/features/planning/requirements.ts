@@ -63,8 +63,19 @@ const listReader = object({
 });
 export type RequirementPage = Decoded<typeof listReader>;
 
+/** #1160 row 4: from the check requirement writes make (any mission operator). */
+export const REQUIREMENT_EDIT = "planning.requirement.edit";
+const requirementPermissions = array(decoders.known([REQUIREMENT_EDIT] as const), 10);
+/** The requirement form's schema, plus whether this viewer may create one. */
+const requirementSchemaReader = (value: unknown, path = "") => ({
+  ...templateSchemaReader(value, path),
+  permissions: object({ permissions: requirementPermissions })(value, path).permissions,
+});
+export type RequirementSchema = ReturnType<typeof requirementSchemaReader>;
+
 const detailReader = object({
   ...requirementRowShape,
+  permissions: requirementPermissions,
   versions: array(object({ version: integer, created_at: timestamp, actor }), 500),
   /**
    * api f2dcc94bd: the plan past draft that holds it (the most recently changed if several), or
@@ -90,8 +101,8 @@ const base = (missionId: MissionId) =>
 export function fetchRequirementSchema(
   missionId: MissionId,
   signal: AbortSignal,
-): Promise<ApiResult<TemplateSchema>> {
-  return request(`${base(missionId)}/schema`, templateSchemaReader, { signal });
+): Promise<ApiResult<RequirementSchema>> {
+  return request(`${base(missionId)}/schema`, requirementSchemaReader, { signal });
 }
 
 export type RequirementQuery = Readonly<{

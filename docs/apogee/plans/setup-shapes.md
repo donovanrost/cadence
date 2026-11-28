@@ -345,7 +345,7 @@ visible_when`), plus `group` (the panel key) and `advanced: boolean`.
                  "version": 2, "spacecraft_count": 500}],
   "not_covered": [{"group": "profile|plane|none", "label": "Earendil Block 2", "count": 12,
                    "suggested_target": {…query…}|null}],
-  "permissions": ["planning.edit", "planning.approve"]
+  "permissions": ["planning.template.manage", "fleet_planning_policy.manage", "planning.requirement.edit", "planning.approve"]
 }}
 ```
 `policy: null` means not set up. Rule summaries are server-made sentences, so the UI never

@@ -12,11 +12,6 @@ export interface AlarmSpec {
   readonly scid: number;
   readonly point: { readonly id: string; readonly name: string; readonly subsystem: string };
   readonly severity: "critical" | "caution";
-  readonly condition: "red_low" | "red_high" | "yellow_low" | "yellow_high";
-  readonly value: number;
-  readonly thresholds: Readonly<
-    Record<"red_low" | "yellow_low" | "yellow_high" | "red_high", number | null>
-  >;
   readonly firstCrossedAt: string;
   readonly receivedAt: string;
 }
@@ -30,10 +25,11 @@ function row(spec: AlarmSpec) {
     point: { ...spec.point, unit: "A", description: null },
     severity: spec.severity,
     active: true,
-    condition: spec.condition,
-    value: spec.value,
-    limit_set_name: "DEFAULT",
-    thresholds: spec.thresholds,
+    // #1117 (#451 T3c): a row is a live alarm state; these ground-limit fields are always null.
+    condition: null,
+    value: null,
+    limit_set_name: null,
+    thresholds: null,
     first_crossed_at: spec.firstCrossedAt,
     generation_time: spec.receivedAt,
     received_at: spec.receivedAt,

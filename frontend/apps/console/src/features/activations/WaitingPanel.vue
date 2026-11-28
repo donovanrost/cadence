@@ -3,7 +3,7 @@ import type { MissionId } from "@/api/index.ts";
 import { computed } from "vue";
 import { useRemoteQuery } from "@/api";
 import { useMissionInvalidation } from "@/live";
-import { canAdministerOrganization, useMissionScope, useSession } from "@/shell";
+import { useSession } from "@/shell";
 import { ApPanel, ApTable, ApTag, plural, type ApColumn } from "@/ui";
 import { ACTIVATIONS_LIVE, fetchActivations, mayDecide, requestedLine, stateTag } from "./api.ts";
 
@@ -19,12 +19,8 @@ useMissionInvalidation(
 const pending = computed(() =>
   list.state.value.status === "ready" ? list.state.value.value.requests : [],
 );
-const scope = useMissionScope();
 const session = useSession();
-const viewer = computed(() => ({
-  userId: session.user.id,
-  orgAdmin: canAdministerOrganization(session, scope.value.organization),
-}));
+const viewer = computed(() => ({ userId: session.user.id }));
 const columns: readonly ApColumn[] = [
   { key: "what", label: "Activation" },
   { key: "who", label: "Requested" },

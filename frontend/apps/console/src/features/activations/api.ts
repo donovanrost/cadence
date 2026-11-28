@@ -137,7 +137,7 @@ export function decide(k: DetailKey, verb: Verb, reason: string) {
 }
 
 /** Who is looking: the gate below needs no more than this. */
-export type Viewer = Readonly<{ userId: string; orgAdmin: boolean }>;
+export type Viewer = Readonly<{ userId: string }>;
 
 export const isRequester = (r: ActivationRequest, viewer: Viewer) =>
   r.requested_by?.id === viewer.userId;
@@ -145,8 +145,8 @@ export const isRequester = (r: ActivationRequest, viewer: Viewer) =>
 /**
  * THE approve gate, the only place the console decides who may approve or reject (director: the
  * approver rule is with the user). Today it follows the domain's :approve_activation through the
- * server's can_decide (any mission operator except the requester). If the ruling adds the ops-console
- * path's org-admin requirement, this becomes `… && viewer.orgAdmin`, and nothing else changes.
+ * server's can_decide (any mission operator except the requester). Who must approve is the mission's
+ * activation policy (#111), not a role (#1160 row 6); requiring an admin is policy work for #723.
  */
 export function mayDecide(r: ActivationRequest, viewer: Viewer): boolean {
   return r.can_decide && !isRequester(r, viewer);

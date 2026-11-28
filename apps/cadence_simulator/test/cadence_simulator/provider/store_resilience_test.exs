@@ -36,6 +36,17 @@ defmodule CadenceSimulator.Provider.StoreResilienceTest do
   end
 
   describe "the Orchestrator tick" do
+    test "a reconcile removes streams orphaned by Store.clear", %{port: port} do
+      now = DateTime.utc_now()
+      _reservation = active_reservation(port, now)
+      assert Orchestrator.active_stream_count() == 1
+
+      :ok = Store.clear()
+      :ok = Orchestrator.reconcile()
+
+      assert Orchestrator.active_stream_count() == 0
+    end
+
     @tag timeout: 60_000
     test "keeps running and sweeps while the Store process is stuck", %{
       port: port,

@@ -144,16 +144,6 @@ export interface HeaderEvidence {
   response?: { headers?: unknown } | undefined;
   responseExtra?: { headers?: unknown } | undefined;
 }
-export interface DetachedDiagnostics {
-  webSockets: ReadonlyMap<
-    string,
-    Omit<SocketObservation, "observedGeneration"> & { observedGeneration?: number | undefined }
-  >;
-  requests: ReadonlyMap<string, RequestEvidence>;
-  webSocketFailures: readonly string[];
-  consoleErrors?: readonly string[];
-  logErrors?: readonly string[];
-}
 export interface ReleaseIdentity {
   applicationKey: string;
   releaseId: string;

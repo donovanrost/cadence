@@ -11,9 +11,11 @@ defmodule Cadence.Control.PlanningPolicy do
   """
 
   alias Cadence.Accounts.MemberNames
-  alias Cadence.Auth.{Policy, Scope}
+  alias Cadence.Auth.Scope
 
   alias Cadence.ContactPlanning.{
+    ContactRequirements,
+    ContactRequirementTemplates,
     FleetPlanningPolicies,
     FleetPlanningPolicy,
     FleetPlanningPolicyVersion
@@ -21,16 +23,29 @@ defmodule Cadence.Control.PlanningPolicy do
 
   alias Cadence.ContactPlanning.FleetPlanningPolicySchema
 
-  @doc "`planning.edit` / `planning.approve` for the caller (organization admins today)."
-  @spec permissions(Scope.t()) :: [binary()]
-  def permissions(%Scope{} = scope) do
-    params = %{organization_id: scope.organization_id}
+  @doc """
+  Contact planning's console capabilities for the caller in `mission_id`, one per server action
+  (#1160 row 5), each from the very check that action makes (#722 criterion 3), so the two
+  can't drift:
 
+  - `planning.template.manage`: template writes and lifecycle moves
+    (`ContactRequirementTemplates.authorize_manage/2`, `:manage_mission`);
+  - `fleet_planning_policy.manage`: saving a policy version
+    (`FleetPlanningPolicies.authorize_manage/1`, `:manage_fleet_planning_policy`);
+  - `planning.requirement.edit`: requirement create, update, close and cancel
+    (`ContactRequirements.authorize_edit/2`, `:operate_mission`);
+  - `planning.approve`: deciding a pending policy version
+    (`FleetPlanningPolicies.authorize_approve/1`, `:approve_fleet_planning_policy`).
+  """
+  @spec permissions(Scope.t(), binary()) :: [binary()]
+  def permissions(%Scope{} = scope, mission_id) when is_binary(mission_id) do
     [
-      {"planning.edit", :manage_fleet_planning_policy},
-      {"planning.approve", :approve_fleet_planning_policy}
+      {"planning.template.manage", &ContactRequirementTemplates.authorize_manage(&1, mission_id)},
+      {"fleet_planning_policy.manage", &FleetPlanningPolicies.authorize_manage/1},
+      {"planning.requirement.edit", &ContactRequirements.authorize_edit(&1, mission_id)},
+      {"planning.approve", &FleetPlanningPolicies.authorize_approve/1}
     ]
-    |> Enum.filter(fn {_name, action} -> Policy.authorize(scope, action, params) == :ok end)
+    |> Enum.filter(fn {_name, check} -> check.(scope) == :ok end)
     |> Enum.map(&elem(&1, 0))
   end
 

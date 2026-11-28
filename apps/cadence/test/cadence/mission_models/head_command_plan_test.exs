@@ -56,15 +56,31 @@ defmodule Cadence.MissionModels.HeadCommandPlanTest do
                authored.layer_id
              )
 
-    {:ok, head_command} = MissionModels.fetch_plan(c.org, c.mission, head, :command)
+    {:ok, head_revision} = MissionModels.fetch_revision(c.org, c.mission, head)
+
+    {:ok, %{command: head_command} = plans} =
+      MissionModels.fetch_runtime_plans(c.org, c.mission, head)
+
     {:ok, base_command} = MissionModels.fetch_plan(c.org, c.mission, base, :command)
 
     assert head_command.plan["runtime_definitions"] != []
+    assert head_command.plan == base_command.plan
 
     assert {head_command.plan_id, head_command.content_sha256,
             head_command.target_contract_version} ==
              {base_command.plan_id, base_command.content_sha256,
               base_command.target_contract_version}
+
+    # The runtime admits the plan envelope against the head revision, even when the command
+    # payload and its content identity are the base's.
+    assert Enum.sort(Map.keys(plans)) == [:algorithm, :command, :monitoring, :telemetry]
+
+    for {target, plan} <- plans do
+      assert plan.target == target
+      assert plan.status == :ready
+      assert plan.mission_model_revision_id == head_revision.revision_id
+      assert plan.mission_model_content_sha256 == head_revision.content_sha256
+    end
   end
 
   # A recorded version, as an applied monitoring set would leave it (the rule is AuthoredHeadTest's).

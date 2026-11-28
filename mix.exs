@@ -28,10 +28,7 @@ defmodule CadenceWorkspace.MixProject do
         "test.projections": :test,
         "test.planes": :test,
         "test.integration": :test,
-        "test.cluster": :test,
-        "test.browser": :test,
-        "test.browser.full": :test,
-        "test.browser.federation": :test
+        "test.cluster": :test
       ]
     ]
   end
@@ -73,24 +70,6 @@ defmodule CadenceWorkspace.MixProject do
         workspace_test_command(
           projects: [:cadence, :cadence_simulator, :cadence_web],
           task_args: ["--only", "integration"]
-        )
-      ],
-      "test.browser": [
-        workspace_command("test.browser",
-          projects: [:cadence_web],
-          env: [{"MIX_ENV", "test"}]
-        )
-      ],
-      "test.browser.full": [
-        workspace_command("test.browser.full",
-          projects: [:cadence_web],
-          env: [{"MIX_ENV", "test"}]
-        )
-      ],
-      "test.browser.federation": [
-        workspace_command("test.browser.federation",
-          projects: [:cadence_web],
-          env: [{"MIX_ENV", "test"}]
         )
       ],
       "precommit.checks": [

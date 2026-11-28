@@ -20,12 +20,6 @@ defmodule Cadence.Auth.ApplicationHostPolicyTest do
                mission_id: "mission-alpha"
              })
 
-    assert :ok =
-             Policy.authorize(scope, :read_legacy_application, %{
-               organization_id: "org-alpha",
-               mission_id: "mission-alpha"
-             })
-
     assert {:error, :scope_mismatch} =
              Policy.authorize(scope, :read_application_catalog, %{
                organization_id: "org-beta",
@@ -41,7 +35,7 @@ defmodule Cadence.Auth.ApplicationHostPolicyTest do
     }
 
     assert {:error, :authenticated_user_required} =
-             Policy.authorize(missing_user, :read_legacy_application, %{
+             Policy.authorize(missing_user, :read_application_catalog, %{
                organization_id: "org-alpha",
                mission_id: "mission-alpha"
              })

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { canAdministerOrganization, useMissionScope, useSession } from "@/shell";
+import { useMissionScope } from "@/shell";
+import { useCanStage } from "@/features/changes/index.ts";
 import { ApButton, ApEmptyState, ApPanel, useInPlaceSwap } from "@/ui";
 import OverridesPanel from "./OverridesPanel.vue";
 import RuleBlock from "./RuleBlock.vue";
@@ -10,8 +11,7 @@ import type { ProfileDetail } from "./detail.ts";
 /** P2 Routing rules and P3 Overrides (DECISIONS #3, domain P2). */
 const props = defineProps<{ detail: ProfileDetail; part: "routing" | "overrides" }>();
 const scope = useMissionScope();
-const session = useSession();
-const canStage = computed(() => canAdministerOrganization(session, scope.value.organization));
+const canStage = useCanStage(scope.value.mission.id);
 const perSpacecraft = computed(() => props.detail.routing_model === "per_spacecraft");
 // a11y A1/A5: Edit rules and Add a profile rule swap in RulesEditor (focus its first field); Cancel
 // and save swap back and return focus to the opener.

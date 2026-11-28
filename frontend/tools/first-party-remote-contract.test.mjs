@@ -51,11 +51,10 @@ void test("the approved first-party remotes expose explicit publication and mani
 });
 
 void test("real-workspace publication discovery admits exactly the approved remote identities", async () => {
-  const { host, remotes } = await discoverFirstPartyRemotes(frontendRoot, {
+  const { remotes } = await discoverFirstPartyRemotes(frontendRoot, {
     requireApproved: true,
   });
 
-  assert.equal(host.packageName, "@cadence/plugin-host");
   assert.deepEqual(
     remotes
       .map(({ bundle, remoteName }) => ({ bundle, remoteName }))

@@ -23,7 +23,7 @@ export { itemLine } from "./itemLines.ts";
 export { kindLabel } from "./shapes.ts";
 export { tableActor, who, type TableActor } from "./revision-record.ts";
 export { checkKeyText, checkLabel, type CheckKey, type HoldReason } from "./preview.ts";
-export { refreshConfigState, useConfigState } from "./useConfigState.ts";
+export { refreshConfigState, useCanStage, useConfigState } from "./useConfigState.ts";
 export { default as SchemaForm } from "./SchemaForm.vue";
 export { default as KindEditor } from "./KindEditor.vue";
 export type { Change, FormRules, FormState } from "./formRules.ts";

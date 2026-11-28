@@ -14,7 +14,7 @@ defmodule CadenceWeb.Console.MissionChannel do
 
   alias Cadence.Dashboards.RuntimeInvalidation
   alias Cadence.Platform.ScopedReadUpdates
-  alias CadenceWeb.Console.Access
+  alias CadenceWeb.Console.{Access, ChannelAccess}
   alias CadenceWeb.Console.{ConfigJSON, ConfigLive, SchedulingRunner}
   alias CadenceWeb.Console.ContactChanges
   alias CadenceWeb.Console.FleetPush
@@ -79,7 +79,8 @@ defmodule CadenceWeb.Console.MissionChannel do
            flush_timer: nil
          )
          |> ConfigLive.join()
-         |> FleetPush.join()}
+         |> FleetPush.join()
+         |> ChannelAccess.watch()}
 
       {:error, reason} ->
         {:error, %{reason: Atom.to_string(reason)}}
@@ -87,6 +88,13 @@ defmodule CadenceWeb.Console.MissionChannel do
   end
 
   @impl true
+  # The person's access changed (#1153): re-check, and close if it no longer passes.
+  def handle_info({:access_changed, _user_id} = message, socket),
+    do: ChannelAccess.handle_changed(socket, message)
+
+  def handle_info(:admin_mode_expired, socket),
+    do: ChannelAccess.handle_changed(socket, :admin_mode_expired)
+
   def handle_info({event, organization_id, mission_id}, socket)
       when is_map_key(@read_update_resources, event) do
     if {organization_id, mission_id} ==

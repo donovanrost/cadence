@@ -7,9 +7,6 @@
 # The directory Mix downloads your dependencies sources to.
 /deps/
 
-# Vite/NPM dependencies.
-/node_modules/
-
 # Where third-party dependencies like ExDoc output generated docs.
 /doc/
 

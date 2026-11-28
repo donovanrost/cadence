@@ -21,8 +21,8 @@ defmodule CadenceWeb.Plugs.RequireAuthenticatedScopeTest do
       conn = %{
         conn
         | method: "GET",
-          request_path: "/missions/mission-1/ops/explore",
-          query_string: "point_id=HK.temp&time_mode=historical"
+          request_path: "/console/acme/apollo/now",
+          query_string: "spacecraft_id=sc-1&window=24h"
       }
 
       conn = RequireAuthenticatedScope.call(conn, [])
@@ -31,7 +31,7 @@ defmodule CadenceWeb.Plugs.RequireAuthenticatedScopeTest do
       assert redirected_to(conn) == "/console/sign-in"
 
       assert get_session(conn, :user_return_to) ==
-               "/missions/mission-1/ops/explore?point_id=HK.temp&time_mode=historical"
+               "/console/acme/apollo/now?spacecraft_id=sc-1&window=24h"
     end
 
     test "does not store application-host JSON GETs as browser return paths" do

@@ -43,12 +43,15 @@ const body = () => ({
       },
     ],
   },
+  permissions: ["catalog.import"],
 });
 
 describe("catalogIndexReader", () => {
   it("decodes the index and the null database of an empty mission", () => {
     expect(decode(catalogIndexReader, body()).ok).toBe(true);
-    expect(decode(catalogIndexReader, { databases: [], database: null }).ok).toBe(true);
+    expect(decode(catalogIndexReader, { databases: [], database: null, permissions: [] }).ok).toBe(
+      true,
+    );
   });
 
   it("decodes a run that names no file, so one such run can't break the page", () => {

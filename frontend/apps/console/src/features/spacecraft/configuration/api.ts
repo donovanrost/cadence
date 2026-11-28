@@ -110,8 +110,8 @@ export const snapshotReader = d.object({
     source: d.knownText(["organization", "inherited", "overridden", "enforced"] as const),
     can_request: d.boolean,
     can_review: d.boolean,
-    /** #595 (api): `:operate_mission`, the check a draft save makes. Optional until api ships it. */
-    can_save: d.optional(d.boolean),
+    /** #595, #1160 row 2: `:operate_mission`, the check a draft save makes (`may_save?/2`). */
+    can_save: d.boolean,
   }),
   /**
    * #595 (api): the profile the craft inherits, for U94's `Open profile` on

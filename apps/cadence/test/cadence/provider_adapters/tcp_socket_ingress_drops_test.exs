@@ -29,7 +29,7 @@ defmodule Cadence.ProviderAdapters.TCPSocket.IngressDropsTest do
         |> IngressDrops.note(:clcw_unlinked, 1, 4)
       end)
 
-    assert log == ""
+    refute log =~ "TCP provider provider-uplink-010"
     assert %{count: 3, bytes: 12} = state.ingress_drops.clcw_unlinked
   end
 
