@@ -11,21 +11,50 @@ defmodule Cadence.Reads.DurableReceiptCache do
   (`fleet_durable_receipts_timeout_ms`, 3 s) answers `telemetry: :degraded`, kept for 5 s only, so
   a recovered store is picked up soon.
 
+  The answers live in an ETS table owned by this supervised process (a refresh is one `insert`;
+  `:persistent_term` would scan every process on each update, and these change every minute per
+  spacecraft viewed). A key nobody has read for ten times the TTL (at least ten minutes) is swept
+  away, so the table is bounded by what is being looked at, not by everything ever looked at.
+  Without the process (a unit test that does not start the application) every read asks the store.
+
   The caller's `fetch` returns `{:ok, receipts}` or an error; the cache answers
   `%{receipts: receipts, telemetry: :ok | :degraded}`.
   """
 
+  use GenServer
+
+  @table __MODULE__
   @durable_timeout_ms 3_000
   @durable_ttl_ms 60_000
   @degraded_ttl_ms 5_000
+  @sweep_ms 300_000
+  @min_keep_ms 600_000
 
   @type answer :: %{receipts: map(), telemetry: :ok | :degraded}
+
+  def start_link(opts \\ []), do: GenServer.start_link(__MODULE__, opts, name: __MODULE__)
+
+  @impl true
+  def init(_opts) do
+    :ets.new(@table, [:named_table, :public, :set, read_concurrency: true])
+    Process.send_after(self(), :sweep, @sweep_ms)
+    {:ok, %{}}
+  end
+
+  @impl true
+  def handle_info(:sweep, state) do
+    sweep(System.monotonic_time(:millisecond))
+    Process.send_after(self(), :sweep, @sweep_ms)
+    {:noreply, state}
+  end
+
+  def handle_info(_message, state), do: {:noreply, state}
 
   @spec get(term(), (-> {:ok, map()} | term())) :: answer()
   def get(key, fetch) when is_function(fetch, 0) do
     now = System.monotonic_time(:millisecond)
 
-    case {ttl_ms(), :persistent_term.get({__MODULE__, key}, nil)} do
+    case {ttl_ms(), lookup(key)} do
       {0, _cached} ->
         ask(fetch)
 
@@ -34,8 +63,39 @@ defmodule Cadence.Reads.DurableReceiptCache do
 
       {ttl, %{value: value} = cached} ->
         if expired?(cached, ttl, now), do: refresh(key, fetch, cached, now)
+        touch(key, now)
         value
     end
+  end
+
+  @doc "Forgets a key (tests)."
+  @spec forget(term()) :: :ok
+  def forget(key) do
+    if :ets.whereis(@table) != :undefined, do: :ets.delete(@table, key)
+    :ok
+  end
+
+  # An entry is `{key, at, read_at, refreshing_since, value}`: the times are updated in place (a
+  # read does not copy the receipts back into the table).
+  defp lookup(key) do
+    if :ets.whereis(@table) == :undefined do
+      nil
+    else
+      case :ets.lookup(@table, key) do
+        [{^key, at, read_at, refreshing_since, value}] ->
+          %{at: at, read_at: read_at, refreshing_since: refreshing_since, value: value}
+
+        [] ->
+          nil
+      end
+    end
+  end
+
+  defp store(key, %{at: at, read_at: read_at, refreshing_since: since, value: value}) do
+    if :ets.whereis(@table) != :undefined,
+      do: :ets.insert(@table, {key, at, read_at, since, value})
+
+    :ok
   end
 
   # A good answer lives the TTL; a degraded one (the store did not answer) only a few seconds.
@@ -43,14 +103,20 @@ defmodule Cadence.Reads.DurableReceiptCache do
   defp expired?(%{at: at}, ttl, now), do: now - at >= min(ttl, @degraded_ttl_ms)
 
   defp remember(value, key, now) do
-    :persistent_term.put({__MODULE__, key}, %{at: now, value: value, refreshing_since: nil})
+    store(key, %{at: now, read_at: now, value: value, refreshing_since: nil})
     value
+  end
+
+  # What was read last, for the sweep.
+  defp touch(key, now) do
+    if :ets.whereis(@table) != :undefined, do: :ets.update_element(@table, key, {3, now})
+    :ok
   end
 
   # One refresh at a time per key, off the read's path.
   defp refresh(key, fetch, cached, now) do
     unless is_integer(cached.refreshing_since) and now - cached.refreshing_since < 10_000 do
-      :persistent_term.put({__MODULE__, key}, %{cached | refreshing_since: now})
+      store(key, %{cached | refreshing_since: now})
 
       Task.start(fn ->
         fetch |> ask() |> remember(key, System.monotonic_time(:millisecond))
@@ -67,6 +133,14 @@ defmodule Cadence.Reads.DurableReceiptCache do
       {:ok, {:ok, receipts}} -> %{receipts: receipts, telemetry: :ok}
       _unavailable_or_slow -> %{receipts: %{}, telemetry: :degraded}
     end
+  end
+
+  defp sweep(now) do
+    keep = max(ttl_ms() * 10, @min_keep_ms)
+
+    :ets.select_delete(@table, [
+      {{:_, :_, :"$1", :_, :_}, [{:<, :"$1", now - keep}], [true]}
+    ])
   end
 
   defp ttl_ms, do: Application.get_env(:cadence, :fleet_durable_receipts_ttl_ms, @durable_ttl_ms)

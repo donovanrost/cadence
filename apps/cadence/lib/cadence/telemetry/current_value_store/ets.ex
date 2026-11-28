@@ -62,7 +62,7 @@ defmodule Cadence.Telemetry.CurrentValueStore.ETS do
       :ets.new(index_table_name(table_name), [
         :named_table,
         :public,
-        :bag,
+        :ordered_set,
         read_concurrency: true,
         write_concurrency: true
       ])
@@ -77,8 +77,10 @@ defmodule Cadence.Telemetry.CurrentValueStore.ETS do
     backend_opts |> Keyword.get(:table_name, @table_name) |> index_table_name()
   end
 
-  defp index_key({mission_id, scope_id, _point, _realm, _source, _binding} = key),
-    do: {{mission_id, scope_id}, key}
+  # An object is the 1-tuple of its key, `{{mission, scope}, key}`, so that the spacecraft's keys
+  # are a prefix range of the ordered set.
+  defp index_entry({mission_id, scope_id, _point, _realm, _source, _binding} = key),
+    do: {{{mission_id, scope_id}, key}}
 
   @impl true
   def record_samples(samples) when is_list(samples), do: record_samples(samples, [])
@@ -157,7 +159,7 @@ defmodule Cadence.Telemetry.CurrentValueStore.ETS do
     with :ok <- validate_replacement_scope(mission_id, point_id, sample) do
       table = ensure_table!(backend_opts)
       true = :ets.insert(table, {key(sample), sample})
-      true = :ets.insert(index_table(backend_opts), index_key(key(sample)))
+      true = :ets.insert(index_table(backend_opts), index_entry(key(sample)))
       note_receipt(backend_opts, sample)
       :ok
     end
@@ -196,7 +198,7 @@ defmodule Cadence.Telemetry.CurrentValueStore.ETS do
 
     Enum.each(samples, fn %Sample{} = sample ->
       true = :ets.insert(table, {key(sample), sample})
-      true = :ets.insert(index_table(backend_opts), index_key(key(sample)))
+      true = :ets.insert(index_table(backend_opts), index_entry(key(sample)))
       note_receipt(backend_opts, sample)
     end)
 
@@ -261,8 +263,8 @@ defmodule Cadence.Telemetry.CurrentValueStore.ETS do
 
     backend_opts
     |> index_table()
-    |> :ets.lookup({mission_id, scope_id})
-    |> Enum.flat_map(fn {_scope, {_m, _s, point_id, _r, _d, _b} = key} ->
+    |> :ets.select([{{{{mission_id, scope_id}, :"$1"}}, [], [:"$1"]}])
+    |> Enum.flat_map(fn {_m, _s, point_id, _r, _d, _b} = key ->
       with true <- member?(points, point_id),
            [{^key, sample}] <- :ets.lookup(table, key) do
         [{scope_id, sample}]
@@ -307,7 +309,7 @@ defmodule Cadence.Telemetry.CurrentValueStore.ETS do
     table = ensure_table!(backend_opts)
     true = :ets.match_delete(table, {{mission_id, :_, :_, :_, :_, :_}, :_})
     true = :ets.match_delete(receipts_table(backend_opts), {{mission_id, :_}, :_})
-    true = :ets.match_delete(index_table(backend_opts), {{mission_id, :_}, :_})
+    true = :ets.match_delete(index_table(backend_opts), {{{mission_id, :_}, :_}})
     :ok
   end
 
@@ -335,7 +337,7 @@ defmodule Cadence.Telemetry.CurrentValueStore.ETS do
 
       [] ->
         true = :ets.insert(table, {key, sample})
-        true = :ets.insert(index, index_key(key))
+        true = :ets.insert(index, index_entry(key))
     end
   end
 

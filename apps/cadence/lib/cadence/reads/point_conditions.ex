@@ -19,7 +19,8 @@ defmodule Cadence.Reads.PointConditions do
   store's, which is node-local: correct on the node that owns the spacecraft's partition, empty on
   another. It is merged with the durable history store's per-point receipts
   (`DurableReceiptCache`, as Fleet does for spacecraft), so a node that does not own the
-  spacecraft still knows when it was last heard. Only a point neither knows is `:unknown` when the
+  spacecraft still knows when it was last heard. In production the history is QuestDB (`LATEST ON`
+  per point); the Postgres sample store answers in dev and test only. Only a point neither knows is `:unknown` when the
   history store did not answer (`telemetry: :degraded`) and `:stale` when it did (never sampled).
 
   **Order and paging.** By the point's worst rank (critical, caution, stale, everything else),
