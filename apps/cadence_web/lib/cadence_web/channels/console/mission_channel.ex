@@ -150,7 +150,7 @@ defmodule CadenceWeb.Console.MissionChannel do
   def handle_info(:fleet_snapshot = message, socket),
     do: {:noreply, FleetPush.handle(message, socket)}
 
-  def handle_info({:fleet_loaded, _shared, _heard_due?} = message, socket),
+  def handle_info({:fleet_loaded, _shared, _commands, _heard_due?} = message, socket),
     do: {:noreply, FleetPush.handle(message, socket)}
 
   def handle_info({:DOWN, _ref, :process, _pid, _reason} = message, socket),
