@@ -319,7 +319,7 @@ defmodule Cadence.SemanticRuntime do
     scoped_latest = scoped_latest(state.latest, scope)
 
     index
-    |> PlanIndex.monitoring_for(update.parameter_id)
+    |> PlanIndex.monitoring_for(update.parameter_id, Scope.spacecraft_id(scope))
     |> Enum.reduce({result, state}, fn plan, {%Result{} = acc_result, %State{} = acc_state} ->
       state_key = Scope.state_key(scope, plan.policy_id)
       prior = Map.get(acc_state.monitoring_state, state_key, %{})

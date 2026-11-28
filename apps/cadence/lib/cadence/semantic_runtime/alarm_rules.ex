@@ -14,7 +14,14 @@ defmodule Cadence.SemanticRuntime.AlarmRules do
   evaluated or replayed under; recovered commits are scoped to its `runtime_basis_sha256`.
   """
 
-  alias Cadence.SemanticRuntime.{AlarmLevel, MonitoringEvaluator, PlanDecoder, Result}
+  alias Cadence.SemanticRuntime.{
+    AlarmLevel,
+    MonitoringEvaluator,
+    MonitoringPlan,
+    PlanDecoder,
+    Result,
+    Scope
+  }
 
   @spec for_result(map(), Result.t() | nil) :: %{optional({binary(), binary()}) => map()}
   def for_result(runtime_plans, %Result{monitoring_results: results} = result)
@@ -35,10 +42,20 @@ defmodule Cadence.SemanticRuntime.AlarmRules do
         plan = Map.get(plans, monitoring.policy_id),
         update = Map.get(updates, monitoring.update_id),
         not is_nil(plan) and not is_nil(update),
-        match = MonitoringEvaluator.matched_rule(plan, update, monitoring.matched_context),
+        match =
+          MonitoringEvaluator.matched_rule(
+            running(plan, update),
+            update,
+            monitoring.matched_context
+          ),
         not is_nil(match),
         into: %{},
         do: {{monitoring.policy_id, monitoring.update_id}, match}
+  end
+
+  # The plan as the update's spacecraft ran it (its effective compiled rules, #451 T2).
+  defp running(plan, update) do
+    MonitoringPlan.effective(plan, update |> Scope.from_update() |> Scope.spacecraft_id())
   end
 
   # Only the monitoring plan: the algorithms aren't needed to name a rule.

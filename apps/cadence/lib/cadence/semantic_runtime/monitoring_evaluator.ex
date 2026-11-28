@@ -129,8 +129,13 @@ defmodule Cadence.SemanticRuntime.MonitoringEvaluator do
 
   defp severity(rule), do: rule |> value(:severity, :warning) |> normalize_atom()
 
+  # A compiled rule carries its own id, stable across edits (#451); an older rule is named by a
+  # hash of its content.
   defp rule_id(rule) do
-    "rule:" <> String.slice(Canonical.sha256(canonical(rule)), 0, 16)
+    case value(rule, :rule_id) do
+      id when is_binary(id) and id != "" -> id
+      _none -> "rule:" <> String.slice(Canonical.sha256(canonical(rule)), 0, 16)
+    end
   end
 
   # Keys and atoms as strings, so atom- and string-keyed copies of a rule hash alike.

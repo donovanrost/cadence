@@ -62,11 +62,22 @@ defmodule Cadence.SemanticRuntime.PlanIndex do
   @spec empty?(t()) :: boolean()
   def empty?(%__MODULE__{empty?: empty?}), do: empty?
 
-  @spec monitoring_for(t(), binary()) :: [MonitoringPlan.t()]
-  def monitoring_for(%__MODULE__{table: nil, monitoring: monitoring}, parameter_id),
+  @doc """
+  The monitoring plans of a parameter as `spacecraft_id` runs them: the compiled rule rows resolved
+  to that spacecraft's effective rules (`MonitoringPlan.effective/2`); plans without rule rows as
+  they are.
+  """
+  @spec monitoring_for(t(), binary(), binary() | nil) :: [MonitoringPlan.t()]
+  def monitoring_for(index, parameter_id, spacecraft_id \\ nil) do
+    index
+    |> monitoring_rows(parameter_id)
+    |> Enum.map(&MonitoringPlan.effective(&1, spacecraft_id))
+  end
+
+  defp monitoring_rows(%__MODULE__{table: nil, monitoring: monitoring}, parameter_id),
     do: Map.get(monitoring, parameter_id, [])
 
-  def monitoring_for(%__MODULE__{table: table, plan_id: plan_id}, parameter_id),
+  defp monitoring_rows(%__MODULE__{table: table, plan_id: plan_id}, parameter_id),
     do: lookup(table, {plan_id, :monitoring, parameter_id})
 
   @doc "The algorithms that read `parameter_id` as an input (the caller applies their triggers)."
