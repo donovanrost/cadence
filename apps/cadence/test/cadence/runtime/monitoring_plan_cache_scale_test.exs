@@ -9,7 +9,7 @@ defmodule Cadence.Runtime.MonitoringPlanCacheScaleTest do
 
   @moduletag :scale
 
-  alias Cadence.Catalog.MissionModel.{Expression, RuntimePlan}
+  alias Cadence.Catalog.MissionModel.{Canonical, Expression, RuntimePlan}
   alias Cadence.Runtime.MonitoringPlanCache
   alias Cadence.SemanticRuntime
   alias Cadence.SemanticRuntime.{PlanDecoder, State, Update}
@@ -176,7 +176,7 @@ defmodule Cadence.Runtime.MonitoringPlanCacheScaleTest do
       definition: %{kind: :comparison, operator: :>, value: above}
     }
 
-    Map.put(row, :rule_digest, Cadence.Catalog.MissionModel.Canonical.sha256(row))
+    Map.put(row, :rule_digest, Canonical.sha256(row))
   end
 
   defp craft_batch(n) do
