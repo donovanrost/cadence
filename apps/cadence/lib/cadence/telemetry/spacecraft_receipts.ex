@@ -25,6 +25,27 @@ defmodule Cadence.Telemetry.SpacecraftReceipts do
     end
   end
 
+  @doc """
+  Durable "last heard" per point of one spacecraft (`%{point_id => DateTime}`), the same stores and
+  fallbacks as `latest_by_spacecraft/3` (#143).
+  """
+  @spec latest_by_point(binary(), binary(), binary(), keyword()) ::
+          {:ok, %{binary() => DateTime.t()}} | {:error, term()}
+  def latest_by_point(organization_id, mission_id, spacecraft_id, opts \\ []) do
+    policy = Keyword.get_lazy(opts, :policy, &HistoryStore.configured_policy/0)
+
+    case policy.backend do
+      HistoryStore.QuestDB ->
+        questdb_points(organization_id, mission_id, spacecraft_id, policy.backend_opts)
+
+      HistoryStore.Postgres ->
+        {:ok, SampleRecords.latest_receipts_by_point(organization_id, mission_id, spacecraft_id)}
+
+      _other ->
+        {:error, :unsupported}
+    end
+  end
+
   defp questdb(organization_id, mission_id, backend_opts) do
     sql = """
     SELECT spacecraft_id, receipt_time
@@ -35,6 +56,24 @@ defmodule Cadence.Telemetry.SpacecraftReceipts do
     LATEST ON observed_at PARTITION BY spacecraft_id
     """
 
+    receipts(sql, "spacecraft_id", backend_opts)
+  end
+
+  defp questdb_points(organization_id, mission_id, spacecraft_id, backend_opts) do
+    sql = """
+    SELECT point_id, receipt_time
+    FROM telemetry_observations
+    WHERE mission_id = #{SQL.literal(mission_id)}
+      AND organization_id = #{SQL.literal(organization_id)}
+      AND spacecraft_id = #{SQL.literal(spacecraft_id)}
+      AND realm = 'flight'
+    LATEST ON observed_at PARTITION BY point_id
+    """
+
+    receipts(sql, "point_id", backend_opts)
+  end
+
+  defp receipts(sql, key_column, backend_opts) do
     with {:ok, %{"columns" => columns, "dataset" => rows}} <- RestClient.exec(sql, backend_opts) do
       names = Enum.map(columns, & &1["name"])
 
@@ -42,7 +81,7 @@ defmodule Cadence.Telemetry.SpacecraftReceipts do
        rows
        |> Enum.map(&Map.new(Enum.zip(names, &1)))
        |> Enum.flat_map(fn
-         %{"spacecraft_id" => id, "receipt_time" => at} when is_binary(id) and is_binary(at) ->
+         %{^key_column => id, "receipt_time" => at} when is_binary(id) and is_binary(at) ->
            case DateTime.from_iso8601(at) do
              {:ok, datetime, _offset} -> [{id, datetime}]
              _invalid -> []

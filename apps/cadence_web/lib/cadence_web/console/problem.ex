@@ -203,6 +203,7 @@ defmodule CadenceWeb.Console.Problem do
     already_invited: {409, "That person already has a pending invitation."},
     member_not_found: {404, "That person isn't a member of this organization."},
     invitation_not_found: {404, "That invitation isn't pending (accepted, revoked or expired)."},
+    notice_not_found: {404, "That notice isn't yours or no longer exists."},
     invitation_not_pending:
       {409, "That invitation was already answered, revoked or has expired."},
     service_identity_not_found: {404, "That service identity isn't active in this organization."},

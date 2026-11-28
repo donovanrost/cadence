@@ -17,6 +17,7 @@ const session: Session = {
   admin_mode: true,
   admin_mode_expires_at: new Date(Date.now() + 30 * 60_000).toISOString(),
   pending_invitations_count: null,
+  unread_notices_count: 0,
 };
 afterEach(() => seedAdminMode({ ...session, admin_mode: false, admin_mode_expires_at: null }));
 
