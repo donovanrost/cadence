@@ -114,7 +114,7 @@ test("plain remote links and query changes use the same host navigation", () => 
 test.each([
   ["https://other.test/missions", "", {}, undefined],
   ["/session", "", {}, undefined],
-  ["/missions/m-1/applications/comms/overview", "", {}, undefined],
+  ["/missions/m-1/applications/spacecraft/list", "", {}, undefined],
   ["/missions", 'target="_blank"', {}, undefined],
   ["/missions", "download", {}, undefined],
   ["/missions", "", { ctrlKey: true }, undefined],

@@ -25,8 +25,7 @@ defmodule Cadence.Configuration.Submission do
     Pipeline,
     Preview,
     ReviewRecord,
-    ReviewRow,
-    Staging
+    ReviewRow
   }
 
   alias Cadence.Governance.{Accountability, ActivationLocks, ActivationPolicy}
@@ -47,7 +46,7 @@ defmodule Cadence.Configuration.Submission do
          :ok <- state(set, "open"),
          :ok <- expected(set, params),
          {:ok, preview} <- checks(organization_id, set, params) do
-      policy = policy(organization_id, mission_id, set)
+      policy = ActivationPolicy.evidence(organization_id, mission_id)
       # #261: what this request writes, decided before its transaction (api-ops: ids, not clocks).
       proof = %{
         actor: actor,
@@ -538,16 +537,6 @@ defmodule Cadence.Configuration.Submission do
 
   defp failure_document(reason), do: %{"reason" => to_string(reason)}
 
-  # A legacy route conversion batch always goes to review, so its stager can't apply it
-  # (reviewer_is_author does the refusing; director 11-16).
-  defp policy(organization_id, mission_id, set) do
-    evidence = ActivationPolicy.evidence(organization_id, mission_id)
-
-    if Enum.any?(ChangeSetStore.changes(set.change_set_id), &Staging.conversion?(&1.source)),
-      do: ActivationPolicy.forced_approval(evidence, "legacy_route_conversion"),
-      else: evidence
-  end
-
   @doc """
   Why `viewer` can't review (approve or send back) the set, before they try: `:reviewer_is_author`
   when the set needs approval and they submitted it or authored any of its changes (the same test
@@ -567,9 +556,8 @@ defmodule Cadence.Configuration.Submission do
 
   @doc """
   Whether submitting `change_set_id` asks for a second person's approval (Request review) rather
-  than applying: the set's recorded policy once submitted, else the mission's, with a legacy route
-  conversion's forced approval. The same decision the submit makes, so the console's words for a
-  refused submit name the right act (fe-setup on #555).
+  than applying: the set's recorded policy once submitted, else the mission's. This matches the
+  submit decision so the console can name the action when submission is refused (fe-setup on #555).
 
   It doesn't authorize (api-ops): only for wording a submit the caller already authorized, never
   as a read.
@@ -584,8 +572,11 @@ defmodule Cadence.Configuration.Submission do
 
   defp needs_approval?(organization_id, set) do
     case set.policy_document do
-      %{"approval_required" => required} -> required
-      _not_submitted -> policy(organization_id, set.mission_id, set)["approval_required"]
+      %{"approval_required" => required} ->
+        required
+
+      _not_submitted ->
+        ActivationPolicy.evidence(organization_id, set.mission_id)["approval_required"]
     end
   end
 

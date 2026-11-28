@@ -13,7 +13,6 @@ defmodule CadenceWeb.Console.ConfigController do
     Activations,
     Configuration,
     ConfigurationRollback,
-    LegacyRouteConversion,
     SpacecraftOps
   }
 
@@ -100,8 +99,7 @@ defmodule CadenceWeb.Console.ConfigController do
 
   # mms-ux (for ca-ux): a submit's refusals name its act. Under 'needs a second person's approval'
   # the button is Request review, so the server-worded refusals open "Not sent for review:". The
-  # act is the submit's own decision, a legacy route conversion's forced approval included
-  # (fe-setup on #555), not a second read of the mission's setting.
+  # act is decided by the submit policy for this change set.
   defp submit_act(conn, change_set_id) do
     if Configuration.needs_approval?(scope(conn), mission_id(conn), change_set_id),
       do: :request_review,
@@ -241,15 +239,7 @@ defmodule CadenceWeb.Console.ConfigController do
     )
   end
 
-  # ux U79: who may review it, and (TEMPORARY, removed with 9ac6dc8ee) whether it holds a legacy
-  # route conversion batch.
-  defp annotate(_conn, nil), do: nil
-
-  defp annotate(conn, %{id: id} = set) do
-    scope(conn)
-    |> ChangeSetViewer.annotate(mission_id(conn), set)
-    |> Map.put(:legacy_conversion, LegacyRouteConversion.change_set_batch(mission_id(conn), id))
-  end
+  defp annotate(conn, set), do: ChangeSetViewer.annotate(scope(conn), mission_id(conn), set)
 
   defp ok(conn, data), do: {:sent, json(conn, %{data: ConfigJSON.encode(data)})}
 

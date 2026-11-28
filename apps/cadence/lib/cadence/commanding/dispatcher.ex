@@ -66,6 +66,28 @@ defmodule Cadence.Commanding.Dispatcher do
     end
   end
 
+  @doc """
+  Wakes the lanes of a group after its transaction committed, and returns at once (#1041): one
+  message for the whole group, not a drain per lane inside the request. Send it only AFTER the
+  commit (the rows must be visible). If it is lost (the dispatcher down or restarting), nothing
+  is: every lane with a pending entry gets its own dispatcher when the dispatcher boots and on
+  its safety reconcile (`#{@default_safety_poll_interval_ms} ms`), and each lane re-polls itself.
+  """
+  @spec kick_lanes(ProcessNamespace.t(), binary(), binary(), [binary()]) :: :ok
+  def kick_lanes(%ProcessNamespace{} = process_namespace, organization_id, mission_id, lanes)
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(lanes) do
+    case GenServer.whereis(process_namespace.dispatcher) do
+      pid when is_pid(pid) ->
+        GenServer.cast(
+          pid,
+          {:kick_lanes, organization_id, mission_id, lanes |> Enum.uniq() |> Enum.sort()}
+        )
+
+      nil ->
+        :ok
+    end
+  end
+
   @spec drain_lane(binary(), binary(), binary(), keyword()) ::
           {:ok, LaneDispatcher.drain_summary()} | {:error, term()}
   def drain_lane(organization_id, mission_id, queue_lane_key),
@@ -135,6 +157,30 @@ defmodule Cadence.Commanding.Dispatcher do
     end
   end
 
+  defp kick_owned_lane(state, organization_id, mission_id, queue_lane_key) do
+    with :ok <-
+           DispatchSupervisor.ensure_lane_dispatcher_started(
+             state.process_namespace,
+             organization_id,
+             mission_id,
+             queue_lane_key,
+             state.lane_dispatcher_opts
+             |> Keyword.put(:safety_poll_interval_ms, state.lane_safety_poll_interval_ms)
+             |> Keyword.put(:run_on_boot?, false)
+           ),
+         {:ok, lane_dispatcher} <-
+           DispatchSupervisor.lane_dispatcher(
+             state.process_namespace,
+             organization_id,
+             mission_id,
+             queue_lane_key
+           ) do
+      LaneDispatcher.notify(lane_dispatcher)
+    else
+      _unavailable -> :ok
+    end
+  end
+
   @impl true
   def init(opts) do
     state = %{
@@ -186,6 +232,12 @@ defmodule Cadence.Commanding.Dispatcher do
       ) do
     result = drain_owned_lane(state, organization_id, mission_id, queue_lane_key, opts)
     {:reply, result, state}
+  end
+
+  @impl true
+  def handle_cast({:kick_lanes, organization_id, mission_id, lanes}, state) do
+    Enum.each(lanes, &kick_owned_lane(state, organization_id, mission_id, &1))
+    {:noreply, state}
   end
 
   @impl true

@@ -14,18 +14,6 @@ const frontend = new URL("../../../../", import.meta.url);
  * baseline too, which is allowed only in a deletion batch's own commit (legacy-deletion.md).
  */
 const RETAINED_BASELINE = [
-  "/missions/:mission_id/comms",
-  "/missions/:mission_id/comms/ground-stations",
-  "/missions/:mission_id/comms/ground-stations/:ground_station_id",
-  "/missions/:mission_id/comms/ground-stations/:ground_station_id/edit",
-  "/missions/:mission_id/comms/ground-stations/new",
-  "/missions/:mission_id/comms/routing",
-  "/missions/:mission_id/comms/routing/:routing_rule_id",
-  "/missions/:mission_id/comms/routing/new",
-  "/missions/:mission_id/comms/transports",
-  "/missions/:mission_id/comms/transports/:transport_id",
-  "/missions/:mission_id/comms/transports/new",
-  "/missions/:mission_id/comms/validation",
   "/missions/:mission_id/settings",
   "/missions/:mission_id/settings/:section_id",
 ] as const;

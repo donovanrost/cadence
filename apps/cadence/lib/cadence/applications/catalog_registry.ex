@@ -6,10 +6,8 @@ defmodule Cadence.Applications.CatalogRegistry do
   alias Cadence.Applications.{
     ApplicationDefinition,
     CatalogContribution,
-    Comms,
     DerivedTelemetry,
     JSONBoundary,
-    LegacyCommsOverview,
     Limits,
     OpsConsole,
     TelemetryDecomCatalogContribution
@@ -17,8 +15,6 @@ defmodule Cadence.Applications.CatalogRegistry do
 
   @max_contributions 64
   @contributors [
-    Comms,
-    LegacyCommsOverview,
     Limits,
     TelemetryDecomCatalogContribution,
     OpsConsole,

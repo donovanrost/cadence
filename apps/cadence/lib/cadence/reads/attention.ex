@@ -63,7 +63,59 @@ defmodule Cadence.Reads.Attention do
     WithdrawnApproval,
     ProviderEphemeris
   ]
+
+  # Runtime outages may suggest a next pass, but attach to the mission. Apply failures
+  # attach to an activation, expiry to a command group, and coverage to a UTC day.
+  # Withdrawn approvals attach to spacecraft, and ephemeris findings to provider groups.
+  # Pass-specific provider changes follow the other sources to preserve display order on a tie.
+  @pass_sources @sources --
+                  [
+                    MissionRuntime,
+                    ActivationApply,
+                    ExpiredGroup,
+                    PlanCoverage,
+                    WithdrawnApproval,
+                    ProviderEphemeris,
+                    ProviderChange
+                  ]
   @resolved_window_s 60
+
+  @doc """
+  Open and acknowledged items for the given pass rows. Includes provider changes after
+  the pass ends and blocked uplinks matched by scheduled contact for readiness.
+  """
+  @spec for_passes(Scope.t(), binary(), [map()]) :: {:ok, [map()]} | {:error, term()}
+  def for_passes(%Scope{}, _mission_id, []), do: {:ok, []}
+
+  def for_passes(%Scope{} = scope, mission_id, passes) do
+    with :ok <- authorize(scope, mission_id) do
+      reservations = MapSet.new(passes, & &1.id)
+
+      contacts =
+        MapSet.new(
+          for pass <- passes, is_binary(pass.scheduled_contact_id), do: pass.scheduled_contact_id
+        )
+
+      org = scope.organization_id
+
+      items =
+        for source <- @pass_sources ++ [ProviderChange],
+            item <- pass_items(source, org, mission_id),
+            attached_to_pass?(source, item, reservations, contacts),
+            do: item
+
+      {:ok, items}
+    end
+  end
+
+  defp pass_items(ProviderChange, org, mission_id), do: ProviderChange.pass_items(org, mission_id)
+  defp pass_items(source, org, mission_id), do: source.items(org, mission_id)
+
+  defp attached_to_pass?(UplinkBlocked, item, _reservations, contacts),
+    do: MapSet.member?(contacts, item.contact_id)
+
+  defp attached_to_pass?(_source, item, reservations, _contacts),
+    do: MapSet.member?(reservations, Map.get(item, :provider_reservation_id))
 
   @doc """
   `{items, resolved, counts}`: open and acknowledged items, those resolved in the last 60 s

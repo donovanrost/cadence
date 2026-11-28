@@ -138,7 +138,7 @@ standard; changing type aliases while leaving assertions in callers is insuffici
 Own [first-party-remote-workspace.mjs](../tools/first-party-remote-workspace.mjs), its tests,
 the root publication/release tools and their contract tests, and the host plus six approved
 remotes' federation/publication configs. The remote owners are `organization-admin`,
-`mission-catalog`, `spacecraft`, `telemetry-decom`, `comms-overview`, and `ops-console`.
+`mission-catalog`, `spacecraft`, `telemetry-decom`, and `ops-console`.
 
 Give each publication an explicit descriptor for its remote name and bundle; keep its package
 name authoritative in `package.json`. Use one checked reader from both discovery and build

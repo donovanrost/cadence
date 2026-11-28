@@ -82,6 +82,53 @@ defmodule Cadence.Reads.MissionModels.ActiveBasis do
 
   def for_target(snapshot, _target), do: {:ok, snapshot}
 
+  @doc """
+  `for_target/2` for many targets: `%{source_endpoint_id => {:ok, snapshot} | {:error, reason}}`.
+  On a fleet activation the entries are one read, and each distinct model is loaded and its
+  catalog decoded once, not once per target.
+  """
+  def for_targets(%{activation: %{metadata: metadata} = activation} = snapshot, targets) do
+    ids = Enum.map(targets, & &1.source_endpoint_id)
+
+    if FleetSnapshot.fleet?(metadata) do
+      bases = SpacecraftModelBindings.command_bases(activation, ids)
+
+      catalogs =
+        bases
+        |> Map.values()
+        |> Enum.flat_map(fn
+          {:ok, basis} -> [basis]
+          {:error, _reason} -> []
+        end)
+        |> Enum.uniq_by(&{&1.mission_model_revision_id, &1.mission_model_content_sha256})
+        |> Map.new(
+          &{{&1.mission_model_revision_id, &1.mission_model_content_sha256},
+           MissionModelPlanDecoder.command_authoring_catalog(&1.runtime_plans)}
+        )
+
+      Map.new(ids, fn id ->
+        {id, with_catalog(snapshot, Map.fetch!(bases, id), catalogs)}
+      end)
+    else
+      Map.new(ids, &{&1, {:ok, snapshot}})
+    end
+  end
+
+  def for_targets(snapshot, targets),
+    do: Map.new(targets, &{&1.source_endpoint_id, {:ok, snapshot}})
+
+  defp with_catalog(_snapshot, {:error, reason}, _catalogs), do: {:error, reason}
+
+  defp with_catalog(snapshot, {:ok, basis}, catalogs) do
+    case Map.fetch!(
+           catalogs,
+           {basis.mission_model_revision_id, basis.mission_model_content_sha256}
+         ) do
+      {:ok, catalog} -> {:ok, %{snapshot | basis: basis, catalog: catalog}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
   defp target_basis(snapshot, activation, target) do
     with {:ok, basis} <-
            SpacecraftModelBindings.command_basis(

@@ -241,7 +241,7 @@ export interface GateOptions {
   clientCreationTimeout?: number;
 }
 
-export type ApplicationKey = "comms" | "telemetry_decom" | "ops_console" | "organization_admin";
+export type ApplicationKey = "telemetry_decom" | "ops_console";
 export interface SurfaceOptions {
   client: import("./cdp-contract").CdpPort;
   diagnostics: ReturnType<typeof import("./federation_browser_smoke.mjs").installDiagnostics>;
@@ -261,12 +261,3 @@ export interface SurfaceOptions {
   navigateSurface?: boolean;
   existingGeneration?: GenerationSelection;
 }
-export type RepresentativeOptions = Omit<SurfaceOptions, "url" | "queryVersion"> & {
-  args: string[];
-  argName: string;
-  expectedPath: string;
-};
-export type RepresentativeConfig = Omit<
-  RepresentativeOptions,
-  "client" | "diagnostics" | "signal" | "args" | "expectedOrigin"
->;

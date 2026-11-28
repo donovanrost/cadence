@@ -67,19 +67,27 @@ const episodeFields = {
 const episode = d.object(episodeFields);
 export type Episode = Decoded<typeof episode>;
 
-const event = d.object({
+/**
+ * An episode's event kinds (alarms-console.md). Read with knownText (rule 3), so a kind this console
+ * doesn't know reads as a neutral line with the server's word, never failing the whole episode.
+ */
+export const episodeEventKinds = [
+  "raised",
+  "escalated",
+  "deescalated",
+  "acknowledged",
+  "assigned",
+  "unassigned",
+  "note",
+  "handed_off",
+  "cleared",
+  // #451 (#1072): the rules in force on the alarm's parameter changed while it was open.
+  "rule_changed",
+] as const;
+
+export const episodeEventReader = d.object({
   id: d.token,
-  kind: d.oneOf([
-    "raised",
-    "escalated",
-    "deescalated",
-    "acknowledged",
-    "assigned",
-    "unassigned",
-    "note",
-    "handed_off",
-    "cleared",
-  ] as const),
+  kind: d.knownText(episodeEventKinds),
   actor: d.nullable(actor),
   at: d.timestamp,
   /** U68 R5: the sample a source record's event was caused by; null for people's actions. */
@@ -95,9 +103,9 @@ const event = d.object({
   // Kind-specific; read per kind in episodeEventText, never trusted as a whole.
   payload: (value: unknown) => (value !== null && typeof value === "object" ? value : {}),
 });
-export type EpisodeEvent = Decoded<typeof event>;
+export type EpisodeEvent = Decoded<typeof episodeEventReader>;
 
-const episodeDetail = d.object({ ...episodeFields, events: d.array(event, 2_000) });
+const episodeDetail = d.object({ ...episodeFields, events: d.array(episodeEventReader, 2_000) });
 export type EpisodeDetail = Decoded<typeof episodeDetail>;
 
 export const ALARM_PERMISSIONS = ["alarm.acknowledge", "alarm.assign"] as const;

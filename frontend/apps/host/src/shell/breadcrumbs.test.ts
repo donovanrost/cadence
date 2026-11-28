@@ -7,20 +7,19 @@ const context = {
   spacecraft: { display_name: "KST-1" },
 };
 
-test("a record's trail links back through its section and list", () => {
+test("a record's trail links back to its list", () => {
   expect(
     breadcrumbTrail(
-      { path: "/missions/:mission_id/comms/transports/:transport_id", scope: "mission" },
-      "/missions/m1/comms/transports/t1",
+      { path: "/missions/:mission_id/ops/contacts/records/:contact_id", scope: "mission" },
+      "/missions/m1/ops/contacts/records/c1",
       context,
-      "Transport",
+      "Contact Record",
     ),
   ).toEqual([
     { label: "Flight Operations", href: "/" },
     { label: "Kestrel", href: "/missions/m1" },
-    { label: "Comms", href: "/missions/m1/comms" },
-    { label: "Transports", href: "/missions/m1/comms/transports" },
-    { label: "Transport" },
+    { label: "Contact Schedule", href: "/missions/m1/ops/contacts" },
+    { label: "Contact Record" },
   ]);
 });
 
@@ -29,10 +28,10 @@ test("records above the page are left out; the spacecraft is named by context", 
     breadcrumbTrail({ path: pattern, scope: "mission" }, path, context, "Page").map((c) => c.label);
   expect(
     labels(
-      "/missions/:mission_id/comms/ground-stations/:ground_station_id/edit",
-      "/missions/m1/comms/ground-stations/g1/edit",
+      "/missions/:mission_id/ops/contacts/records/:contact_id/edit",
+      "/missions/m1/ops/contacts/records/c1/edit",
     ),
-  ).toEqual(["Flight Operations", "Kestrel", "Comms", "Ground Stations", "Page"]);
+  ).toEqual(["Flight Operations", "Kestrel", "Contact Schedule", "Page"]);
   expect(
     labels(
       "/missions/:mission_id/spacecraft/:spacecraft_id/applications/:application_key/:surface_id",

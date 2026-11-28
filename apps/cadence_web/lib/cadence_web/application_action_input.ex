@@ -12,20 +12,6 @@ defmodule CadenceWeb.ApplicationActionInput do
 
   defp normalize(
          %{
-           "applicationKey" => "ops_console",
-           "applicationVersion" => 1,
-           "surfaceId" => "contact_schedule",
-           "surfaceVersion" => 1
-         } = params
-       ) do
-    case JSONBoundary.safe(params) do
-      {:ok, _} = safe -> safe
-      _ -> if reserve?(params), do: capability_input(params), else: JSONBoundary.safe(params)
-    end
-  end
-
-  defp normalize(
-         %{
            "applicationKey" => "derived_telemetry",
            "applicationVersion" => 1,
            "surfaceId" => "manage",
@@ -74,44 +60,4 @@ defmodule CadenceWeb.ApplicationActionInput do
       _ -> {:error, :application_surface_bounds_exceeded}
     end
   end
-
-  defp reserve?(%{"actionId" => action}), do: action == "reserve"
-  defp reserve?(%{"operation" => "reserve", "operationVersion" => 1}), do: true
-  defp reserve?(_), do: false
-
-  defp capability_input(params) do
-    with {:ok, fields} <- capability_fields(params),
-         {:ok, normalized} <- JSONBoundary.safe(Map.drop(params, Map.keys(fields))),
-         result = Map.merge(normalized, fields),
-         {:ok, encoded} <- Jason.encode(result),
-         true <- byte_size(encoded) <= 65_536 do
-      {:ok, result}
-    else
-      _ -> {:error, :application_surface_bounds_exceeded}
-    end
-  end
-
-  defp capability_fields(params) do
-    fields = Map.take(params, ~w(input params))
-
-    with [input] <- fields |> Map.values() |> Enum.uniq(),
-         :ok <- capability_value(input),
-         do: {:ok, fields},
-         else: (_ -> {:error, :invalid_application_request})
-  end
-
-  defp capability_value(%{"token" => token} = input)
-       when map_size(input) == 1 and is_binary(token) and byte_size(token) in 1..8192 do
-    if String.valid?(token), do: :ok, else: {:error, :string}
-  end
-
-  defp capability_value(
-         %{"contract_version" => 2, "operation_id" => id, "payload" => %{"token" => _} = payload} =
-           input
-       )
-       when map_size(input) == 3 do
-    with {:ok, ^id} <- Ecto.UUID.cast(id), do: capability_value(payload)
-  end
-
-  defp capability_value(_), do: {:error, :invalid_application_request}
 end

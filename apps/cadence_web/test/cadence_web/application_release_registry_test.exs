@@ -18,7 +18,7 @@ defmodule CadenceWeb.ApplicationReleaseRegistryTest do
              ApplicationReleaseRegistry.all()
 
     assert {:error, {:integrity_failure, :invalid_snapshot_clock}} =
-             ApplicationReleaseRegistry.fetch("comms_overview", 1, "overview", 1)
+             ApplicationReleaseRegistry.fetch("telemetry_decom", 1, "packet_bindings", 1)
   end
 
   test "accepts canonical Z clocks and rejects pre-epoch, offset, malformed, and bad options" do
@@ -59,44 +59,7 @@ defmodule CadenceWeb.ApplicationReleaseRegistryTest do
              ApplicationReleaseRegistry.all([:not_a_keyword])
 
     assert {:error, {:integrity_failure, :invalid_snapshot_options}} =
-             ApplicationReleaseRegistry.fetch("comms_overview", 1, "overview", 1, %{})
-  end
-
-  test "keys the checked-in Comms release by application and surface versions" do
-    assert {:ok, release} =
-             ApplicationReleaseRegistry.fetch("comms_overview", 1, "overview", 1, now: @now)
-
-    assert release == %{
-             federation: :module_federation,
-             release_id: "comms-overview-v1",
-             remote_name: "cadence_comms",
-             manifest_path: "/assets/application-host/comms/mf-manifest.json",
-             exposed_module: "./LegacyApplication"
-           }
-  end
-
-  test "advertises the canonical Comms release for every admitted surface" do
-    surfaces =
-      ~w(overview validation transports transport routing routing_detail ground_stations ground_station)
-
-    Enum.each(surfaces, fn surface_id ->
-      assert {:ok, release} =
-               ApplicationReleaseRegistry.fetch("comms", 1, surface_id, 1, now: @now)
-
-      assert release == %{
-               federation: :module_federation,
-               release_id: "comms-v1",
-               remote_name: "cadence_comms",
-               manifest_path: "/assets/application-host/comms/mf-manifest.json",
-               exposed_module: "./Application"
-             }
-    end)
-
-    assert Enum.any?(ApplicationReleaseRegistry.all(now: @now), fn {{application_key, _version,
-                                                                     _surface, _surface_version},
-                                                                    _release} ->
-             application_key == "comms"
-           end)
+             ApplicationReleaseRegistry.fetch("telemetry_decom", 1, "packet_bindings", 1, %{})
   end
 
   test "advertises the checked-in telemetry packet bindings release coordinate" do
@@ -139,7 +102,7 @@ defmodule CadenceWeb.ApplicationReleaseRegistryTest do
              ApplicationReleaseRegistry.snapshot(now: @now)
   end
 
-  # The fixture builds and validates three production remotes before packaging both generations.
+  # The fixture builds and validates both production remotes before packaging both generations.
   # It needs the federation publication output (pnpm run build:publication), so CI runs it in a
   # job that builds that output (`--only frontend_publication`) and excludes it elsewhere.
   @tag timeout: 120_000
@@ -171,9 +134,7 @@ defmodule CadenceWeb.ApplicationReleaseRegistryTest do
 
     accepted = ApplicationReleaseRegistry.snapshot(now: fixture.now)
     assert {:ok, %{source: :database, entries: entries}} = accepted
-    # comms, telemetry_decom and ops_console: #709 removed organization_admin (its only surface
-    # was the notifications bell) and #671 mission_catalog and spacecraft.
-    assert length(entries) == 3
+    assert length(entries) == 2
 
     accepted_control =
       Repo.query!("""

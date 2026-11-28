@@ -7,7 +7,6 @@ defmodule CadenceWeb.ApplicationHostBridgeTest do
     ApplicationDefinition,
     ApplicationInstallations,
     HostContext,
-    JSONBoundary,
     SurfaceDefinition
   }
 
@@ -190,58 +189,6 @@ defmodule CadenceWeb.ApplicationHostBridgeTest do
                route_context,
                params,
                "bridge-legacy-surface",
-               now: @now
-             )
-  end
-
-  test "host admission and idempotency preserve the bounded opaque reserve token" do
-    user = TestFixtures.persist_user!()
-    organization = TestFixtures.persist_org!()
-    membership = TestFixtures.grant_membership!(user, organization)
-    mission = TestFixtures.persist_mission!(organization)
-
-    scope =
-      Scope.new(%{
-        user: user,
-        organization: organization,
-        organization_id: organization.organization_id,
-        organization_membership: membership
-      })
-
-    route = %{
-      host_context: HostContext.mission(mission.mission_id),
-      mission: mission,
-      spacecraft: nil
-    }
-
-    token = String.duplicate("opaque", 400)
-
-    params = %{
-      "applicationKey" => "ops_console",
-      "applicationVersion" => 1,
-      "surfaceId" => "contact_schedule",
-      "surfaceVersion" => 1,
-      "actionId" => "reserve",
-      "input" => %{"token" => token}
-    }
-
-    assert {:error, :string} = JSONBoundary.safe(params)
-
-    assert {:ok, prepared} =
-             ApplicationHostBridge.prepare_action(scope, route, params, "opaque-reserve-test",
-               now: @now
-             )
-
-    assert prepared.dispatch_request.params == %{"token" => token}
-    assert {:ok, _} = ApplicationActionIdempotency.request_digest(prepared.request_document)
-    assert {:error, _} = ApplicationHostBridge.execute_action(scope, route, prepared, now: @now)
-
-    assert {:error, _} =
-             ApplicationHostBridge.prepare_action(
-               %{scope | organization_membership: nil},
-               route,
-               params,
-               "revoked-test",
                now: @now
              )
   end

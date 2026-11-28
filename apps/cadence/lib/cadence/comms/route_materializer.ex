@@ -2,8 +2,7 @@ defmodule Cadence.Comms.RouteMaterializer do
   @moduledoc """
   Brings spacecraft's `origin: profile` routes in line with their pinned profile version, their
   overrides, and the mission's stations and transports. Only changed routes are written; routes
-  no longer wanted are archived (their materialized paths retire with them). Spacecraft-local
-  and legacy routes are left alone.
+  no longer wanted are archived (their materialized paths retire with them). Spacecraft-local routes are left alone.
 
   Runs inside the caller's transaction (change-set apply or preview). Uses only `Repo`.
   """
@@ -76,10 +75,9 @@ defmodule Cadence.Comms.RouteMaterializer do
 
     with {:ok, desired} <- desired(organization_id, spacecraft, overrides, context),
          {:ok, written} <- write(organization_id, desired),
-         {:ok, archived} <- archive_unwanted(organization_id, existing, desired),
-         {:ok, retired} <- retire_superseded(organization_id, before, desired) do
+         {:ok, archived} <- archive_unwanted(organization_id, existing, desired) do
       after_routes =
-        if written or archived or retired,
+        if written or archived,
           do:
             RoutingRuleStore.list_routing_rules_for_spacecraft(
               organization_id,
@@ -151,42 +149,6 @@ defmodule Cadence.Comms.RouteMaterializer do
 
     {:ok, unwanted != []}
   end
-
-  # A legacy per-spacecraft rule that a profile route now covers (same transport, direction and
-  # role) is retired, so the lift into profile rules never leaves two live copies of a route.
-  # A bidirectional rule is retired once both of its directions are covered.
-  defp retire_superseded(_organization_id, _before, []), do: {:ok, false}
-
-  # `before`: the spacecraft's rules from before this reconcile's writes. Those writes are profile
-  # routes only, so its legacy rules are as they were. {:ok, retired?}.
-  defp retire_superseded(organization_id, before, desired) do
-    covered = MapSet.new(desired, &{&1.transport_id, &1.direction, &1.role})
-
-    superseded =
-      Enum.filter(before, fn rule ->
-        rule.origin == :legacy and rule.enabled? and
-          rule
-          |> directions()
-          |> Enum.all?(&MapSet.member?(covered, {rule.transport_id, &1, rule.role}))
-      end)
-
-    Enum.each(
-      superseded,
-      &RoutingRuleStore.archive_routing_rule(
-        organization_id,
-        &1.mission_id,
-        &1.routing_rule_id,
-        %{
-          "superseded_by_profile_route" => true
-        }
-      )
-    )
-
-    {:ok, superseded != []}
-  end
-
-  defp directions(%{direction: :bidirectional}), do: [:inbound, :outbound]
-  defp directions(%{direction: direction}), do: [direction]
 
   defp to_document(routes) do
     %{

@@ -6,13 +6,12 @@ defmodule Cadence.Applications.HostQueryRegistry do
   alias Cadence.Reads.ApplicationSurfaces.ProviderRegistry, as: SurfaceProviderRegistry
 
   @max_providers 16
-  @contributors [Cadence.Applications.Comms]
 
   @type provider_key :: {binary(), binary()}
 
   @spec providers() :: %{optional(provider_key()) => module()}
   def providers,
-    do: providers(@contributors ++ FixtureContributors.exporting(:host_query_providers, 0))
+    do: providers(FixtureContributors.exporting(:host_query_providers, 0))
 
   @doc false
   @spec providers([module()]) :: %{optional(provider_key()) => module()}
@@ -51,10 +50,9 @@ defmodule Cadence.Applications.HostQueryRegistry do
   def dispatch(scope, host_context, params) when is_map(params) do
     registered_providers = providers()
 
-    if registered_providers != %{} do
-      dispatch(scope, host_context, params, registered_providers)
-    else
-      {:error, :invalid_application_host_query_provider_registry}
+    case registered_providers do
+      empty when map_size(empty) == 0 -> :not_handled
+      providers -> dispatch(scope, host_context, params, providers)
     end
   end
 

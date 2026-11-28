@@ -4,7 +4,10 @@ defmodule CadenceWeb.Console.AttentionAPITest do
 
   alias Cadence.Contacts.BookingResolutions.Row
   alias Cadence.Contacts.{ContactStore, RealizedContact}
+  alias Cadence.Protocol.RecordArchive.Quarantine
   alias Cadence.ProviderChangeFixtures
+  alias Cadence.Reads.ActionQueue.AttentionItems
+  alias Cadence.Reads.Attention
   alias Cadence.Repo
   alias CadenceWeb.TestFixtures
 
@@ -73,6 +76,59 @@ defmodule CadenceWeb.Console.AttentionAPITest do
 
     assert %{"error" => %{"code" => "pass_not_found"}} =
              c |> conn() |> get(c.base <> "/passes/nope") |> json_response(404)
+  end
+
+  test "pass attention matches the mission feed for a booking with several sources", c do
+    contact = unsettled_contact!(c)
+    now = DateTime.utc_now()
+
+    assert :ok =
+             Quarantine.put(
+               c.mission_id,
+               c.organization_id,
+               [
+                 %{
+                   entry: %{
+                     "record_kind" => "frame",
+                     "record_id" => "poisoned-frame",
+                     "metadata" => %{"realized_contact_id" => contact.realized_contact_id}
+                   },
+                   error_code: "identity_conflict",
+                   error: nil
+                 }
+               ],
+               now
+             )
+
+    id = c.reservation.provider_reservation_id
+    pass = %{id: id, scheduled_contact_id: c.reservation.scheduled_contact_id}
+
+    assert {:ok, %{items: items}} = Attention.load(c.admin_scope, c.mission_id)
+    expected = Enum.filter(items, &(Map.get(&1, :provider_reservation_id) == id))
+
+    assert Enum.map(expected, & &1.source) ==
+             ~w(pass_resolution contact_settlement archive_quarantine)
+
+    assert {:ok, ^expected} = Attention.for_passes(c.admin_scope, c.mission_id, [pass])
+
+    assert %{"data" => %{"attentions" => attentions}} =
+             c |> conn() |> get(c.base <> "/passes/#{id}") |> json_response(200)
+
+    names = AttentionItems.lookups(c.organization_id, c.mission_id, expected)
+
+    expected_wire =
+      for item <- expected do
+        {priority, due_at} = AttentionItems.rank(item, now)
+
+        item
+        |> AttentionItems.object(names)
+        |> Map.merge(%{priority: priority, due_at: due_at})
+      end
+      |> Jason.encode!()
+      |> Jason.decode!()
+
+    assert Enum.sort_by(attentions, & &1["source"]) ==
+             Enum.sort_by(expected_wire, & &1["source"])
   end
 
   test "acknowledge, then resolve, as the signed-in user", c do
@@ -155,29 +211,7 @@ defmodule CadenceWeb.Console.AttentionAPITest do
   # #847 (U37): the Contacts drawer reads one pass's settlement item, not the whole action queue.
   describe "GET …/attention/contact_settlement?reservation_id=" do
     setup c do
-      now = DateTime.utc_now()
-
-      {:ok, _contact} =
-        ContactStore.persist_realized(
-          RealizedContact.new(%{
-            organization_id: c.organization_id,
-            mission_id: c.mission_id,
-            scheduled_contact_id: c.reservation.scheduled_contact_id,
-            initial_time: now,
-            realized_at: now,
-            lifecycle_state: :completed,
-            metadata: %{
-              "settlement" => %{
-                "state" => "unsettled",
-                "reason" => "settle_deadline",
-                "failure_kind" => "store_unavailable",
-                "unsettled_at" => DateTime.to_iso8601(now),
-                "backlog" => %{"entries" => 120, "bytes" => 4096, "journals" => 1}
-              }
-            }
-          })
-        )
-
+      unsettled_contact!(c)
       :ok
     end
 
@@ -213,5 +247,32 @@ defmodule CadenceWeb.Console.AttentionAPITest do
                |> get(c.base <> "/attention/contact_settlement")
                |> json_response(422)
     end
+  end
+
+  defp unsettled_contact!(c) do
+    now = DateTime.utc_now()
+
+    assert {:ok, contact} =
+             ContactStore.persist_realized(
+               RealizedContact.new(%{
+                 organization_id: c.organization_id,
+                 mission_id: c.mission_id,
+                 scheduled_contact_id: c.reservation.scheduled_contact_id,
+                 initial_time: now,
+                 realized_at: now,
+                 lifecycle_state: :completed,
+                 metadata: %{
+                   "settlement" => %{
+                     "state" => "unsettled",
+                     "reason" => "settle_deadline",
+                     "failure_kind" => "store_unavailable",
+                     "unsettled_at" => DateTime.to_iso8601(now),
+                     "backlog" => %{"entries" => 120, "bytes" => 4096, "journals" => 1}
+                   }
+                 }
+               })
+             )
+
+    contact
   end
 end
