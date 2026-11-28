@@ -54,6 +54,23 @@ defmodule CadenceWeb.Console.ContactRequirementAPITest do
     id
   end
 
+  # #1160 row 4: any mission operator edits requirements; the schema (New) and a requirement (Edit,
+  # Close, Cancel) say so from the check the writes make. This member isn't an admin, and creates.
+  test "a member who isn't an admin holds planning.requirement.edit, as the writes agree", c do
+    assert json_response(get_json(c, "/schema"), 200)["data"]["permissions"] ==
+             ["planning.requirement.edit"]
+
+    id = create!(c, c.sc1)
+
+    assert json_response(get_json(c, "/#{id}"), 200)["data"]["permissions"] ==
+             ["planning.requirement.edit"]
+
+    outsider = TestFixtures.persist_user!()
+    TestFixtures.grant_membership!(outsider, TestFixtures.persist_org!())
+    refused = outsider |> TestFixtures.member_conn() |> get(c.base <> "/schema")
+    assert refused.status in [403, 404]
+  end
+
   test "the form schema adds the spacecraft, the window and max_gap_seconds", c do
     data = json_response(get_json(c, "/schema"), 200)["data"]
     by_path = Map.new(data["fields"], &{&1["path"], &1})

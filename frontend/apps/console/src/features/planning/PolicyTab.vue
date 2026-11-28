@@ -107,7 +107,7 @@ async function save() {
         </details>
       </ApPanel>
       <ApPanel
-        v-if="policy.permissions.includes('planning.edit')"
+        v-if="policy.permissions.includes('fleet_planning_policy.manage')"
         index="P6"
         :title="policy.version === null ? 'Create policy' : 'Save a new version'"
       >
@@ -133,7 +133,7 @@ async function save() {
           </p>
         </div>
       </ApPanel>
-      <p v-else class="m-0 text-sm text-text-3">Org admins change contact planning.</p>
+      <p v-else class="m-0 text-sm text-text-3">Org admins change the planning policy.</p>
     </template>
   </ApRemote>
 </template>

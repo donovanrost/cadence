@@ -245,7 +245,7 @@ defmodule Cadence.Control.PlanningTemplates do
       },
       templates: list(organization_id, mission_id),
       not_covered: not_covered(organization_id, mission_id, spacecraft, covered),
-      permissions: PlanningPolicy.permissions(scope)
+      permissions: PlanningPolicy.permissions(scope, mission_id)
     }
   end
 

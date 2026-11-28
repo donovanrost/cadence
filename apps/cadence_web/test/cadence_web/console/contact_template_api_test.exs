@@ -221,7 +221,13 @@ defmodule CadenceWeb.Console.ContactTemplateAPITest do
     summary = c.admin |> call(:get, c.base) |> json_response(200) |> Map.fetch!("data")
     assert %{"spacecraft_total" => 3, "covered" => 2} = summary["coverage"]
     assert [%{"group" => "none", "count" => 1}] = summary["not_covered"]
-    assert summary["permissions"] == ["planning.edit", "planning.approve"]
+
+    assert summary["permissions"] == [
+             "planning.template.manage",
+             "fleet_planning_policy.manage",
+             "planning.requirement.edit",
+             "planning.approve"
+           ]
   end
 
   test "the template form schema covers the document paths", c do
@@ -272,6 +278,10 @@ defmodule CadenceWeb.Console.ContactTemplateAPITest do
       call(c.member, :post, c.base <> "/templates", body(%{"kind" => "plane", "plane" => 1}))
 
     assert json_response(member, 403)["error"]["code"] == "forbidden"
+
+    # #1160 row 5: the member's summary agrees: no planning.template.manage, which the write needs.
+    member_summary = c.member |> call(:get, c.base) |> json_response(200) |> Map.fetch!("data")
+    assert member_summary["permissions"] == ["planning.requirement.edit"]
 
     assert json_response(call(c.admin, :get, c.base <> "/templates/nope"), 404)["error"]["code"] ==
              "template_not_found"
