@@ -287,7 +287,7 @@ Preview validation issues carry the same field errors. The errors have `path` se
 | --- | --- |
 | `invalid_listener_choice` | The value must be Own or Shared. |
 | `shared_listener_requires_downlink` | Shared requires a listening downlink. |
-| `shared_listener_requires_tm_framing` | Shared requires fixed-size TM frames. |
+| `shared_listener_requires_tm_framing` | Shared requires fixed-size TM frames of 2 to 2,048 bytes. |
 | `shared_listener_requires_allowlist` | Plaintext Shared requires valid allowed source addresses. |
 | `shared_listener_requires_mtls` | Sharing across provider bindings requires mTLS. |
 | `shared_listener_unavailable_mtls` | Direct transports cannot use provider delivery credentials. |

@@ -124,7 +124,7 @@ defmodule Cadence.Comms.ListenClaimsTest do
       assert {:error, {:shared_listener_requires_mtls, %{port: ^port}}} =
                persist_transport(a, port, config)
 
-      assert {:error, {:shared_listener_requires_mtls, %{port: ^port}}} =
+      assert {:error, {:listen_endpoint_listener_mismatch, %{port: ^port}}} =
                persist_transport(a, port)
 
       assert {:ok, own} =
@@ -254,6 +254,20 @@ defmodule Cadence.Comms.ListenClaimsTest do
   end
 
   describe "starting a contact" do
+    test "a pinned shared listener checks the bind address against other missions", %{
+      a: a,
+      b: b,
+      port: port
+    } do
+      assert {:ok, _profile} = persist_profile(a, "rx-a", listen("127.0.0.1", port))
+
+      configuration = Map.put(listen("delivery.example", port), "listener", "shared")
+      paths = [%{provider_bindings: [%{configuration: configuration}]}]
+
+      assert {:error, {:listen_endpoint_claimed, %{port: ^port}}} =
+               ListenClaims.check_paths(b.mission_id, paths)
+    end
+
     test "a pass whose pinned listener another mission claims doesn't start", %{
       a: a,
       b: b,

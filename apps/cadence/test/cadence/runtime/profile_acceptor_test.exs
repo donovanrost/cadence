@@ -142,7 +142,10 @@ defmodule Cadence.Runtime.ProfileAcceptorTest do
     {a, port} = register!(c, "contact-a", 1, allowed: ["127.0.0.1/32"])
     {b, ^port} = register!(c, "contact-b", 2, allowed: ["10.0.0.0/8"])
     stop_adapter(a)
-    acceptor = ProfileAcceptor.whereis(c.namespace, c.mission, c.profile)
+
+    acceptor =
+      ProfileAcceptor.whereis(c.namespace, c.mission, c.profile, %{port: 0, host: "127.0.0.1"})
+
     assert eventually(fn -> length(ProfileAcceptor.registrations(acceptor)) == 1 end)
 
     # Only B's list remains: loopback is outside every list, refused before any frame is read.
@@ -173,13 +176,83 @@ defmodule Cadence.Runtime.ProfileAcceptorTest do
     refute_receive {^a, _any}, 200
   end
 
-  test "a registration from another binding is never a candidate on this binding's acceptor", c do
-    {a, port} = register!(c, "contact-a", 1, provider_binding_id: "some-other-binding")
-    peer = connect!(port, frame(1))
+  test "a registration cannot name a different pinned profile", c do
+    assert {:error, :wrong_binding} =
+             ProfileAcceptor.register(c.namespace, c.mission, c.profile, %{port: 0}, %{
+               adapter: self(),
+               provider_binding_id: "other-profile"
+             })
+  end
 
-    # The peer is closed unrouted: the foreign registration is neither handed it nor told.
+  test "a duplicate SCID in one binding is refused even if only one allows the peer", c do
+    {a, port} = register!(c, "contact-a", 7)
+    {b, ^port} = register!(c, "contact-b", 7, allowed: ["10.0.0.0/8"])
+    peer = connect!(port, frame(7))
+
+    assert_receive {^a, {:peer_refused, _, {:ambiguous_scid, 7}}}, 2_000
+    assert_receive {^b, {:peer_refused, _, {:ambiguous_scid, 7}}}, 2_000
     assert {:error, :closed} = :gen_tcp.recv(peer, 0, 2_000)
-    refute_receive {^a, {:peer_accepted, _, _, _, _}}, 200
+    refute_received {_, {:peer_accepted, _, _, _, _}}
+  end
+
+  test "a frame size above the shared cap is refused without waiting for payload", c do
+    {a, port} = register!(c, "contact-a", 7, frame_size: 2_049)
+    peer = connect!(port, "")
+
+    assert_receive {^a, {:peer_refused, _, :unidentified}}, 1_000
+    assert {:error, :closed} = :gen_tcp.recv(peer, 0, 1_000)
+  end
+
+  test "a fixed plaintext endpoint admits only its registered binding", c do
+    port = Cadence.SharedListenerFixtures.free_port()
+    listen = %{port: port, host: "127.0.0.1"}
+    {adapter, ^port} = register!(c, "contact-a", 7, listen: listen)
+    other_profile = c.profile <> "-other"
+
+    assert {:error, :wrong_binding} =
+             ProfileAcceptor.register(c.namespace, c.mission, other_profile, listen, %{
+               adapter: self(),
+               delivery_binding_id: "other-binding",
+               scid: 7
+             })
+
+    _peer = connect!(port, frame(7))
+    assert_receive {^adapter, {:peer_accepted, _, _, _, _}}, 1_000
+  end
+
+  test "Own and Shared cut over on a drained endpoint", c do
+    port = Cadence.SharedListenerFixtures.free_port()
+    listen = %{port: port, host: "127.0.0.1"}
+    {adapter, ^port} = register!(c, "contact-a", 1, listen: listen)
+    acceptor = ProfileAcceptor.whereis(c.namespace, c.mission, c.profile, listen)
+    peer = connect!(port, frame(1))
+    assert_receive {^adapter, {:peer_accepted, socket, _, _, _}}, 1_000
+    assert {:error, :eaddrinuse} = ProfileAcceptor.release_idle(c.namespace, c.mission, listen)
+
+    :ok = :gen_tcp.send(peer, "same stream")
+    assert {:ok, "same stream"} = recv_as(adapter, socket)
+
+    stop_adapter(adapter)
+    assert eventually(fn -> ProfileAcceptor.registrations(acceptor) == [] end)
+    idle_peer = connect!(port, frame(1))
+    assert {:error, :closed} = :gen_tcp.recv(idle_peer, 0, 1_000)
+
+    assert eventually(fn ->
+             ProfileAcceptor.snapshot(acceptor).refusals_per_minute.no_registered_contact == 1
+           end)
+
+    assert :ok = ProfileAcceptor.release_idle(c.namespace, c.mission, listen)
+    assert {:ok, own} = :gen_tcp.listen(port, ip: {127, 0, 0, 1}, reuseaddr: true)
+
+    assert {:error, {:tcp_provider_listen_failed, _, :eaddrinuse}} =
+             ProfileAcceptor.register(c.namespace, c.mission, c.profile, listen, %{
+               adapter: self()
+             })
+
+    :ok = :gen_tcp.close(own)
+    {next_adapter, ^port} = register!(c, "contact-b", 2, listen: listen)
+    _next_peer = connect!(port, frame(2))
+    assert_receive {^next_adapter, {:peer_accepted, _, _, _, _}}, 1_000
   end
 
   # api-ops review: an adapter monitors the acceptor only after register returns. Register names
@@ -201,7 +274,11 @@ defmodule Cadence.Runtime.ProfileAcceptorTest do
     assert {:ok, _port, acceptor} =
              ProfileAcceptor.register(c.namespace, c.mission, c.profile, listen, registration)
 
-    assert acceptor == ProfileAcceptor.whereis(c.namespace, c.mission, c.profile)
+    assert acceptor ==
+             ProfileAcceptor.whereis(c.namespace, c.mission, c.profile, %{
+               port: 0,
+               host: "127.0.0.1"
+             })
 
     :ok =
       DynamicSupervisor.terminate_child(ProfileAcceptor.supervisor_name(c.namespace), acceptor)
@@ -218,7 +295,10 @@ defmodule Cadence.Runtime.ProfileAcceptorTest do
        c do
     listen = %{port: 0, host: "127.0.0.1", linger_ms: 50}
     {a, _port} = register!(c, "contact-a", 1, listen: listen)
-    dying = ProfileAcceptor.whereis(c.namespace, c.mission, c.profile)
+
+    dying =
+      ProfileAcceptor.whereis(c.namespace, c.mission, c.profile, %{port: 0, host: "127.0.0.1"})
+
     stop_adapter(a)
 
     assert eventually(fn -> :sys.get_state(dying).linger_ref != nil end)
@@ -249,7 +329,12 @@ defmodule Cadence.Runtime.ProfileAcceptorTest do
     assert {:ok, _port, fresh} = Task.await(task, 2_000)
     refute Process.alive?(dying)
     assert fresh != dying
-    assert fresh == ProfileAcceptor.whereis(c.namespace, c.mission, c.profile)
+
+    assert fresh ==
+             ProfileAcceptor.whereis(c.namespace, c.mission, c.profile, %{
+               port: 0,
+               host: "127.0.0.1"
+             })
   end
 
   # api-ops: a profile's quiet_connection_ms is a positive integer; a numeric string is coerced.
@@ -293,13 +378,19 @@ defmodule Cadence.Runtime.ProfileAcceptorTest do
 
     for round <- 1..5 do
       {_adapter, _port} = register!(c, "contact-#{round}", round)
-      acceptor = ProfileAcceptor.whereis(c.namespace, c.mission, c.profile)
+
+      acceptor =
+        ProfileAcceptor.whereis(c.namespace, c.mission, c.profile, %{port: 0, host: "127.0.0.1"})
+
       ref = Process.monitor(acceptor)
       Process.exit(acceptor, :kill)
       assert_receive {:DOWN, ^ref, :process, ^acceptor, :killed}, 1_000
 
       assert eventually(fn ->
-               ProfileAcceptor.whereis(c.namespace, c.mission, c.profile) == nil
+               ProfileAcceptor.whereis(c.namespace, c.mission, c.profile, %{
+                 port: 0,
+                 host: "127.0.0.1"
+               }) == nil
              end)
     end
 
@@ -350,8 +441,9 @@ defmodule Cadence.Runtime.ProfileAcceptorTest do
       end)
 
     send(adapter, {:register, self()})
+    on_exit(fn -> send(adapter, :stop) end)
     assert_receive {:registered, {:ok, port, acceptor}}, 2_000
-    assert acceptor == ProfileAcceptor.whereis(c.namespace, c.mission, c.profile)
+    assert acceptor == ProfileAcceptor.whereis(c.namespace, c.mission, c.profile, listen)
     {adapter, port}
   end
 

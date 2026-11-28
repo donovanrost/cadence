@@ -141,6 +141,8 @@ defmodule Cadence.Contacts.ListenerRefusalAttention do
       own_quiet_since: quiet_since,
       connected: adapter.connected?,
       shared_with: adapter.shared_with,
+      listener_endpoint: Map.get(adapter, :listener_endpoint),
+      refusals_per_minute: Map.get(adapter, :refusals_per_minute),
       second_connections_refused: adapter.second_connections_refused,
       acknowledged_by: nil,
       resolution: nil,
