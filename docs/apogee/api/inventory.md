@@ -15,11 +15,9 @@ in `L/reads/`** and the domain functions the controllers call. Console endpoints
 | Route family | Pipeline | Authenticates with | Policy | SPA as-is? |
 | --- | --- | --- | --- | --- |
 | ~~`/api/organizations/:org/...`~~ | ~~`:api` + `:authenticated_api` (`FetchCurrentScope`, `RequireCurrentScope`)~~ | **Removed (#754, #922, #747):** the scope, the pipeline and both plugs are deleted. A service authenticates with its bearer on `/api/v1` (opted in through `Console.ServiceAccess`) and on the two named machine surfaces. | — | — |
-| ~~`/api/cadence/application-host/v1/...`~~ | ~~`:browser` + `RequireAuthenticatedScope` + `:application_host_json`~~ | **Removed (#672):** the scope, its pipeline, the `ApplicationHostCSRF`, `ApplicationHostSession` and `RequireApplicationHostScope` plugs, and the console's `/host` read are deleted; the console mounts no app surfaces. | — | — |
 | ~~`/api/cadence/contact-workspace/v1/...`~~ | ~~`:browser` + `RequireAuthenticatedScope`~~ | **Removed:** no such route remains; the contact schedule is the console's. | — | — |
 | `/health/live`, `/health/ready` | `:api` | none | none | Yes, but it's only infra (`GET /api/health` deleted, #747) |
 | Browser GETs: `/missions/:m/catalog/artifacts/:id/download`, `/missions/:m/ops/dashboards/:id/export` | `:browser` + `RequireAuthenticatedScope` | cookie | Download only fetches within the session's current org (no named policy). Export uses `DashboardAuthorAuth.authorized?` | Usable as plain links when the session org matches |
-| ~~`/api/cadence/frontend-release/v1/...`, `/releases/:app/:release/artifacts/*`~~ | ~~`FrontendReleasePublisher`~~ | **Removed (#672):** release publishing, artifact serving, their plugs and the stage janitor are deleted. | — | — |
 
 Policy facts that console endpoints depend on (`L/auth/policy.ex`): `:operate_mission` lets in an active member of
 the scope's org, any `platform_admin` (admin mode), or a service bound to that exact mission. Most
@@ -38,9 +36,10 @@ other docs in this folder), and a service reaches the ones it may with its beare
 
 ## 3. Browser JSON bridges (removed)
 
-The application host bridge (`/api/cadence/application-host/v1`: catalog, query and actions for the
-federated app surfaces) is deleted with the console's surface host (#672). The read functions and
-action providers behind it are in `L/` until the app registries go; the console doesn't call them.
+The application host bridge (catalog, query and actions for the federated app surfaces) and the
+frontend-release publishing API are deleted (DECISIONS #116) with the console's surface host (#672), and so are the surface
+reads, action providers and registries behind it. Apps are headless: the console installs them
+and shows their status through `/api/v1`.
 
 ## 4. Read models to wrap (`L/reads/`)
 

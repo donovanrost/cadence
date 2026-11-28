@@ -132,8 +132,8 @@ written.
   within each shard. The first green run prints `--slowest-modules 10` per shard, and I tune N
   from that (one matrix number per app).
 - Browser-tagged tests stay excluded (`test_helper.exs` already excludes `:browser` and
-  `:browser_smoke`). The federation browser job that ran them was removed in #1075 (2026-11-28);
-  its node contract tests run in Frontend quality's `test:transport`.
+  `:browser_smoke`). The federation browser job that ran them was removed in #1075 (2026-11-28),
+  and its node contract tests (`test:transport`) went with the federation in #672.
 - Postgres 17 service with its data dir on tmpfs (`--tmpfs /var/lib/postgresql/data`), plus
   `fsync=off` and `synchronous_commit=off` via `ALTER SYSTEM` + reload in a step (service
   containers can't take `command:` args).
@@ -152,7 +152,11 @@ written.
 
 ## `ApplicationReleaseRegistryTest` and the publication output
 
-What the test needs (from `apps/cadence_web/browser_test/support/federation_release_fixture.exs`):
+**Retired (#672, 2026-11-28).** The federation is deleted: `ApplicationReleaseRegistryTest`, the
+`:frontend_publication` tag, the `test-web-publication` job and the publication build are gone,
+and `browser-assets` builds only the console for Console e2e. What follows is the history.
+
+What the test needed (from `apps/cadence_web/browser_test/support/federation_release_fixture.exs`):
 
 - The real federation publication output under
   `apps/cadence_web/priv/static/assets/application-host/{comms,telemetry-decom,mission-catalog,ops-console,organization-admin,spacecraft}`

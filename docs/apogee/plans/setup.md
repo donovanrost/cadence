@@ -4,7 +4,7 @@ Owner: **fe-setup**. Status: draft 1 (2026-11-08). Boards: `Setup` (S1), `AddSpa
 `Catalog` (S3), `Profile` (S4), `People` (S5), `SetupJourneys`.
 
 `L` = `apps/cadence/lib/cadence`. "Bridge" = the application-host query bridge
-(`/api/cadence/application-host/v1/.../query`). Bridge payloads are presentation DTOs (CSS classes,
+(deleted in #672, DECISIONS #116). Bridge payloads are presentation DTOs (CSS classes,
 breadcrumbs, tone strings), so the plan asks **api** for purpose-built `/api/v1` JSON,
 reusing the underlying `L/reads/*` and stores. "Missing" means no backend data exists today.
 
