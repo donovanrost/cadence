@@ -222,6 +222,12 @@ Mission/Catalog, Spacecraft, Comms, Ops, and administration are platform modules
 at their declared scopes. They do not require installation records. Telemetry
 Decom remains an optional installation.
 
+Only a platform module declares actions. An optional application declares no
+domain or lifecycle actions (`ApplicationDefinition.validate/1` refuses one that
+does): the console installs, disables and uninstalls it through
+`ApplicationInstallations`, and its configuration is written through its own
+domain paths, never through the action dispatcher.
+
 Use the registry's canonical policy for host admission; do not maintain separate
 installation-exemption lists in navigation, query, or action code. Platform
 availability does not bypass authentication, scope permissions, declared

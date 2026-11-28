@@ -225,7 +225,6 @@ defmodule Cadence.Architecture.PlaneBoundary do
     "lib/cadence/applications/application_installations/installation_row.ex" => :management,
     "lib/cadence/applications/application_installations/lifecycle_event_row.ex" => :management,
     "lib/cadence/applications/action_dispatcher.ex" => :management,
-    "lib/cadence/applications/configuration_reference.ex" => :shared,
     "lib/cadence/applications/host_context.ex" => :shared,
     "lib/cadence/applications/lifecycle_action_definition.ex" => :shared,
     "lib/cadence/applications/lifecycle_actions.ex" => :shared,

@@ -9,7 +9,6 @@ defmodule Cadence.Applications.ApplicationDefinition do
 
   alias Cadence.Applications.{
     ActionDefinition,
-    ApplicationDependency,
     LifecycleContract,
     ResourceContract,
     SettingsSectionDefinition,
@@ -30,7 +29,6 @@ defmodule Cadence.Applications.ApplicationDefinition do
           installation_policy: installation_policy(),
           availability: availability(),
           installable_scopes: [scope()],
-          dependencies: [ApplicationDependency.t()],
           configuration_contract: map(),
           resource_contract: ResourceContract.t(),
           lifecycle_contract: LifecycleContract.t(),
@@ -61,7 +59,6 @@ defmodule Cadence.Applications.ApplicationDefinition do
     :status_query_id,
     installation_policy: :optional,
     installable_scopes: [],
-    dependencies: [],
     configuration_contract: %{},
     resource_contract: %ResourceContract{},
     lifecycle_contract: %LifecycleContract{},
@@ -73,7 +70,6 @@ defmodule Cadence.Applications.ApplicationDefinition do
 
   @scopes [:organization, :user, :admin, :mission, :spacecraft, :source_endpoint, :transport]
   @capability_kinds [:semantic_handler, :managed_application, :projection, :transport_extension]
-  @max_dependencies 16
   # Route-level applications may expose a finite action vocabulary per
   # surface. Keep the application-wide envelope explicit while allowing the
   # Ops cohort to retain its exact declared identities.
@@ -124,13 +120,13 @@ defmodule Cadence.Applications.ApplicationDefinition do
          true <- definition.installation_policy in [:platform, :optional],
          true <- definition.availability in [:available, :roadmap],
          true <- valid_installable_scopes?(definition.installable_scopes),
-         true <- valid_dependencies?(definition.dependencies, definition.application_key),
          true <- valid_configuration_contract?(definition.configuration_contract),
          :ok <- ResourceContract.validate(definition.resource_contract),
          :ok <- LifecycleContract.validate(definition.lifecycle_contract),
          true <- optional_text?(definition.status_query_id),
          true <- valid_actions?(definition.actions, definition.installable_scopes),
          true <- distinct_action_contracts?(definition),
+         true <- platform_actions_only?(definition),
          true <- valid_surfaces?(definition),
          true <- valid_settings_sections?(definition.settings_sections),
          true <- valid_capability_contributions?(definition.capability_contributions) do
@@ -158,25 +154,6 @@ defmodule Cadence.Applications.ApplicationDefinition do
   end
 
   defp valid_settings_sections?(_sections), do: false
-
-  defp valid_dependencies?(dependencies, application_key) when is_list(dependencies) do
-    identities = Enum.map(dependencies, &dependency_identity/1)
-
-    length(dependencies) <= @max_dependencies and
-      Enum.all?(dependencies, &(ApplicationDependency.validate(&1) == :ok)) and
-      Enum.all?(dependencies, &(&1.application_key != application_key)) and
-      length(Enum.uniq(identities)) == length(identities)
-  end
-
-  defp valid_dependencies?(_dependencies, _application_key), do: false
-
-  defp dependency_identity(%ApplicationDependency{
-         application_key: application_key,
-         scope: scope
-       }),
-       do: {application_key, scope}
-
-  defp dependency_identity(_dependency), do: nil
 
   defp valid_configuration_contract?(contract) when map_size(contract) == 0, do: true
 
@@ -206,6 +183,13 @@ defmodule Cadence.Applications.ApplicationDefinition do
     domain_action_ids = Enum.map(definition.actions, & &1.action_id)
     Enum.all?(domain_action_ids, &(&1 not in definition.lifecycle_contract.actions))
   end
+
+  # Only a platform application's actions are dispatched (#669 b): nothing checks an optional
+  # application's installation before running one, so an optional application declares none.
+  defp platform_actions_only?(%__MODULE__{installation_policy: :optional} = definition),
+    do: definition.actions == [] and definition.lifecycle_contract.actions == []
+
+  defp platform_actions_only?(%__MODULE__{}), do: true
 
   defp valid_surfaces?(%__MODULE__{} = definition) when is_list(definition.surfaces) do
     surface_identities = Enum.map(definition.surfaces, &surface_identity/1)

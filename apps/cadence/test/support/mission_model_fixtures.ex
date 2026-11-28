@@ -6,7 +6,10 @@ defmodule Cadence.MissionModelFixtures do
   alias Cadence.Control.MissionModelPromotion
   alias Cadence.Control.MissionRuntimeReconciler
   alias Cadence.Control.Missions, as: ControlMissions
+  alias Cadence.Management.Activations, as: ManagementActivations
   alias Cadence.MissionModelApproval
+  alias Cadence.MissionModels
+  alias Cadence.MissionModels.Comparison
   alias Cadence.Runtime.MissionRuntimeSpec
 
   def activate_imported_model!(organization_id, mission_id, result_document, opts \\ []) do
@@ -66,6 +69,42 @@ defmodule Cadence.MissionModelFixtures do
       commands_by_name: Map.new(runtime_definitions, &{&1["name"], &1["command_id"]}),
       binding_set: binding_set
     }
+  end
+
+  @doc """
+  Requests a mission-scope model activation of an approved revision: its manifest and a passed
+  comparison against the binding set go in the request's metadata, the shape
+  `Control.MissionModelPromotion` validates on approve and apply.
+  """
+  def request_model_activation(
+        scope,
+        mission_id,
+        revision_id,
+        binding_set_id,
+        version,
+        opts \\ []
+      ) do
+    organization_id = scope.organization_id
+
+    with {:ok, revision} <- MissionModels.fetch_revision(organization_id, mission_id, revision_id),
+         {:ok, plans} <-
+           MissionModels.fetch_runtime_plans(organization_id, mission_id, revision_id),
+         {:ok, %{"status" => "passed"} = comparison} <-
+           Comparison.run(organization_id, mission_id, revision_id, binding_set_id, version) do
+      metadata =
+        opts
+        |> Keyword.get(:metadata, %{})
+        |> Map.put("mission_model", MissionModels.manifest(revision, plans))
+        |> Map.put("mission_model_comparison", %{
+          "comparison_report_id" => comparison["comparison_report_id"],
+          "report_sha256" => comparison["report_sha256"]
+        })
+
+      ManagementActivations.request(scope, mission_id, binding_set_id, version,
+        metadata: metadata,
+        now: Keyword.get(opts, :at, DateTime.utc_now())
+      )
+    end
   end
 
   def command_id!(model, name), do: Map.fetch!(model.commands_by_name, name)

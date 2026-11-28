@@ -10,7 +10,6 @@ defmodule Cadence.MissionModels do
 
   alias Cadence.Auth.Scope
   alias Cadence.Catalog.MissionModel.{Compiler, CompilerResult, Layer, Revision, RuntimePlan}
-  alias Cadence.Management.Activations, as: ManagementActivations
 
   alias Cadence.MissionModels.{
     Comparison,
@@ -105,8 +104,8 @@ defmodule Cadence.MissionModels do
 
   @doc """
   The mission composition that names `revision_id` (#542), or
-  `{:error, :mission_model_revision_not_in_catalog}`: what approval, promotion requests and their
-  apply require of a revision (`CompositionApproval.require/3`).
+  `{:error, :mission_model_revision_not_in_catalog}`: what approval and an activation's apply
+  require of a revision (`CompositionApproval.require/3`).
   """
   @spec require_composition(binary(), binary(), binary()) ::
           {:ok, map()} | {:error, :mission_model_revision_not_in_catalog}
@@ -285,66 +284,6 @@ defmodule Cadence.MissionModels do
     end)
   end
 
-  @doc """
-  Computes and persists the candidate comparison, then creates an authenticated
-  activation request. Approval and execution remain owned by the existing
-  management/control activation workflow.
-  """
-  @spec request_promotion(
-          Scope.t(),
-          binary(),
-          binary(),
-          binary(),
-          pos_integer(),
-          keyword()
-        ) :: {:ok, Cadence.Management.Activations.ActivationRequest.t()} | {:error, term()}
-  def request_promotion(
-        %Scope{} = current_scope,
-        mission_id,
-        revision_id,
-        binding_set_id,
-        binding_set_version,
-        opts \\ []
-      ) do
-    organization_id = current_scope.organization_id
-
-    with {:ok, %Revision{status: :approved} = revision} <-
-           fetch_revision(organization_id, mission_id, revision_id),
-         {:ok, _composition} <- require_composition(organization_id, mission_id, revision_id),
-         {:ok, plans} <- fetch_runtime_plans(organization_id, mission_id, revision_id),
-         {:ok, comparison} <-
-           Comparison.run(
-             organization_id,
-             mission_id,
-             revision_id,
-             binding_set_id,
-             binding_set_version
-           ),
-         :ok <- require_passed_comparison(comparison) do
-      metadata =
-        opts
-        |> Keyword.get(:metadata, %{})
-        |> Map.put("mission_model", manifest(revision, plans))
-        |> Map.put("mission_model_comparison", %{
-          "comparison_report_id" => comparison["comparison_report_id"],
-          "report_sha256" => comparison["report_sha256"]
-        })
-
-      ManagementActivations.request(
-        current_scope,
-        mission_id,
-        binding_set_id,
-        binding_set_version,
-        change_class: :mission_data_plane,
-        metadata: metadata,
-        now: Keyword.get(opts, :at, DateTime.utc_now())
-      )
-    else
-      {:ok, %Revision{}} -> {:error, :mission_model_revision_not_approved}
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
   @doc "Registers an approved, mission-scoped replay case for high-risk comparisons."
   def register_qualification_case(%Scope{} = current_scope, mission_id, name, updates, opts \\ []) do
     Comparison.register_case(current_scope, mission_id, name, updates, opts)
@@ -451,9 +390,6 @@ defmodule Cadence.MissionModels do
       {:error, reason} -> {:error, reason}
     end
   end
-
-  defp require_passed_comparison(%{"status" => "passed"}), do: :ok
-  defp require_passed_comparison(_comparison), do: {:error, :mission_model_comparison_not_passed}
 
   defp organization_filter(query, nil), do: where(query, [row], is_nil(row.organization_id))
 

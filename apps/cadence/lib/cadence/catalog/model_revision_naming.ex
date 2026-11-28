@@ -4,8 +4,8 @@ defmodule Cadence.Catalog.ModelRevisionNaming do
   import run compiles its own model revision, and a run that makes no catalog revision leaves
   one that no catalog revision names. The model approval's importer separation is recorded
   against catalog revisions, so such a revision can be neither approved
-  (`MissionModels.RevisionDecisions`) nor requested or applied for activation
-  (`MissionModels.request_promotion/6`, `Control.MissionModelPromotion`). Rejecting it stays
+  (`MissionModels.RevisionDecisions`) nor applied for activation
+  (`Control.MissionModelPromotion`). Rejecting it stays
   allowed, so it can be cleared from the approval queue.
   """
 

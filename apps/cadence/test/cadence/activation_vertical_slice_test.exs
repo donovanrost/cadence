@@ -6,7 +6,7 @@ defmodule Cadence.ActivationVerticalSliceTest do
   alias Cadence.Accounts.User
   alias Cadence.ApplicationDispatch.BindingSet
   alias Cadence.Auth
-  alias Cadence.Auth.{Scope, ServiceAccountableRow, ServiceIdentity}
+  alias Cadence.Auth.{Scope, ServiceIdentity}
   alias Cadence.Catalog.MissionModel.Layer
   alias Cadence.Control.Activations, as: ControlActivations
   alias Cadence.Control.MissionRuntimeReconciler
@@ -14,6 +14,7 @@ defmodule Cadence.ActivationVerticalSliceTest do
   alias Cadence.Management.Activations, as: ManagementActivations
   alias Cadence.MissionModelApproval
   alias Cadence.MissionModelCatalogNaming
+  alias Cadence.MissionModelFixtures
   alias Cadence.MissionModels
   alias Cadence.Projections.ActivationStatus
   alias Cadence.Runtime
@@ -51,7 +52,7 @@ defmodule Cadence.ActivationVerticalSliceTest do
     revision = persist_approved_model(organization_id, mission_id)
 
     assert {:ok, request} =
-             MissionModels.request_promotion(
+             MissionModelFixtures.request_model_activation(
                requester,
                mission_id,
                revision.revision_id,
@@ -115,7 +116,7 @@ defmodule Cadence.ActivationVerticalSliceTest do
     revision = persist_approved_model(organization_id, mission_id)
 
     assert {:ok, %{state: :approved} = request} =
-             MissionModels.request_promotion(
+             MissionModelFixtures.request_model_activation(
                requester,
                mission_id,
                revision.revision_id,

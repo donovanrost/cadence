@@ -458,15 +458,6 @@ defmodule CadenceWeb.ApplicationHostController do
     )
   end
 
-  defp bridge_problem(conn, {:application_configuration_version_conflict, _expected, _current}) do
-    problem(
-      conn,
-      :conflict,
-      "configuration_version_conflict",
-      "The application configuration changed. Reload the surface and try again."
-    )
-  end
-
   defp bridge_problem(conn, %ActionFailure{code: code, message: message}) do
     problem(conn, :unprocessable_entity, code, message)
   end

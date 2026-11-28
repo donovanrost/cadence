@@ -8,7 +8,6 @@ defmodule Cadence.Applications.ActionRequest do
           surface_id: binary() | nil,
           surface_version: pos_integer() | nil,
           params: map(),
-          expected_configuration_version: pos_integer() | nil,
           idempotency_key: binary() | nil
         }
 
@@ -19,7 +18,6 @@ defmodule Cadence.Applications.ActionRequest do
     :action_id,
     :surface_id,
     :surface_version,
-    :expected_configuration_version,
     :idempotency_key,
     params: %{}
   ]
