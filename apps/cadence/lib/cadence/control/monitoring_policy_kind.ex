@@ -18,9 +18,8 @@ defmodule Cadence.Control.MonitoringPolicyKind do
 
   @behaviour Cadence.Platform.ConfigKind
 
-  alias Cadence.Applications.SpacecraftConfiguration.Active
+  alias Cadence.Control.MonitoringGeneration
   alias Cadence.MissionModels.{AuthoredLayer, Compositions, DeclarationProjection, Selection}
-  alias Cadence.Missions
   alias Cadence.Platform.ConfigFields, as: F
 
   @fields ~w(name parameter parameter_id policy_kind default_rules contexts minimum_violations
@@ -209,19 +208,8 @@ defmodule Cadence.Control.MonitoringPolicyKind do
 
   ## Reads
 
-  defp in_use(organization_id, mission_id) do
-    with {:ok, mission} <- Missions.fetch_mission(organization_id, mission_id),
-         {:ok, %{activation: %{}, entries: entries}} <- Active.load(mission) do
-      entries
-      |> Map.values()
-      |> Enum.map(& &1["composition_id"])
-      |> Enum.filter(&is_binary/1)
-      |> Enum.uniq()
-      |> Enum.sort()
-    else
-      _none -> []
-    end
-  end
+  defp in_use(organization_id, mission_id),
+    do: MonitoringGeneration.compositions_in_use(organization_id, mission_id)
 
   defp bases(organization_id, mission_id) do
     for composition_id <- in_use(organization_id, mission_id),
