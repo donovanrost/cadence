@@ -12,8 +12,6 @@ export const context = {
   csrf_token: "test-csrf",
   nav_context: "organization",
   nav_item: "missions",
-  notifications: [],
-  unread_count: 0,
   mission: { mission_id: "mission/1", display_name: "Lunar", slug: "lunar" },
   ops_nav_item: "commands",
   dashboard_navigation: { starred: [], recent: [] },

@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import NotificationBell from "../notifications/NotificationBell.vue";
 import { computed } from "vue";
 import { readAccountContext } from "./contracts";
 import AccountDropdownMenu from "@cadence/ui/AccountDropdownMenu.vue";
@@ -15,7 +14,6 @@ const otherOrganizations = computed(() => {
 </script>
 <template>
   <div v-if="model?.user" class="flex items-center gap-2">
-    <NotificationBell :context="props.context" :id="`${id}-notifications`" />
     <AccountDropdownMenu class="dropdown dropdown-end">
       <template #trigger="{ open }"
         ><button

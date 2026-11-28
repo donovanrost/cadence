@@ -8,6 +8,3 @@ export function text(value: unknown, max = 4096): value is string {
 export function present(value: unknown, max = 4096): value is string {
   return text(value, max) && value.trim().length > 0;
 }
-export function count(value: unknown): value is number {
-  return Number.isSafeInteger(value) && Number(value) >= 0;
-}
