@@ -6,11 +6,12 @@ defmodule Cadence.Repo.Migrations.CreateFleetAlarmSummaries do
   # `semantic_latest_alarm_states` in the same transaction, once per spacecraft per batch that
   # transitions anything. Reading the aggregate instead cost what the active alarms do (58 ms p99 at
   # 3% of 200,000 rows active, 800 ms in a mass event); the fleet read is one row per spacecraft.
+  # The identity columns are bytewise (COLLATE "C"), as #949 requires of every id/key column.
   def up do
     create table(:semantic_fleet_alarm_summaries, primary_key: false) do
-      add(:organization_id, :string, null: false, primary_key: true)
-      add(:mission_id, :string, null: false, primary_key: true)
-      add(:spacecraft_id, :string, null: false, primary_key: true)
+      add(:organization_id, :string, null: false, primary_key: true, collation: "C")
+      add(:mission_id, :string, null: false, primary_key: true, collation: "C")
+      add(:spacecraft_id, :string, null: false, primary_key: true, collation: "C")
       add(:worst_rank, :smallint, null: false)
       add(:active, :integer, null: false)
       add(:last_received_at, :utc_datetime_usec, null: false)
