@@ -8,6 +8,7 @@ defmodule Cadence.Dashboards.DataLinkResolver.LimitTargets do
   alias Cadence.Dashboards.{DataLink, DataLinkInspector}
   alias Cadence.Limits
   alias Cadence.Limits.{DefinitionInterval, DefinitionLifecycle}
+  alias Cadence.Reads.AlarmEvents
 
   @spec resolve(DataLink.t(), binary(), binary()) ::
           {:ok, DataLinkInspector.t()} | {:error, DataLinkInspector.t()}
@@ -24,7 +25,21 @@ defmodule Cadence.Dashboards.DataLinkResolver.LimitTargets do
          )}
 
       {:error, :limit_event_not_found} ->
-        {:error, inspector(link, :missing, "Limit event was not found in this mission.", [])}
+        # The runtime's alarm transitions (#451 T3e): the id of an event a frame carries.
+        case AlarmEvents.fetch(organization_id, mission_id, link.target_id) do
+          {:ok, event} ->
+            {:ok,
+             inspector(
+               link,
+               :resolved,
+               nil,
+               limit_event_rows(event),
+               limit_event_related_links(link, event)
+             )}
+
+          {:error, :limit_event_not_found} ->
+            {:error, inspector(link, :missing, "Limit event was not found in this mission.", [])}
+        end
     end
   end
 

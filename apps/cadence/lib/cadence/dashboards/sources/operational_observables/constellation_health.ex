@@ -8,8 +8,8 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables.ConstellationHealth 
 
   alias Cadence.Dashboards.{Field, Frame, PlannedSourceRequest}
   alias Cadence.Limits.Event
-  alias Cadence.Reads.Limits, as: LimitReads
-  alias Cadence.Reads.OperationalState
+  alias Cadence.Reads.{MonitoredParameters, OperationalState}
+  alias Cadence.SemanticObservations.FleetAlarms
   alias Cadence.Spacecraft
 
   @state_severity %{red: 3, yellow: 2, blue: 1, green: 0}
@@ -35,11 +35,13 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables.ConstellationHealth 
       ) do
     latest_states_fun = Keyword.get(opts, :latest_states_fun, &default_latest_states/3)
     spacecraft_fun = Keyword.get(opts, :spacecraft_fun, &default_spacecraft/3)
+    spacecraft = spacecraft_fun.(organization_id, mission_id, adapter_opts)
+    states = latest_states_fun.(organization_id, mission_id, adapter_opts)
 
     frame(
       request,
-      spacecraft_fun.(organization_id, mission_id, adapter_opts),
-      latest_states_fun.(organization_id, mission_id, adapter_opts),
+      spacecraft,
+      with_nominal(opts, organization_id, mission_id, spacecraft, states),
       source_context
     )
   end
@@ -105,8 +107,35 @@ defmodule Cadence.Dashboards.Sources.OperationalObservables.ConstellationHealth 
     Enum.max_by(states, &Map.get(@state_severity, &1, -1))
   end
 
+  # The runtime's alarms, one state per alarming spacecraft (its worst), from the fleet summary the
+  # alarm writers keep (#451 T3e): one statement however many spacecraft there are, never every
+  # state of the mission.
   defp default_latest_states(organization_id, mission_id, _opts) do
-    LimitReads.latest_states_for_mission(organization_id, mission_id, [])
+    organization_id
+    |> FleetAlarms.load(mission_id)
+    |> Enum.map(fn {spacecraft_id, alarm} ->
+      %Event{spacecraft_id: spacecraft_id, normalized_state: normalized(alarm.limit_state)}
+    end)
+  end
+
+  defp normalized(:critical), do: :red
+  defp normalized(:caution), do: :yellow
+
+  # A mission whose plan monitors something has every spacecraft with no alarm nominal; one that
+  # monitors nothing has them `no_data`. Only for the default state source: a caller that supplies
+  # its own states says what it means.
+  defp with_nominal(opts, organization_id, mission_id, spacecraft, states) do
+    if Keyword.has_key?(opts, :latest_states_fun) or
+         not MonitoredParameters.configured?(organization_id, mission_id) do
+      states
+    else
+      alarming = MapSet.new(states, & &1.spacecraft_id)
+
+      states ++
+        for %{spacecraft_id: id} <- spacecraft,
+            not MapSet.member?(alarming, id),
+            do: %Event{spacecraft_id: id, normalized_state: :green}
+    end
   end
 
   defp default_spacecraft(organization_id, mission_id, _opts) do

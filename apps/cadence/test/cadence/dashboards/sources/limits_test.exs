@@ -128,14 +128,14 @@ defmodule Cadence.Dashboards.Sources.LimitsTest do
     assert_receive {:latest, "org-1", "mission-1", "HK.counter", opts}
     assert opts[:realm] == :flight
     assert opts[:data_source_id] == "managed_limits_projection"
-    assert opts[:dataset] == "telemetry_latest_limit_states"
+    assert opts[:dataset] == "semantic_latest_alarm_states"
     assert opts[:semantics_mode] == :observed
     assert opts[:spacecraft_id] == "sc-1"
 
     assert_receive {:intervals, "org-1", "mission-1", "HK.counter", interval_opts}
     assert interval_opts[:realm] == :flight
     assert interval_opts[:data_source_id] == "managed_limits_projection"
-    assert interval_opts[:dataset] == "telemetry_latest_limit_states"
+    assert interval_opts[:dataset] == "semantic_latest_alarm_states"
     assert interval_opts[:semantics_mode] == :observed
   end
 
@@ -489,7 +489,7 @@ defmodule Cadence.Dashboards.Sources.LimitsTest do
     assert_receive {:history, "org-1", "mission-1", "HK.counter", opts}
     assert opts[:realm] == :flight
     assert opts[:data_source_id] == "managed_limits_projection"
-    assert opts[:dataset] == "telemetry_latest_limit_states"
+    assert opts[:dataset] == "semantic_latest_alarm_states"
     assert opts[:semantics_mode] == :observed
     assert opts[:spacecraft_id] == "sc-1"
     assert opts[:from_receipt_time] == from_time
@@ -551,7 +551,7 @@ defmodule Cadence.Dashboards.Sources.LimitsTest do
     assert_receive {:watermark, "org-1", "mission-1", "HK.counter", opts}
     assert opts[:realm] == :flight
     assert opts[:data_source_id] == "managed_limits_projection"
-    assert opts[:dataset] == "telemetry_latest_limit_states"
+    assert opts[:dataset] == "semantic_latest_alarm_states"
     assert opts[:semantics_mode] == :observed
     assert opts[:spacecraft_id] == "sc-1"
   end
@@ -682,7 +682,7 @@ defmodule Cadence.Dashboards.Sources.LimitsTest do
     assert_receive {:intervals, "org-1", "mission-1", "HK.counter", opts}
     assert opts[:realm] == :flight
     assert opts[:data_source_id] == "managed_limits_projection"
-    assert opts[:dataset] == "telemetry_latest_limit_states"
+    assert opts[:dataset] == "semantic_latest_alarm_states"
     assert opts[:semantics_mode] == :observed
     assert opts[:from_receipt_time] == first_from
     assert opts[:to_receipt_time] == to_time
@@ -1368,7 +1368,7 @@ defmodule Cadence.Dashboards.Sources.LimitsTest do
         realm: :flight,
         logical_source: :limits,
         data_source_id: "managed_limits_projection",
-        dataset: "telemetry_latest_limit_states"
+        dataset: "semantic_latest_alarm_states"
       },
       data_source: %DataSource{
         data_source_id: "managed_limits_projection",
@@ -1379,7 +1379,7 @@ defmodule Cadence.Dashboards.Sources.LimitsTest do
         capabilities: capabilities
       },
       realm: :flight,
-      dataset: "telemetry_latest_limit_states"
+      dataset: "semantic_latest_alarm_states"
     }
   end
 

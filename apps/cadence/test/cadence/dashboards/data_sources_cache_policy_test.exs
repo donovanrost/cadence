@@ -546,7 +546,7 @@ defmodule Cadence.Dashboards.DataSourcesCachePolicyTest do
         binding_id: "cache-policy-flight-limits",
         data_source_id: "cache-policy-mission-limits",
         realm: :flight,
-        dataset: "telemetry_latest_limit_states"
+        dataset: "semantic_latest_alarm_states"
       )
 
     limits_frame_key = dashboard_frame_key(limits_key, "frame-limits")

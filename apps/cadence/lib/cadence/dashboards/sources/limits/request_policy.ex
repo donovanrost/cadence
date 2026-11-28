@@ -89,7 +89,7 @@ defmodule Cadence.Dashboards.Sources.Limits.RequestPolicy do
         request,
         :unknown_limit_definition,
         :info,
-        "No effective limit definition interval is available for observable",
+        "No limit bands are shown for this observable: limit bands for monitoring rules aren't shown yet",
         %{observable_id: observable_id}
       )
     ]

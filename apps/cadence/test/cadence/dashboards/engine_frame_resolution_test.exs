@@ -134,7 +134,7 @@ defmodule Cadence.Dashboards.EngineFrameResolutionTest do
 
     assert limit_opts[:spacecraft_id] == "sc_001"
     assert limit_opts[:data_source_id] == "managed_limits_projection"
-    assert limit_opts[:dataset] == "telemetry_latest_limit_states"
+    assert limit_opts[:dataset] == "semantic_latest_alarm_states"
     assert limit_opts[:semantics_mode] == :observed
 
     assert_receive {:limits_watermark, "org_dashboards", "mission_dashboards",
@@ -142,7 +142,7 @@ defmodule Cadence.Dashboards.EngineFrameResolutionTest do
 
     assert watermark_opts[:spacecraft_id] == "sc_001"
     assert watermark_opts[:data_source_id] == "managed_limits_projection"
-    assert watermark_opts[:dataset] == "telemetry_latest_limit_states"
+    assert watermark_opts[:dataset] == "semantic_latest_alarm_states"
     assert watermark_opts[:semantics_mode] == :observed
   end
 
@@ -256,14 +256,14 @@ defmodule Cadence.Dashboards.EngineFrameResolutionTest do
                     "tlm.hk.battery_voltage", limit_opts}
 
     assert limit_opts[:data_source_id] == "managed_limits_projection"
-    assert limit_opts[:dataset] == "telemetry_latest_limit_states"
+    assert limit_opts[:dataset] == "semantic_latest_alarm_states"
     refute limit_opts[:source_binding_id] == "selected_flight_telemetry"
 
     assert_receive {:limits_watermark, "org_dashboards", "mission_dashboards",
                     "tlm.hk.battery_voltage", watermark_opts}
 
     assert watermark_opts[:data_source_id] == "managed_limits_projection"
-    assert watermark_opts[:dataset] == "telemetry_latest_limit_states"
+    assert watermark_opts[:dataset] == "semantic_latest_alarm_states"
     refute watermark_opts[:source_binding_id] == "selected_flight_telemetry"
   end
 

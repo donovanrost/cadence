@@ -308,7 +308,7 @@ defmodule Cadence.Dashboards.Sources.LimitsAnalysisBucketsTest do
         realm: :flight,
         logical_source: :limits,
         data_source_id: "managed_limits_projection",
-        dataset: "telemetry_latest_limit_states"
+        dataset: "semantic_latest_alarm_states"
       },
       data_source: %DataSource{
         data_source_id: "managed_limits_projection",
@@ -319,7 +319,7 @@ defmodule Cadence.Dashboards.Sources.LimitsAnalysisBucketsTest do
         capabilities: capabilities
       },
       realm: :flight,
-      dataset: "telemetry_latest_limit_states"
+      dataset: "semantic_latest_alarm_states"
     }
   end
 end

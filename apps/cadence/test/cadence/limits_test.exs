@@ -4,7 +4,6 @@ defmodule Cadence.LimitsTest do
   alias Cadence.Control.DerivedTelemetry, as: DerivedTelemetryService
   alias Cadence.Jobs
   alias Cadence.Reads.DerivedTelemetry, as: DerivedTelemetryReads
-  alias Cadence.Reads.Limits, as: LimitReads
   use Cadence.ConfigCase, async: false
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
@@ -27,6 +26,7 @@ defmodule Cadence.LimitsTest do
   alias Cadence.Limits
   alias Cadence.Limits.Definition, as: LimitDefinition
   alias Cadence.Limits.Facts, as: LimitFacts
+  alias Cadence.Limits.Store
   alias Cadence.Platform.EventBus
   alias Cadence.Telemetry.PacketDefinition
 
@@ -182,51 +182,42 @@ defmodule Cadence.LimitsTest do
     assert Enum.map(published_events, & &1.limit_state) == [:green, :yellow_high]
     refute_receive {:"$gen_cast", {:cadence_fact, {:cadence, :limits, :facts}, _fact}}
 
-    event_history =
-      LimitReads.event_history("mission-alpha", "DERIVED.counter_double")
+    # The ground projections the batch evaluation wrote (the runtime's alarm states are read through
+    # `Reads.AlarmEvents`, #451 T3e).
+    point = "DERIVED.counter_double"
 
+    event_history = Store.list_events("mission-alpha", point_id: point, order: :desc)
     assert Enum.map(event_history, & &1.limit_state) == [:yellow_high, :green]
 
     bounded_event_history =
-      LimitReads.event_history("mission-alpha", "DERIVED.counter_double",
+      Store.list_events("mission-alpha",
+        point_id: point,
         from_receipt_time: DateTime.from_unix!(1_700_000_200),
-        to_receipt_time: DateTime.from_unix!(1_700_000_205)
+        to_receipt_time: DateTime.from_unix!(1_700_000_205),
+        order: :desc
       )
 
     assert Enum.map(bounded_event_history, & &1.limit_state) == [:green]
 
-    as_of_state =
-      LimitReads.latest_state("mission-alpha", "DERIVED.counter_double",
-        to_receipt_time: DateTime.from_unix!(1_700_000_205)
+    [as_of_state | _] =
+      Store.list_events("mission-alpha",
+        point_id: point,
+        to_receipt_time: DateTime.from_unix!(1_700_000_205),
+        order: :desc
       )
 
     assert as_of_state.limit_state == :green
     assert as_of_state.normalized_state == :green
 
-    latest_state =
-      LimitReads.latest_state("mission-alpha", "DERIVED.counter_double")
+    [latest_state] = Store.list_latest_states("mission-alpha", point_id: point)
 
     assert latest_state.limit_state == :yellow_high
     assert latest_state.normalized_state == :yellow
     assert latest_state.violation
     assert latest_state.evaluated_value == 60
 
-    assert {:ok, watermark} =
-             LimitReads.watermark_result("mission-alpha", "DERIVED.counter_double")
-
-    assert watermark.confidence == :best_effort
-
-    assert DateTime.compare(watermark.latest_receipt_time, DateTime.from_unix!(1_700_000_210)) ==
-             :eq
-
-    assert DateTime.compare(watermark.complete_through, DateTime.from_unix!(1_700_000_210)) ==
-             :eq
-
-    assert DateTime.compare(watermark.retention_starts_at, DateTime.from_unix!(1_700_000_200)) ==
-             :eq
-
-    assert watermark.sample_count == 3
-    assert watermark.projection_sources == %{event_count: 2, latest_state_count: 1}
+    assert %{latest: %{sample_count: 1}, events: %{sample_count: 2}} =
+             Store.watermark("mission-alpha", point)
   end
 
   test "persisting a limit definition invalidates matching dashboard runtime caches" do
@@ -421,7 +412,7 @@ defmodule Cadence.LimitsTest do
   defp dashboard_data_source_id(:limits), do: "managed_limits_projection"
   defp dashboard_data_source_id(:telemetry), do: "managed_questdb_primary"
 
-  defp dashboard_dataset(:limits), do: "telemetry_latest_limit_states"
+  defp dashboard_dataset(:limits), do: "semantic_latest_alarm_states"
   defp dashboard_dataset(:telemetry), do: "flight"
 
   defp dashboard_source_adapter(:limits), do: Cadence.Dashboards.Sources.Limits
