@@ -3,7 +3,7 @@ defmodule CadenceWeb.DashboardExplorationReadTest do
   alias Cadence.Auth.Scope
   alias Cadence.Contacts.ScheduledContact
   alias Cadence.Dashboards.{DocumentCodec, Documents, ResolutionContext}
-  alias Cadence.Reads.Dashboards.{Exploration, ExplorationSnapshot, Workspace}
+  alias Cadence.Reads.Dashboards.{Exploration, ExplorationSampleSnapshot, Workspace}
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.Telemetry.Sample
   alias CadenceWeb.TestFixtures
@@ -183,7 +183,7 @@ defmodule CadenceWeb.DashboardExplorationReadTest do
     assert frame.shape == :scalar
   end
 
-  test "real authorized snapshots load without leaking provenance", c do
+  test "real authorized reads load without leaking provenance into the browser projection", c do
     dashboard = dashboard(c)
 
     assert {:ok, _} =
@@ -199,8 +199,22 @@ defmodule CadenceWeb.DashboardExplorationReadTest do
           %{"point_id" => "metric", "logical_source" => "operational_observables"},
           %{"point_id" => "voltage", "scope_kind" => "transport", "scope_id" => "transport"}
         ] do
-      assert {:ok, model} = ExplorationSnapshot.load(c.scope, c.mission, params, c.opts)
-      refute Jason.encode!(model) =~ "must-not-reach-browser"
+      case Exploration.load(c.scope, c.mission, params, c.opts) do
+        {:ok, read} ->
+          projection =
+            ExplorationSampleSnapshot.build(read.selected_sample, read.query, read.request)
+
+          refute Jason.encode!(projection) =~ "must-not-reach-browser"
+
+        # A query that names no point, or a source or scope the exploration does not support, is
+        # a status of the query, never a wider read.
+        {:error, reason} ->
+          assert reason in [
+                   :point_required,
+                   :unsupported_exploration_source,
+                   :unsupported_exploration_scope
+                 ]
+      end
     end
   end
 
@@ -208,22 +222,19 @@ defmodule CadenceWeb.DashboardExplorationReadTest do
        c do
     dashboard = dashboard(c)
     params = %{"source_dashboard_id" => dashboard.dashboard_id}
-    assert {:ok, model} = ExplorationSnapshot.load(c.scope, c.mission, params, c.opts)
-    assert model.origin == %{status: "unavailable", dashboard: nil}
+
+    # Not published: no origin, whatever the draft holds; the query itself still needs a point.
+    assert {:error, :unavailable} =
+             Workspace.reference(c.scope, c.mission, dashboard.dashboard_id)
+
+    assert {:error, :point_required} = Exploration.load(c.scope, c.mission, params, c.opts)
 
     assert {:ok, _} =
              Documents.publish(c.org, c.mission, dashboard.dashboard_id, 1, expected_version: 1)
 
-    assert {:ok, model} = ExplorationSnapshot.load(c.scope, c.mission, params, c.opts)
-
-    assert model.origin == %{
-             status: "ready",
-             dashboard: %{id: dashboard.dashboard_id, name: dashboard.name}
-           }
-
-    assert model.query == params
-    assert model.status == "point_required"
-    assert model.version == 3
+    reference = %{id: dashboard.dashboard_id, name: dashboard.name}
+    assert {:ok, ^reference} = Workspace.reference(c.scope, c.mission, dashboard.dashboard_id)
+    assert {:error, :point_required} = Exploration.load(c.scope, c.mission, params, c.opts)
 
     assert {:ok, _} =
              Documents.update(
@@ -234,9 +245,8 @@ defmodule CadenceWeb.DashboardExplorationReadTest do
                expected_version: 1
              )
 
-    assert {:ok, refreshed} = ExplorationSnapshot.load(c.scope, c.mission, params, c.opts)
-    assert refreshed.origin == model.origin
-    refute Jason.encode!(refreshed) =~ "Unpublished secret name"
+    assert {:ok, ^reference} = Workspace.reference(c.scope, c.mission, dashboard.dashboard_id)
+    refute inspect(reference) =~ "Unpublished secret name"
     refute_received {:read_explore, _, _, _, _, _}
   end
 
@@ -271,17 +281,19 @@ defmodule CadenceWeb.DashboardExplorationReadTest do
           other_mission.dashboard_id,
           "missing"
         ] do
-      assert {:ok, model} =
-               ExplorationSnapshot.load(
+      assert {:error, :unavailable} = Workspace.reference(c.scope, c.mission, id)
+
+      assert {:ok, read} =
+               Exploration.load(
                  c.scope,
                  c.mission,
                  %{"source_dashboard_id" => id, "point_id" => "voltage"},
                  c.opts
                )
 
-      assert model.origin == %{status: "unavailable", dashboard: nil}
-      assert model.status == "ready"
-      assert length(model.rows) == 1
+      # The observation is still read: one frame, one value.
+      assert [frame] = read.result.frames_by_placement["exploration"].primary
+      assert [_time, %{values: [_one]}] = frame.fields
     end
   end
 
@@ -303,7 +315,7 @@ defmodule CadenceWeb.DashboardExplorationReadTest do
                Workspace.reference(scope, c.mission, dashboard.dashboard_id)
 
       assert {:error, :unavailable} =
-               ExplorationSnapshot.load(
+               Exploration.load(
                  scope,
                  c.mission,
                  %{"source_dashboard_id" => dashboard.dashboard_id},
