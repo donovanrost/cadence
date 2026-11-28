@@ -30,6 +30,24 @@ config :cadence_web,
 
 dev_port = String.to_integer(System.get_env("PORT", "4001"))
 
+review_origin = System.get_env("CADENCE_DEV_REVIEW_ORIGIN", "")
+
+review_url =
+  case review_origin do
+    "" ->
+      nil
+
+    origin ->
+      uri = URI.parse(origin)
+
+      if uri.scheme != "https" or is_nil(uri.host) or uri.path not in [nil, ""] or
+           not is_nil(uri.query) or not is_nil(uri.fragment) or not is_nil(uri.userinfo) do
+        raise "CADENCE_DEV_REVIEW_ORIGIN must be an HTTPS origin"
+      end
+
+      [host: uri.host, scheme: "https", port: uri.port || 443]
+  end
+
 # CADENCE_CI_SERVER=1: the console-e2e CI server only. No code reloader and no Vite or Tailwind
 # watchers. Under concurrent requests the reloader raced Mix's project loading ("Trying to load
 # XTCE.MixProject ... another project with the same name was already defined", run 44741752992),
@@ -44,8 +62,10 @@ ci_server? = System.get_env("CADENCE_CI_SERVER") in ["1", "true"]
 config :cadence_web, :tidewave?, not ci_server?
 
 config :cadence_web, CadenceWeb.Endpoint,
-  url: [host: "127.0.0.1"],
-  check_origin: ["//localhost:#{dev_port}", "//127.0.0.1:#{dev_port}"],
+  url: review_url || [host: "127.0.0.1"],
+  check_origin:
+    ["//localhost:#{dev_port}", "//127.0.0.1:#{dev_port}"] ++
+      if(review_url, do: [review_origin], else: []),
   http: [ip: {127, 0, 0, 1}, port: dev_port],
   code_reloader: not ci_server?,
   reloadable_apps: [:cadence, :cadence_catalog, :ccsds, :xtce, :cadence_web],
