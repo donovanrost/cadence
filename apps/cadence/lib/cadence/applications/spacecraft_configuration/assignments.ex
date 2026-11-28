@@ -55,6 +55,30 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Assignments do
     |> Repo.all()
   end
 
+  @doc "Spacecraft whose current assignment names this catalog revision."
+  @spec saved_on_catalog(binary(), binary(), binary()) :: [binary()]
+  def saved_on_catalog(org, mission, catalog) do
+    org
+    |> headed_assignments(mission)
+    |> with_artifact()
+    |> where([artifact: artifact], artifact.catalog_revision_id == ^catalog)
+    |> select([assignment: row], row.spacecraft_id)
+    |> Repo.all()
+  end
+
+  @doc "Current assignment version for each requested spacecraft with an assignment."
+  @spec latest_versions(binary(), binary(), [binary()]) :: %{binary() => pos_integer()}
+  def latest_versions(_org, _mission, []), do: %{}
+
+  def latest_versions(org, mission, ids) do
+    org
+    |> headed_assignments(mission)
+    |> where([head], head.spacecraft_id in ^ids)
+    |> select([assignment: row], {row.spacecraft_id, row.version})
+    |> Repo.all()
+    |> Map.new()
+  end
+
   def fetch_many(_org, _mission, []), do: %{}
 
   def fetch_many(org, mission, ids) do

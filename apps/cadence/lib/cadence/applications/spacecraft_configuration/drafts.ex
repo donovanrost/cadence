@@ -77,6 +77,8 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Drafts do
   defdelegate latest_references(organization_id, mission_id, spacecraft_ids), to: Assignments
   defdelegate latest_for_mission(organization_id, mission_id), to: Assignments
   defdelegate catalog_usage_entries(organization_id, mission_id), to: Assignments
+  defdelegate saved_on_catalog(organization_id, mission_id, catalog_revision_id), to: Assignments
+  defdelegate latest_versions(organization_id, mission_id, spacecraft_ids), to: Assignments
   defdelegate history(organization_id, mission_id, spacecraft_id), to: Assignments
 
   def latest(organization_id, mission_id, spacecraft_id) do
