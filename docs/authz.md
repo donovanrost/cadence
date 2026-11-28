@@ -32,8 +32,22 @@ the list: most checks have none. Counts and line numbers drift; re-grep before a
 
 **A person is never a mission admin.** `Scope.user_scope` sets `mission_id` nil and gives only the
 two capabilities above, so `:manage_mission` for a person means organization admin or platform
-admin, and the `mission_admin` branches in `ActivationPolicy.may_change/4` and
-`ApprovalSettingAccess` are reachable only by a mission-scoped service or an organization admin.
+admin. The `mission_admin` branches in `ActivationPolicy.may_change/4` and `ApprovalSettingAccess`
+are therefore reachable only by an organization admin or a platform admin in admin mode: a
+mission-scoped service holding `mission_admin` never gets there, because `SettingsAccess` refuses
+services (`auth/settings_access.ex:19`) before `may_change` runs.
+
+**The intended model (not findings).**
+- *Access to a mission is access to everything in it.* Any active member of an organization
+  operates every mission of that organization (DECISIONS #62); nothing is per spacecraft, per
+  command or per subsystem. So a read that carries only the `MissionScope` plug, including the
+  whole commanding read surface, is authorized by design.
+- *Any active member can see the people directory*, `GET …/people`: every member's email, role and
+  capability list, and the invitations (including recently decided ones) with their addresses.
+- *A platform admin in admin mode operates any mission by id without being a member*
+  (`console/access.ex:129`, the `todo(authz)` there): the mission must exist and belong to its
+  organization; the organization membership is skipped.
+- *Separation of duties* is a setting (`ActivationPolicy`), not a role: see section 3.3.
 
 **Resources.** An organization (membership, people, provider accounts, fleet planning policy),
 a mission (all operations), or one of a mission's records (a command group, an activation request,
@@ -53,7 +67,7 @@ collapse them differently: `:unavailable` (`ReviewAccess`, `CommandReadAccess`,
 1. **Plugs.** `APISession` (cookie) or the service bearer, `MissionScope` (`:operate_mission`),
    `OrganizationScope` (`:operate_organization`), `RequireAuthenticatedScope`. Every console
    mission route sits behind `MissionScope`; **a route with nothing more is authorized only by
-   "any active member"** (section 5).
+   "any active member"** (the intended model, section 1).
 2. **`Auth.Policy.authorize/3`** (`auth/policy.ex`): 25 action atoms and the four `provider_delivery_credential.*` atoms
    (section 3), about 210 references outside the module, `:operate_mission` alone about 80.
 3. **Wrappers with their own logic.** `Management.Commanding.ReviewAccess`
@@ -96,12 +110,12 @@ needs `:organization_admin` (`:forbidden`).
 | `member.manage` | `:manage_organization_members` (P:106) | organization (people, invitations) | 7 | |
 | `service_identity.manage` | `:manage_service_identities` (P:283) | organization | 5 | Person only; an extra redundant person check. |
 | `provider_account.manage` | `:manage_provider_accounts` (P:128) | organization | 13 | |
-| `provider_change.approve` | `:approve_provider_changes` (P:139) | organization | 2 | Proposer/approver separation is elsewhere. |
+| `provider_change.approve` | `:approve_provider_changes` (P:139) | organization | 2 | **No requester concept and no separation check anywhere**: any organization admin decides. |
 | `mission_model.approve` | `:approve_mission_model` (P:152, 155) | organization (a revision) | 6 | A service is refused with its own atom (`human_mission_model_approver_required`, DECISIONS #92). |
 | `contact_plan.approve` | `:approve_contact_plans` (P:166) | organization | 7 | |
-| `fleet_planning_policy.manage` / `.approve` | `:manage_fleet_planning_policy` (P:177), `:approve_fleet_planning_policy` (P:188) | organization | 2 / 2 | **No author-vs-approver check at all** on approve. |
+| `fleet_planning_policy.manage` / `.approve` | `:manage_fleet_planning_policy` (P:177), `:approve_fleet_planning_policy` (P:188) | organization | 2 / 2 | `Policy` has no separation, but the decision does: `not_author/2` (`contact_planning/fleet_planning_policies.ex:354-365`) refuses `created_by == actor` for approve and reject, unconditionally. |
 | `automation_grant.manage` | `:manage_automation_grants` (P:199) | organization | 7 | |
-| `organization.read` | `:operate_organization` (P:89) | organization | 4 | Any **active member**, not an admin. Also `OrganizationScope`, which alone authorizes `GET …/people` and `GET …/missions` (section 5). |
+| `organization.read` | `:operate_organization` (P:89) | organization | 4 | Any **active member**, not an admin. Also `OrganizationScope`, which alone authorizes `GET …/people` and `GET …/missions` (the intended model, section 1). |
 
 ### 3.2 Mission level
 
@@ -128,9 +142,12 @@ needs `:organization_admin` (`:forbidden`).
 | `approval_setting.change` | `ApprovalSettingAccess` + `ActivationPolicy.may_change/4` | direction rules for tightening/loosening a mission's approval requirement; the mission-admin branch is reachable by a mission-scoped service or an organization admin | `management/approval_setting_access.ex` |
 | `change_set.review` | `Configuration.Access` and the submission's separation check | always enforced | `domain-call-sites.md` §3 |
 
-The self-approval and two-person rules, by kind: **always enforced** for command groups,
-activations and change-set review; **only when `separation_of_duties` is on** for contact plans,
-automation grants and mission models; **none** for fleet planning policy approval.
+The self-approval and two-person rules, by kind (verified against the code):
+
+| Always enforced | Enforced only when `separation_of_duties` is on (`ActivationPolicy` "independent") | Not enforced |
+| --- | --- | --- |
+| command group GO (`Accountability.separate/4`); activation request (the requester check; the author check is skipped only when the request recorded `separation_of_duties` false); change-set review (a set in review); fleet planning policy approve **and** reject (`not_author/2`, `fleet_planning_policies.ex:354-365`) | contact plan approve (only approve); automation grant approve and resume (reject, revoke and narrow have none); mission model approve (reject has none, and an importer with no record is approvable by any admin) | provider change approval (no requester concept) |
+
 `ActivationPolicy.evidence` is the switch: `"independent"` is one human approval plus separation of
 duties, `"direct"` is none.
 
@@ -145,70 +162,59 @@ duties, `"direct"` is none.
   `scope.mission_id in [nil, mission_id]` is repeated in about 15 modules, where for a person it
   does nothing (`mission_id` is always nil) and for a service `Policy` already pins it.
 - The pass-release flag, the approval-setting flags and the `can_decide` flags each repeat the
-  save rule for display (`ApprovalSettingAccess.flags` per field; `may_release?` per pass; the
-  activation row's `can_decide` compares the raw requester id, unlike the enforcement path, which
-  expands a service requester through `Accountability`).
+  save rule for display (`ApprovalSettingAccess.flags` per field, in memory; `may_release?` once
+  per request; the activation row's `can_decide` compares the raw requester id, unlike the
+  enforcement path, which expands a service requester through `Accountability`).
 
-## 5. Gaps the inventory found (each to be filed under #722 as a bug)
+## 5. Findings, with severity
 
-**Plug-only reads (nothing beyond "any active member of the organization")**: the whole commanding
-read surface; `GET …/people` (every member's email, role and capability list, and pending
-invitation addresses; the client shows People to organization admins only);
-`GET …/organizations/:id/missions`; activation request `list`/`get`/`configuration_change_names`
-(`control/activation_requests.ex:26,36,52`); `MissionModelApprovals.list`/`read` and `compare`
-(which persists a report); `DashboardDirectoryController#view`. The only **writes** with nothing
-beyond the scope plug are `DashboardDirectoryController#view` and the dev-only ingest; every
-other write has a named check.
+Each finding was re-checked against the code by a second pass trying to disprove it; the ones that
+did not survive are in "Withdrawn" below. Severity is for the decision of whether to fix it now:
+**high** a person or session keeps access it should have lost; **medium** a rule that is weaker
+than the rest of the system or than the client shows, or a missing separation; **low** a hazard,
+a misnaming, dead code or a cost that does not grow with a fleet.
 
-**Domain functions that rely on the caller**: `Control.Contacts.execute_approved_plan` inserts
-execution items (`accept_approved_plan`) before `ContactPlanExecutions.execute` authorizes
-(`control/contacts.ex:103-112`); `Control.Commanding.dispatch_queue_lane` takes no scope; the
-provider functions that take `Scope | binary` skip authorization when given an organization id.
+| # | Sev | Finding | Evidence |
+| --- | --- | --- | --- |
+| F1 | **high** | **A live console socket keeps its channels after the person's access ends.** Only a password change, a session revoke and a sign-out disconnect a socket (`account_controller.ex:16,45,53,57`, `session_controller.ex:32`); membership removal, a role change, deactivation and admin-mode expiry do not. `connect/3` captures `admin_mode?` once, so an admin-mode socket keeps it for later joins (each join re-reads the session, user, membership and `platform_admin` capability, but reuses the connect-time `admin_mode?`). After a join nothing re-checks: the `command_group` channel pushes with no check, the `dashboard` channel's `view:set`/`view:subscribe` re-run `:operate_mission` against the join-time scope struct, so the check can never fail, and `fleet:subscribe`, `fleet:unsubscribe` and `points:set` authorize nothing. Filed as #1153. | `console_socket.ex:24-34`; `mission_channel.ex:67`; `command_group_channel.ex:20,57`; `spacecraft_channel.ex:28,61`; `dashboard_channel.ex:29,66` |
+| F2 | medium | **`:manage_mission` is looser than `:operate_mission`**: it does not check the mission belongs to the organization; a platform admin skips the organization check; a service holding `organization_admin` passes for any mission of its organization even when pinned to another (the admin UI forbids that combination, `Auth.issue_service_identity` does not). Callers compensate through `MissionScope` and by fetching the mission by organization id, so it is defence in depth. A service's lifecycle is checked by bearer authentication (only active identities load), so that part is fine. | `auth/policy.ex:298-320` |
+| F3 | medium | **Any active member can write the organization-level configuration and pass-review settings.** `:read_settings`/`:manage_settings` admit any active member (organization level: `:operate_organization`; mission level: `:operate_mission`), and those two sections check nothing stricter; only the governance section adds `ActivationPolicy.may_change`. | `auth/policy.ex:71-84`; `management/configuration_settings_section.ex`, `management/pass_review_settings_section.ex` |
+| F4 | medium | **Provider change approval has no author-vs-approver check** (no requester concept): any organization admin decides, including on their own proposal. | `auth/policy.ex:139`; `domain-call-sites.md` §5 |
+| F5 | medium | **The client gate is stricter than the server**: ten or more setup screens hide config staging, catalog import, settings, requirement editing and activations behind the client-only `canAdministerOrganization`, while the server needs only `:operate_mission`, so any mission operator can do them. (Equal for mission create, provider accounts, audit and plan approve/reject.) The server is the authority; this is the same rule as F3 seen from the client. | `web-layer.md` §4 |
+| F6 | low | `data_sources.manage` is advertised to any operator, but every data-sources write also needs `:read_organization` (organization admin), so a non-admin operator sees an action and is refused with 403. The `todo(authz)` there says "any mission operator". | `applications/ops_console/actions/data_sources.ex` (`authorize/3`) |
+| F7 | low | **`MissionModelApprovals.compare` persists a report on a read path** with no authorize call (`comparison.ex:427`), as do `list`/`read`; activation request `list`, `get` and `configuration_change_names` have no domain check either. The route's `MissionScope` plug is the only check (by the model above, any member). | `reads/mission_model_approvals.ex`, `control/activation_requests.ex:26,36,52` |
+| F8 | low | `DashboardDirectoryController#view` is a write authorized only by the plug. | `web-layer.md` §2.8 |
+| F9 | low | **Reads that use a write permission, and misnamed actions**: `:read_organization` is "administer"; `:manage_missions` is plural and org-level (9 sites); the delivery-credential `show` needs `:manage_mission`. About 12 organization-level atoms are one rule. | section 3 |
+| F10 | low | **Dead code**: `CommandReadAccess` (a complete operator check, nothing calls it), `:read_legacy_application`, `ControlPlaneAccess.authorize_mission/3` and `authorize_spacecraft/4`, `Policy.service_allowed_organization_actions/0` (non-test callers: none). | section 2 |
+| F11 | low | `Control.Contacts.execute_approved_plan` inserts the execution items (`accept`, one insert per snapshot, no transaction) before `authorize_execution`; no caller exposes it (the user path already passes `may_execute`; the service path inserts nothing new). | `control/contacts.ex:103-112` |
+| F12 | low | The provider functions that take `Scope | binary` (`persist_provider`, `archive_provider`, `validate_provider`, `sync_provider`, `ProviderCredentials.create`/`rotate`/`revoke`) skip authorization for a binary organization id; the binary callers are tests, fixtures and re-calls after the Scope clause authorized; none is reachable from the web. `version_provider` is organization-id only. | `domain-call-sites.md` §5 |
+| F13 | low | **Service bearer reach** is wide for a mission-bound service: it can download raw catalog source-file bytes (no check beyond `ServiceAccess` and `MissionScope`) and import a catalog as itself (`create` re-runs `:operate_mission` and records the service as the importer). By design (an opt-in), recorded so the Cedar catalog sees it. `ContactPlanController#may_execute` returns ok for any service, dead only because `ServiceAccess` excludes the route. | `console/service_access.ex`; `contact_plan_controller.ex` |
+| F14 | low | **Refusals differ for the same cause** (section 1), and `Administration.Access`'s `:unavailable` becomes 403 `admin_mode_required`. | `web-layer.md` |
+| F15 | low | A signed-out application-host request gets a 302 only when its CSRF token is valid (else a JSON 403 `invalid_csrf`); the JSON 401 plug is dead. `HostPageLive` (3 ops routes, being deleted) applies no `:operate_mission` at mount; its data reads apply it in the domain. | `web-layer.md` §2.13 |
 
-**Server stricter or weaker than the client**: ten or more setup screens hide config staging,
-catalog import and requirement editing behind the client-only `canAdministerOrganization`, while the
-server needs only `:operate_mission` (so any mission operator can do them); `data_sources.manage`
-is advertised to any operator but the server needs `:read_organization` (organization admin);
-`planning.edit` is one client token over three different server checks (organization admin,
-`:manage_mission`, `:operate_mission`); the session `capabilities` list is part hand-written
-(`organization_admin`, `platform_admin` strings) and part derived from `Policy`
-(`command.request`, `command.approve`, `command.abort`, `org.invite`, `org.manage_members`,
-`dashboard.author`). `data_sources.ex` requires organization admin for every action though its
-`todo(authz)` says "any mission operator".
+**Withdrawn after the re-check**: "fleet planning policy approval has no author check" (it refuses
+the author, `fleet_planning_policies.ex:354-365`); "the plug-only commanding reads and the people
+directory are gaps" (they are the model above); "`Control.Commanding.dispatch_queue_lane` takes no
+scope" (called only as the dispatchers' default function); "`may_release?` runs per pass" (once per
+request); "the mission-admin branches are reachable by a mission-scoped service" (they are not).
 
-**Sockets never re-check identity after a join.** `disconnect` is broadcast only on password
-change, session revoke and sign-out, not on membership removal, role change, deactivation or
-admin-mode expiry; `admin_mode?` is captured once at connect, so a socket keeps platform-admin
-joins after the hour ends; the `command_group` channel pushes with no authorization call; the
-dashboard `view:set` event re-runs `:operate_mission` against the frozen join-time scope.
+## 6. Authorization cost per request (the 500-spacecraft floor)
 
-**Service bearer reach.** A mission-bound service can download raw catalog source files and
-import a catalog as itself; `ContactPlanController#may_execute` returns ok for any service
-(dead only because `ServiceAccess` excludes the route); `ContactRuntime#path_runtime` is opted in
-though its sibling `runtime` (same check) is not.
-
-**Platform admin**: in admin mode, passes `:operate_mission` for any mission by id without being a
-member (`todo(authz)` at `console/access.ex:129`); `ReviewAccess` allows it with no membership.
-
-## 6. Checks done per row (the 500-spacecraft floor)
-
-A list read must authorize once and scope its query. These authorize, or compute the answer to an
-authorization, once per item:
+A list read should authorize once and scope its query. Measured by reading the code (not
+profiled); none of these grows with the number of spacecraft, but the first two grow with members
+and missions:
 
 | Where | Cost |
 | --- | --- |
-| `Console.Capabilities.organization/1` (session load) | Three of its five sources run `Policy.authorize` over **every mission of the organization**, once per organization the person belongs to, on each session read. |
-| `ReviewAccess.capabilities`, `GroupAbort.capabilities`, `Dashboards.Capabilities.list` | Each lists all missions and authorizes per mission; the **People directory runs the first two once per member** (members x missions). |
-| `ReviewAccess.authorize` | Extra DB reads on every commanding call (it re-fetches the user and membership instead of trusting the request's scope; the domain sweep counted three). |
-| Fleet planning (`Planner.run`, `update_requirement_progress`, `checkpoint_search_batch`) | `:operate_mission` per requirement and per batch (`fleet_planner.ex:356-370`, `fleet_search.ex:15`, `FleetPlanningRuns` per write). |
-| Grant ledger flags | Policy, `ActivationPolicy.evidence` and a replaced-proposer query per grant. |
-| `ApprovalSettingAccess.flags` | Per field. |
-| Pass release flag (`may_release?`) | The booker check per pass. |
-| Activation `can_decide`; mission-model `viewer_can_decide` | Per row / per revision, display only. |
-| `GET …/people`, `GET …/dashboards`, activation and mission-model reads | Per-row flags on a plug-only read. |
-| Each per-spacecraft channel join | One DB-backed `authorize_mission`. |
+| Session capability list (`Console.Capabilities.organization/1`) | Per organization the person belongs to, per session read: its three Policy-derived sources use `Enum.any?`, so about one `Policy.authorize` each (in memory, with an ETS-cached mission-organization check), but each starts with a `list_missions` full-row read: 4 reads per organization, and 3 more for the current organization in `SessionJSON`. |
+| People directory | The commanding and abort capability sources run **per member**: two `list_missions` queries per member, O(members) queries and O(members x missions) rows. |
+| `ReviewAccess.authorize` | Three DB reads per call (the user, the membership, the mission), a fourth on a cold mission-organization cache; it re-fetches instead of trusting the request's scope. `GroupAbort.authorize` reloads nothing and skips the mission pin and id validation. |
+| Fleet planning | One authorize per run, per 250-requirement batch and per phase in production; the per-requirement path runs only through test seams. |
+| Grant ledger flags | Proposed grants: 2 settings reads each; suspended: 1; the replaced-proposer query only for replacing proposals under "independent". Others cost no query. |
+| `ApprovalSettingAccess.flags` | Per field of the governance section; 1-2 in-memory Policy calls, no DB. |
+| Each channel join | One full `authorize_mission` (session, user, membership, mission reads). |
 
-`Policy.mission_in_organization/2` caches confirmed (organization, mission) pairs for good but
+`Policy.mission_in_organization/2` caches confirmed (organization, mission) pairs for good and
 re-queries every refused pair.
 
 ## 7. What the next steps need from this
@@ -218,8 +224,8 @@ re-queries every refused pair.
   `FunctionClauseError` today (no catch-all); that stays.
 - **The session capability list** (criterion 3, DECISIONS #38) is the one hand-written part: it
   should be derived from the catalog for every action, with the per-role agreement test extended.
-- **List reads** (criterion 4): the table in section 6, starting with the session load and the
-  People directory.
+- **List reads** (criterion 4): the table in section 6, starting with the People directory and the
+  session load (`list_missions` once per request, not per source).
 - **Cedar (#723)** needs the attributes the rules read: a person's membership role and
   platform-admin mode; a service's mission pin, capabilities and lifecycle; the resource's
   organization, mission and (for commanding) hazard, significance, fleet reach and requester; and
