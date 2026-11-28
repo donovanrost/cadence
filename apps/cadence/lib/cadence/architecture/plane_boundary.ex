@@ -172,6 +172,7 @@ defmodule Cadence.Architecture.PlaneBoundary do
     "lib/cadence/semantic_runtime/result.ex" => :shared,
     "lib/cadence/semantic_runtime/scope.ex" => :shared,
     "lib/cadence/semantic_runtime/state.ex" => :shared,
+    "lib/cadence/semantic_runtime/threshold_limits.ex" => :shared,
     "lib/cadence/semantic_runtime/update.ex" => :shared,
     "lib/cadence/runtime/mission_model_plan_decoder.ex" => :shared,
     # #990: the listen allowlist, parsed alike at save (comms) and on accept (the runtime).
