@@ -252,7 +252,7 @@ defmodule Cadence.Reads.PassUplink do
 
     rows =
       org
-      |> Passes.load(mission, from, DateTime.add(to, 1))
+      |> Passes.load(mission, from, DateTime.add(to, 1), %{overlap: false})
       |> Map.fetch!(:passes)
       |> Enum.filter(&MapSet.member?(wanted, &1.scheduled_contact_id))
       |> Map.new(&{&1.scheduled_contact_id, &1})

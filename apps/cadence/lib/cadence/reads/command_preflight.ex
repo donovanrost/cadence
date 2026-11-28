@@ -206,9 +206,12 @@ defmodule Cadence.Reads.CommandPreflight do
 
     # Only the targets' passes, and all of them (paged by the keyset until the read is complete):
     # "no contact" is never decided from a truncated read (#1040).
+    # Windows and uplink facts only: not the listener-overlap decoration, which resolves the
+    # paths of every booked contact around them (#1051).
     filters = %{
       states: ["confirmed", "active"],
-      spacecraft_ids: Enum.map(targets, & &1.spacecraft_id)
+      spacecraft_ids: Enum.map(targets, & &1.spacecraft_id),
+      overlap: false
     }
 
     case Passes.load_all(org, mission, from, until, filters, contact_pages()) do
