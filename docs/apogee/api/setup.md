@@ -1251,7 +1251,9 @@ sources come first, then by name.
     - `credentials_ref`: the reference with its middle elided, never material, or `null`.
   - `kind` is a closed set: `managed_tsdb | byo_tsdb | postgres | object_archive | projection`.
   - `permissions: ["data_sources.manage"]` (top level) when the caller passes the check the
-    writes use (`operate_mission` today), else `[]`.
+    writes use (`Actions.may_manage?/3`: `operate_mission` and an organization admin, #1160), else `[]`. A
+    member who can operate the mission but isn't an organization admin gets `[]`, and their writes
+    are `403`.
 
 ### Data sources (L11): writes, and the reads behind them
 
