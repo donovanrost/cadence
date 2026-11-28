@@ -44,7 +44,11 @@ defmodule Cadence.CommandGroupFixtures do
         id
       end
 
-    Map.merge(c, %{ids: model.commands_by_name, spacecraft: spacecraft})
+    Map.merge(c, %{
+      ids: model.commands_by_name,
+      revision_id: model.revision_id,
+      spacecraft: spacecraft
+    })
   end
 
   def command(c, name, args), do: %{command_id: c.ids[name], argument_values: args}
