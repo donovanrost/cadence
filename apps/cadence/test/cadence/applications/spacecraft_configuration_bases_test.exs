@@ -7,17 +7,20 @@ defmodule Cadence.Applications.SpacecraftConfigurationBasesTest do
   use Cadence.RuntimeCase, async: false
 
   alias Cadence.Applications.{
-    ApplicationBindingStore,
     ApplicationInstallations,
     HostContext,
     PacketBindings
   }
 
+  import Ecto.Query
+
+  alias Cadence.Applications.PacketBindings.ConfigurationRow
   alias Cadence.Applications.SpacecraftConfiguration.ApplicationInputs
   alias Cadence.Applications.SpacecraftConfiguration.Drafts
   alias Cadence.Applications.TelemetryDecomFixtures, as: Fixtures
   alias Cadence.Catalog.SpacecraftConfigurationInput
   alias Cadence.MissionModels.TelemetryProjection
+  alias Cadence.Persistence.JsonDocument
 
   @org "org-configuration-bases"
   @mid "mission-configuration-bases"
@@ -63,21 +66,25 @@ defmodule Cadence.Applications.SpacecraftConfigurationBasesTest do
   end
 
   test "a float in configuration-input metadata changes the stored basis", c do
-    spacecraft_id = c.crafts.telemetry_only.spacecraft_id
+    spacecraft_id = c.crafts.packets_a.spacecraft_id
     original_basis = ApplicationInputs.basis(c.mission, spacecraft_id)
 
-    assert {:ok, binding} =
-             ApplicationBindingStore.fetch(@org, @mid, spacecraft_id, "telemetry_decom")
+    query =
+      from(input in ConfigurationRow,
+        where:
+          input.organization_id == @org and input.mission_id == @mid and
+            input.spacecraft_id == ^spacecraft_id
+      )
 
-    assert {:ok, _updated} =
-             ApplicationBindingStore.upsert(%{binding | metadata: %{"gain" => 1.5}})
+    assert {1, nil} =
+             Repo.update_all(query, set: [metadata: JsonDocument.wrap_value(%{"gain" => 1.5})])
 
     float_basis = ApplicationInputs.basis(c.mission, spacecraft_id)
-    assert String.starts_with?(float_basis, "configuration_inputs:v1:")
+    assert String.starts_with?(float_basis, "configuration_inputs:v2:")
     refute float_basis == original_basis
 
-    assert {:ok, _updated} =
-             ApplicationBindingStore.upsert(%{binding | metadata: %{"gain" => 1}})
+    assert {1, nil} =
+             Repo.update_all(query, set: [metadata: JsonDocument.wrap_value(%{"gain" => 1})])
 
     refute ApplicationInputs.basis(c.mission, spacecraft_id) == float_basis
   end

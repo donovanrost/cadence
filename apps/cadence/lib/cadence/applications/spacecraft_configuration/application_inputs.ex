@@ -3,12 +3,10 @@ defmodule Cadence.Applications.SpacecraftConfiguration.ApplicationInputs do
 
   alias Cadence.MissionModels.TelemetryProjection
 
-  alias Cadence.Applications.ApplicationBindingStore
   alias Cadence.Applications.ApplicationInstallations
   alias Cadence.Applications.HostContext
 
   alias Cadence.Applications.{
-    ApplicationBinding,
     PacketBinding,
     PacketBindingConfiguration,
     PacketBindingResource
@@ -19,21 +17,8 @@ defmodule Cadence.Applications.SpacecraftConfiguration.ApplicationInputs do
 
   alias Cadence.Platform.ContentBasis
 
-  @basis_version 1
+  @basis_version 2
   @basis_fields %{
-    ApplicationBinding => [
-      :application_binding_id,
-      :application_key,
-      :catalog_revision_id,
-      :configuration_version,
-      :enabled,
-      :handled_apids,
-      :metadata,
-      :mission_id,
-      :organization_id,
-      :source_endpoint_id,
-      :spacecraft_id
-    ],
     PacketBindingConfiguration => [
       :application_installation_id,
       :application_key,
@@ -99,14 +84,6 @@ defmodule Cadence.Applications.SpacecraftConfiguration.ApplicationInputs do
         "telemetry_decom"
       )
 
-    bindings =
-      org
-      |> ApplicationBindingStore.list(mission_id,
-        application_key: "telemetry_decom",
-        spacecraft_ids: spacecraft_ids
-      )
-      |> Enum.group_by(& &1.spacecraft_id)
-
     packets =
       org
       |> PacketBindings.list_for_mission(mission_id,
@@ -116,21 +93,11 @@ defmodule Cadence.Applications.SpacecraftConfiguration.ApplicationInputs do
       |> Enum.group_by(& &1.spacecraft_id)
 
     Map.new(spacecraft_ids, fn id ->
-      {id,
-       basis_hash(
-         Map.get(bindings, id, []),
-         Map.get(packets, id, []),
-         Map.get(installations, id, [])
-       )}
+      {id, basis_hash(Map.get(packets, id, []), Map.get(installations, id, []))}
     end)
   end
 
-  defp basis_hash(bindings, packets, installations) do
-    bindings =
-      bindings
-      |> Enum.sort_by(& &1.application_binding_id)
-      |> Enum.map(&basis_value/1)
-
+  defp basis_hash(packets, installations) do
     packets =
       packets
       |> Enum.map(&canonical_packet_input/1)
@@ -146,7 +113,6 @@ defmodule Cadence.Applications.SpacecraftConfiguration.ApplicationInputs do
       end)
 
     ContentBasis.digest("configuration_inputs", @basis_version,
-      bindings: bindings,
       packets: packets,
       installations: installations
     )
@@ -175,8 +141,8 @@ defmodule Cadence.Applications.SpacecraftConfiguration.ApplicationInputs do
   defp basis_value(list) when is_list(list), do: Enum.map(list, &basis_value/1)
   defp basis_value(other), do: other
 
-  def persist(scope, mission, spacecraft, %{"catalog_revision_id" => nil} = document) do
-    with :ok <- disable_existing(scope, mission, spacecraft) do
+  def persist(scope, mission, spacecraft, document, nil) do
+    with :ok <- disable_packets(scope, mission, spacecraft) do
       {:ok,
        %{
          document
@@ -187,22 +153,11 @@ defmodule Cadence.Applications.SpacecraftConfiguration.ApplicationInputs do
     end
   end
 
-  def persist(scope, mission, spacecraft, document) do
+  def persist(scope, mission, spacecraft, document, catalog) do
     with {:ok, installation} <-
            installation(scope, mission, spacecraft, document["telemetry_enabled"]),
-         {:ok, config} <-
-           TelemetryDecom.configure(
-             scope.organization_id,
-             mission.mission_id,
-             spacecraft.spacecraft_id,
-             %{
-               catalog_revision_id: document["catalog_revision_id"],
-               enabled: document["telemetry_enabled"],
-               handled_apids: document["handled_apids"],
-               source_endpoint_id: document["telemetry_source_endpoint_id"]
-             }
-           ),
-         document = Map.put(document, "telemetry_source_endpoint_id", config.source_endpoint_id),
+         {:ok, document} <-
+           TelemetryDecom.normalize_document(mission, spacecraft, catalog, document),
          :ok <- sync_existing_packets(scope, mission, spacecraft, installation, document) do
       {:ok, document}
     end
@@ -215,27 +170,6 @@ defmodule Cadence.Applications.SpacecraftConfiguration.ApplicationInputs do
       {:ok, installation} -> {:ok, installation}
       {:error, _} when enabled -> ApplicationInstallations.install(scope, host, "telemetry_decom")
       {:error, _} -> {:ok, nil}
-    end
-  end
-
-  defp disable_existing(scope, mission, spacecraft) do
-    case TelemetryDecom.fetch_config(
-           scope.organization_id,
-           mission.mission_id,
-           spacecraft.spacecraft_id
-         ) do
-      {:ok, _} ->
-        with {:ok, _} <-
-               TelemetryDecom.disable(
-                 scope.organization_id,
-                 mission.mission_id,
-                 spacecraft.spacecraft_id
-               ) do
-          disable_packets(scope, mission, spacecraft)
-        end
-
-      {:error, :not_configured} ->
-        :ok
     end
   end
 

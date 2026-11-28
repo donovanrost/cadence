@@ -30,9 +30,13 @@ defmodule Cadence.Catalog.MissionModel.MonitoringLowering do
 
   The plan is compiled once per revision and holds every craft's entries, so a partition never
   reads per craft (the per-request rule, #1049).
+
+  Each entry also carries the `SpaceSystem` that owns its policy: `space_system_id`,
+  `space_system_path` and `runtime_name` (ADR-020 P5). Where a policy lives is not what it
+  evaluates, so `rule_digest` (a whitelist) leaves them out.
   """
 
-  alias Cadence.Catalog.MissionModel.{Canonical, Declaration, Diagnostic}
+  alias Cadence.Catalog.MissionModel.{Canonical, Declaration, Diagnostic, SystemOwner}
 
   @digest_version 1
 
@@ -41,13 +45,15 @@ defmodule Cadence.Catalog.MissionModel.MonitoringLowering do
   diagnostics their overrides raise. `origins` maps a declaration's semantic id to the kind of the
   layer that wrote it last (`:imported | :authored`).
   """
-  @spec lower([Declaration.t()], %{optional(binary()) => atom()}) :: {[map()], [Diagnostic.t()]}
-  def lower(declarations, origins) when is_list(declarations) and is_map(origins) do
+  @spec lower([Declaration.t()], %{optional(binary()) => atom()}, SystemOwner.index()) ::
+          {[map()], [Diagnostic.t()]}
+  def lower(declarations, origins, systems)
+      when is_list(declarations) and is_map(origins) and is_map(systems) do
     by_id = Map.new(declarations, &{&1.semantic_id, &1})
 
     {lowered, diagnostics} =
       Enum.reduce(declarations, {[], []}, fn declaration, {lowered, diagnostics} ->
-        case entries(declaration, by_id, origins) do
+        case entries(declaration, by_id, origins, systems) do
           {:ok, new} -> {[{declaration, new} | lowered], diagnostics}
           {:error, diagnostic} -> {lowered, [diagnostic | diagnostics]}
         end
@@ -97,17 +103,20 @@ defmodule Cadence.Catalog.MissionModel.MonitoringLowering do
     end)
   end
 
-  defp entries(declaration, by_id, origins) do
-    base = base(declaration, origins)
+  defp entries(declaration, by_id, origins, systems) do
+    base = base(declaration, origins, systems)
     spacecraft_ids = spacecraft_ids(declaration)
 
     case overridden(declaration) do
-      nil -> {:ok, scoped(base, "policy:" <> declaration.semantic_id, spacecraft_ids)}
-      target_id -> override(declaration, base, Map.get(by_id, target_id), spacecraft_ids)
+      nil ->
+        {:ok, scoped(base, "policy:" <> declaration.semantic_id, spacecraft_ids)}
+
+      target_id ->
+        override(declaration, base, Map.get(by_id, target_id), spacecraft_ids, systems)
     end
   end
 
-  defp override(declaration, _base, nil, _spacecraft_ids),
+  defp override(declaration, _base, nil, _spacecraft_ids, _systems),
     do:
       {:error,
        diagnostic(
@@ -116,7 +125,7 @@ defmodule Cadence.Catalog.MissionModel.MonitoringLowering do
          "an override must name a monitoring policy of this revision"
        )}
 
-  defp override(declaration, _base, _target, []),
+  defp override(declaration, _base, _target, [], _systems),
     do:
       {:error,
        diagnostic(
@@ -125,7 +134,7 @@ defmodule Cadence.Catalog.MissionModel.MonitoringLowering do
          "an override applies to named spacecraft; a mission-wide change is a replace"
        )}
 
-  defp override(declaration, base, target, spacecraft_ids) do
+  defp override(declaration, base, target, spacecraft_ids, systems) do
     cond do
       not is_nil(overridden(target)) or spacecraft_ids(target) != [] ->
         {:error,
@@ -136,7 +145,7 @@ defmodule Cadence.Catalog.MissionModel.MonitoringLowering do
          )}
 
       parameter_id(target) == base["parameter_id"] ->
-        override_entries(base, target, spacecraft_ids)
+        override_entries(base, target, spacecraft_ids, systems)
 
       true ->
         {:error,
@@ -149,17 +158,23 @@ defmodule Cadence.Catalog.MissionModel.MonitoringLowering do
   end
 
   # The craft's state, latest alarm state and episodes key on policy_id: an override is the
-  # target policy for its craft, so it keeps that id as well as the rule_id (and its own
-  # declaration_id).
-  defp override_entries(base, target, spacecraft_ids) do
-    base = Map.put(base, "policy_id", target.semantic_id)
+  # target policy for its craft, so it keeps that id as well as the rule_id, and lives where the
+  # target does (its SpaceSystem and runtime name), whatever path it was authored under: a craft
+  # that binds the target's system runs the override too (its own declaration_id stays).
+  defp override_entries(base, target, spacecraft_ids, systems) do
+    base =
+      base
+      |> Map.put("policy_id", target.semantic_id)
+      |> Map.merge(SystemOwner.fields(target, systems))
+
     {:ok, scoped(base, "policy:" <> target.semantic_id, spacecraft_ids)}
   end
 
-  defp base(declaration, origins) do
+  defp base(declaration, origins, systems) do
     declaration.definition
     |> stringify_keys()
     |> Map.drop(["spacecraft_ids"])
+    |> Map.merge(SystemOwner.fields(declaration, systems))
     |> Map.put("policy_id", declaration.semantic_id)
     |> Map.put("parameter_id", parameter_id(declaration))
     |> Map.put("declaration_id", declaration.semantic_id)

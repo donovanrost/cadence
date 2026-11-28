@@ -25,7 +25,9 @@ defmodule Cadence.SemanticRuntime.MonitoringPlan do
           origin: :catalog | :mission_layer | nil,
           declaration_id: binary() | nil,
           scope: :mission | :spacecraft | nil,
-          spacecraft_id: binary() | nil
+          spacecraft_id: binary() | nil,
+          space_system_id: binary() | nil,
+          runtime_name: binary() | nil
         }
 
   @enforce_keys [:policy_id, :parameter_id]
@@ -46,7 +48,10 @@ defmodule Cadence.SemanticRuntime.MonitoringPlan do
                 origin: nil,
                 declaration_id: nil,
                 scope: nil,
-                spacecraft_id: nil
+                spacecraft_id: nil,
+                # The owning SpaceSystem and qualified runtime name (ADR-020 P5); nil before them.
+                space_system_id: nil,
+                runtime_name: nil
               ]
 
   @origins %{"catalog" => :catalog, "mission_layer" => :mission_layer}
@@ -109,7 +114,9 @@ defmodule Cadence.SemanticRuntime.MonitoringPlan do
       origin: attrs |> value(:origin) |> known(@origins),
       declaration_id: value(attrs, :declaration_id),
       scope: attrs |> value(:scope) |> known(@scopes),
-      spacecraft_id: value(attrs, :spacecraft_id)
+      spacecraft_id: value(attrs, :spacecraft_id),
+      space_system_id: value(attrs, :space_system_id),
+      runtime_name: value(attrs, :runtime_name)
     }
   end
 

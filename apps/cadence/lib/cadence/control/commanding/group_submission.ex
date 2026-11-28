@@ -38,8 +38,7 @@ defmodule Cadence.Control.Commanding.GroupSubmission do
          actor = %{"actor_kind" => "user", "user_id" => fresh.user.user_id},
          :ok <- not_replayed(org, mission_id, Keyword.get(opts, :operation_id)),
          :ok <- required_text(draft),
-         draft = %{draft | targets: UplinkResolution.annotate(org, mission_id, draft.targets)},
-         {:ok, validated} <- Validation.validate(org, mission_id, actor, draft),
+         {:ok, draft, validated} <- validation(org, mission_id, actor, draft, opts),
          :ok <- admissible(validated, draft, Keyword.get(opts, :preflight_digest)) do
       # #117 step 4b: a not_required record's admin_mode, from the submitter's own scope.
       opts = Keyword.put(opts, :admin_mode, fresh.admin_mode? == true)
@@ -47,6 +46,22 @@ defmodule Cadence.Control.Commanding.GroupSubmission do
       org
       |> admit(mission_id, actor, draft, validated, opts)
       |> after_commit(org, mission_id)
+    end
+  end
+
+  # The draft with its resolved routes and its validation: reused from the preflight the caller
+  # ran for this same request (`:request_validation`, from `Reads.CommandPreflight.run/5`), else
+  # computed. The basis is still checked against the locked activation before anything is written.
+  defp validation(org, mission, actor, draft, opts) do
+    case Keyword.get(opts, :request_validation) do
+      %{draft: reused, validated: validated} ->
+        {:ok, reused, validated}
+
+      nil ->
+        draft = %{draft | targets: UplinkResolution.annotate(org, mission, draft.targets)}
+
+        with {:ok, validated} <- Validation.validate(org, mission, actor, draft),
+             do: {:ok, draft, validated}
     end
   end
 
@@ -101,11 +116,11 @@ defmodule Cadence.Control.Commanding.GroupSubmission do
   defp locked_insert(snapshot, org, mission, actor, draft, validated, opts) do
     if snapshot.token == validated.snapshot.token and
          snapshot.activation_id == validated.snapshot.activation_id,
-       do: insert(org, mission, actor, draft, validated, opts),
+       do: insert(org, mission, actor, draft, validated, opts, snapshot.activation),
        else: {:error, :preflight_stale}
   end
 
-  defp insert(org, mission, actor, draft, validated, opts) do
+  defp insert(org, mission, actor, draft, validated, opts, activation) do
     second_go? = validated.policy.second_go_required
     group = build_group(org, mission, actor, draft, validated, opts, second_go?)
 
@@ -116,7 +131,7 @@ defmodule Cadence.Control.Commanding.GroupSubmission do
         if(second_go?, do: :approval_pending, else: :queued)
       )
 
-    with {:ok, seen} <- withdrawn_seen(org, mission, validated, second_go?, opts),
+    with {:ok, seen} <- withdrawn_seen(org, mission, validated, second_go?, opts, activation),
          {:ok, group} <- GroupStore.insert_group(group),
          :ok <- GroupStore.insert_members(members),
          :ok <-
@@ -150,12 +165,13 @@ defmodule Cadence.Control.Commanding.GroupSubmission do
   # E2 (#546): a group armed by its submit (no second GO) records which withdrawn model approvals
   # it was armed knowing, and checks its acknowledgement covers exactly them; a withdrawal since
   # the preflight is a stale preflight. A group waiting for a second GO records at the GO.
-  defp withdrawn_seen(_org, _mission, _validated, true, _opts), do: {:ok, %{}}
+  # `activation` is the one locked for this submit, so the craft's models are read from it.
+  defp withdrawn_seen(_org, _mission, _validated, true, _opts, _activation), do: {:ok, %{}}
 
-  defp withdrawn_seen(org, mission, validated, false, opts) do
+  defp withdrawn_seen(org, mission, validated, false, opts, activation) do
     ids = Enum.map(validated.targets, & &1.spacecraft_id)
 
-    case WithdrawnAtGo.seen(org, mission, ids, Keyword.get(opts, :hold_acks, [])) do
+    case WithdrawnAtGo.seen(org, mission, ids, Keyword.get(opts, :hold_acks, []), activation) do
       {:ok, seen} -> {:ok, seen}
       {:error, :withdrawal_not_acknowledged} -> {:error, :preflight_stale}
     end

@@ -40,12 +40,14 @@ defmodule Cadence.Control.WithdrawnPins do
         }
 
   @doc "`%{spacecraft_id => pin()}` for the affected craft among `spacecraft_ids` only."
-  @spec for_spacecraft(binary(), binary(), [binary()]) :: %{binary() => pin()}
-  def for_spacecraft(_organization_id, _mission_id, []), do: %{}
+  @spec for_spacecraft(binary(), binary(), [binary()], map() | nil) :: %{binary() => pin()}
+  def for_spacecraft(organization_id, mission_id, spacecraft_ids, activation \\ nil)
 
-  def for_spacecraft(organization_id, mission_id, spacecraft_ids)
+  def for_spacecraft(_organization_id, _mission_id, [], _activation), do: %{}
+
+  def for_spacecraft(organization_id, mission_id, spacecraft_ids, activation)
       when is_binary(organization_id) and is_binary(mission_id) and is_list(spacecraft_ids) do
-    running = running(organization_id, mission_id, Enum.uniq(spacecraft_ids))
+    running = running(organization_id, mission_id, Enum.uniq(spacecraft_ids), activation)
     withdrawn = withdrawn(organization_id, mission_id, running |> Map.values() |> Enum.uniq())
 
     if withdrawn == %{} do
@@ -102,8 +104,9 @@ defmodule Cadence.Control.WithdrawnPins do
     end
   end
 
-  defp running(organization_id, mission_id, spacecraft_ids) do
-    with {:ok, activation} <- Activations.fetch_active_activation(organization_id, mission_id),
+  # `activation`: the one the caller already holds (under the command-basis lock), else the active one.
+  defp running(organization_id, mission_id, spacecraft_ids, held) do
+    with {:ok, activation} <- held_or_active(held, organization_id, mission_id),
          {:ok, entries} <- FleetSnapshot.entries_for(activation.metadata, spacecraft_ids) do
       for {id, entry} <- entries,
           revision = revision(entry),
@@ -114,6 +117,11 @@ defmodule Cadence.Control.WithdrawnPins do
       _none -> %{}
     end
   end
+
+  defp held_or_active(nil, organization_id, mission_id),
+    do: Activations.fetch_active_activation(organization_id, mission_id)
+
+  defp held_or_active(activation, _organization_id, _mission_id), do: {:ok, activation}
 
   # A fleet entry's model revision (fleet snapshot v2; #764 deleted the v1 path).
   defp revision(%{"mission_model" => %{"revision_id" => id}}) when is_binary(id), do: id

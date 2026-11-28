@@ -28,14 +28,14 @@ defmodule Cadence.Catalog.MissionModelMountTest do
           {"mission_model_plan:36db7e86882d7b9629b3384691853db55ff679a5a09a73edd4043259546d9887",
            "36db7e86882d7b9629b3384691853db55ff679a5a09a73edd4043259546d9887"},
         command:
-          {"mission_model_plan:78110393fa3e3bd54ddb4170f15a1d077d176a6d2d0b7f6bb303e6d97b18782f",
-           "78110393fa3e3bd54ddb4170f15a1d077d176a6d2d0b7f6bb303e6d97b18782f"},
+          {"mission_model_plan:3548588a6dfbbf445aea58e9a0ef97e7c15e9fd20287b15de28e66046d9edd81",
+           "3548588a6dfbbf445aea58e9a0ef97e7c15e9fd20287b15de28e66046d9edd81"},
         monitoring:
           {"mission_model_plan:d1b748660ecccaf933933b1930011890815b669a1a6559644a7dc81ac5d1c79d",
            "d1b748660ecccaf933933b1930011890815b669a1a6559644a7dc81ac5d1c79d"},
         telemetry:
-          {"mission_model_plan:0a170285a78a1438a81bc1a157558b8d80f846bef25e4829a9c55aa41feb8dce",
-           "0a170285a78a1438a81bc1a157558b8d80f846bef25e4829a9c55aa41feb8dce"}
+          {"mission_model_plan:0278b8955ff641fddafdddb717cdda4b2382e1eae20a6420f5f78d57bbc48475",
+           "0278b8955ff641fddafdddb717cdda4b2382e1eae20a6420f5f78d57bbc48475"}
       }
     },
     xtce: %{
@@ -44,8 +44,8 @@ defmodule Cadence.Catalog.MissionModelMountTest do
       content_sha256: "d3db142cd502e85ee9df42575d53306617ec4fa6af3bfbb4dc2f9ff9ec28ebc3",
       plans: %{
         algorithm:
-          {"mission_model_plan:76170c5fa6497d6796c4bfb0b870b5fdb97974b290eb7c862a632596e7ba808b",
-           "76170c5fa6497d6796c4bfb0b870b5fdb97974b290eb7c862a632596e7ba808b"},
+          {"mission_model_plan:30ff320a65f391d187eee0b9cbd7093fe84a738d9feb07e5d3480f2c1a28609c",
+           "30ff320a65f391d187eee0b9cbd7093fe84a738d9feb07e5d3480f2c1a28609c"},
         command:
           {"mission_model_plan:370e10394674778a9cc9a02a43a87e1dce88fb78e0465e55e3c45018c3528162",
            "370e10394674778a9cc9a02a43a87e1dce88fb78e0465e55e3c45018c3528162"},

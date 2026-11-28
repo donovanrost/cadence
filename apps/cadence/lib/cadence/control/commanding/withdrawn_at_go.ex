@@ -25,10 +25,10 @@ defmodule Cadence.Control.Commanding.WithdrawnAtGo do
   revision (empty when none), or `{:error, :withdrawal_not_acknowledged}` when `acks` (the
   acknowledgements the GO carries, `%{key, hold_basis, ...}`) don't cover exactly those.
   """
-  @spec seen(binary(), binary(), [binary()], [map()]) ::
+  @spec seen(binary(), binary(), [binary()], [map()], map() | nil) ::
           {:ok, %{binary() => binary()}} | {:error, :withdrawal_not_acknowledged}
-  def seen(organization_id, mission_id, spacecraft_ids, acks) do
-    pins = WithdrawnPins.for_spacecraft(organization_id, mission_id, spacecraft_ids)
+  def seen(organization_id, mission_id, spacecraft_ids, acks, activation \\ nil) do
+    pins = WithdrawnPins.for_spacecraft(organization_id, mission_id, spacecraft_ids, activation)
 
     cond do
       pins == %{} ->

@@ -2,7 +2,9 @@ defmodule Cadence.MissionModels.Selection do
   @moduledoc """
   Which revision a pinned composition runs (D3, #544; design §3's selection rule, agreed on #559
   by api-ops and mms-security): the newest APPROVED, RUNNABLE revision linked to the composition
-  at the mission's authored head (nil until phase 3).
+  with no authored head, its **base**. A craft runs that base compiled at the mission's authored
+  head (P3 M1, #451; `Compositions.effective_revision/5`), whose approval is the base's
+  (`MissionModels.effective_statuses/3`), so selection itself never looks at heads.
 
   - **Runnable** is `runnable/0`: an explicit list, in code, of the compiler versions whose plans
     this server executes (api-ops). A revision of any other version is never selected. A test

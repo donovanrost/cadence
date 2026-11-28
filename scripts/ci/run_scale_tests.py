@@ -110,7 +110,7 @@ def markdown(report):
     runner = report["runner"]
     runs = report["runs"]
     lines = [
-        "# CI repeatability numbers only. #217 budgets use quiet laptop 2.",
+        "# CI repeatability numbers only. #217 budgets use Earendil scale scorecards.",
         "",
         f"Runner {cell(runner['type'])} (image {cell(runner['image_version'])}), "
         f"{cell(runner['cpu_model'])}, {runner['logical_cores']} logical cores.",

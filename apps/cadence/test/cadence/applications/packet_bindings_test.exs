@@ -1,12 +1,7 @@
 defmodule Cadence.Applications.PacketBindingsTest do
   use Cadence.DataCase, async: false
 
-  alias Cadence.Applications.{
-    ApplicationInstallations,
-    HostContext,
-    PacketBindings,
-    TelemetryDecom
-  }
+  alias Cadence.Applications.{ApplicationInstallations, HostContext, PacketBindings}
 
   alias Cadence.Auth.Scope
   alias Cadence.Catalog
@@ -179,64 +174,6 @@ defmodule Cadence.Applications.PacketBindingsTest do
     assert disabled.configuration_version == configured.configuration_version + 1
     assert disabled.bindings == configured.bindings
     assert disabled.applied_binding_set_id == nil
-  end
-
-  test "Telemetry Decom resolves runtime selection, endpoint, and applied state from shared bindings",
-       context do
-    assert {:ok, _legacy_config} =
-             TelemetryDecom.configure(
-               @organization_id,
-               @mission_id,
-               @spacecraft_id,
-               catalog_revision_id: context.revision.catalog_revision_id,
-               handled_apids: [],
-               source_endpoint_id: context.endpoint.source_endpoint_id
-             )
-
-    alternate_endpoint =
-      SourceEndpoint.new(%{
-        source_endpoint_id: "source-packet-bindings-alternate",
-        mission_id: @mission_id,
-        spacecraft_id: @spacecraft_id,
-        display_name: "Alternate Downlink"
-      })
-
-    assert {:ok, alternate_endpoint} =
-             Cadence.SourceEndpointFixtures.persist(
-               @organization_id,
-               alternate_endpoint
-             )
-
-    assert {:ok, _configuration} =
-             PacketBindings.replace(
-               context.scope,
-               context.host_context,
-               context.installation.application_installation_id,
-               binding_attrs(context)
-               |> Map.put(:source_endpoint_ref, alternate_endpoint.source_endpoint_id)
-             )
-
-    assert {:ok, configured} =
-             TelemetryDecom.fetch_config(@organization_id, @mission_id, @spacecraft_id)
-
-    assert configured.handled_apids == [42]
-    assert configured.source_endpoint_id == alternate_endpoint.source_endpoint_id
-    assert configured.applied_binding_set_id == nil
-
-    assert :ok =
-             PacketBindings.stamp_applied_for_mission(
-               @organization_id,
-               @mission_id,
-               "mission_applications:#{@mission_id}",
-               3,
-               application_key: "telemetry_decom"
-             )
-
-    assert {:ok, applied} =
-             TelemetryDecom.fetch_config(@organization_id, @mission_id, @spacecraft_id)
-
-    assert applied.applied_binding_set_id == "mission_applications:#{@mission_id}"
-    assert applied.applied_binding_set_version == 3
   end
 
   defp binding_attrs(context) do

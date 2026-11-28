@@ -396,7 +396,7 @@ defmodule Cadence.Activations.FleetConfigurationTest do
     """)
 
     Repo.query!("""
-    CREATE TRIGGER interrupt_apply BEFORE UPDATE ON spacecraft_application_bindings
+    CREATE TRIGGER interrupt_apply BEFORE INSERT ON mission_generation_receipts
     FOR EACH ROW EXECUTE FUNCTION pg_temp.interrupt_apply()
     """)
 
@@ -408,7 +408,7 @@ defmodule Cadence.Activations.FleetConfigurationTest do
     assert code == "activation_execution_interrupted"
     assert reason =~ "injected"
 
-    Repo.query!("DROP TRIGGER interrupt_apply ON spacecraft_application_bindings")
+    Repo.query!("DROP TRIGGER interrupt_apply ON mission_generation_receipts")
 
     # Every step is idempotent, so the same approved request completes on a retry.
     assert {:ok, %{status: :succeeded}} = ControlActivations.execute(approved)

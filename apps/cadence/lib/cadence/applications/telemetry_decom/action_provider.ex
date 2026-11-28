@@ -9,7 +9,6 @@ defmodule Cadence.Applications.TelemetryDecom.ActionProvider do
     ActionFailure,
     ActionRequest,
     ApplicationInstallations,
-    ConfigurationReference,
     HostContext,
     PacketBindings,
     TelemetryDecom
@@ -239,20 +238,6 @@ defmodule Cadence.Applications.TelemetryDecom.ActionProvider do
 
   defp ensure_surface_binding(%ActionRequest{} = request),
     do: ActionContractLedger.admit(request, __MODULE__)
-
-  @impl true
-  def configuration_reference(
-        %ActionRequest{action_id: "save_configuration"},
-        %Config{} = config
-      ) do
-    %ConfigurationReference{
-      kind: "spacecraft_application_binding",
-      id: "application_binding:#{config.spacecraft_id}:telemetry_decom",
-      version: config.configuration_version
-    }
-  end
-
-  def configuration_reference(%ActionRequest{}, _result), do: nil
 
   @impl true
   def result(%Cadence.Applications.PacketBindingConfiguration{} = configuration) do

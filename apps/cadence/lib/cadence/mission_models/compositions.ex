@@ -32,6 +32,7 @@ defmodule Cadence.MissionModels.Compositions do
   alias Cadence.MissionModels
 
   alias Cadence.MissionModels.{
+    AuthoredHead,
     CompositionLayerRow,
     CompositionRow,
     EffectiveRevisionRow,
@@ -251,8 +252,10 @@ defmodule Cadence.MissionModels.Compositions do
   end
 
   @doc """
-  The effective revision of `composition_id` at `authored_head` (nil until phase 3, §2), at the
-  server's current compiler version: that version's existing link as-is; otherwise the composition's layers compiled at their mounts, the revision
+  The effective revision of `composition_id` at `authored_head` (nil: no authored layer; else a
+  recorded version of the mission's authored layer, P3 M1 #451), at the server's current compiler
+  version: that version's existing link as-is; otherwise the composition's layers compiled at
+  their mounts with the authored head last (never mounted), the revision
   written as today, and the link. Under a transaction advisory lock on the composition and head,
   so concurrent calls compile once (api-ops). A revision with blocking diagnostics gets no link:
   `{:error, {:mission_model_composition_invalid, codes}}`.
@@ -264,56 +267,77 @@ defmodule Cadence.MissionModels.Compositions do
           {:ok, binary()} | {:error, term()}
   def effective_revision(organization_id, mission_id, composition_id, authored_head, opts \\ [])
 
-  def effective_revision(_organization_id, _mission_id, _composition_id, head, _opts)
-      when not is_nil(head),
-      do: {:error, :authored_layers_not_supported}
-
-  def effective_revision(organization_id, mission_id, composition_id, nil, opts) do
+  def effective_revision(organization_id, mission_id, composition_id, head, opts)
+      when is_nil(head) or is_binary(head) do
     Repo.transaction(fn ->
-      advisory_lock(organization_id, mission_id, composition_id)
+      advisory_lock(organization_id, mission_id, composition_id, head)
 
-      case link(organization_id, mission_id, composition_id, Compiler.compiler_version()) do
+      case link(organization_id, mission_id, composition_id, head, Compiler.compiler_version()) do
         %EffectiveRevisionRow{revision_id: revision_id} -> revision_id
-        nil -> compile_and_link(organization_id, mission_id, composition_id, opts)
+        nil -> compile_and_link(organization_id, mission_id, composition_id, head, opts)
       end
     end)
   end
 
-  defp compile_and_link(organization_id, mission_id, composition_id, opts) do
-    with {:ok, composition} <- fetch(organization_id, mission_id, composition_id),
-         {:ok, %CompilerResult{revision: revision}} <- compile(composition, opts),
+  defp compile_and_link(organization_id, mission_id, composition_id, head, opts) do
+    with :ok <- recorded_head(organization_id, mission_id, head),
+         {:ok, composition} <- fetch(organization_id, mission_id, composition_id),
+         {:ok, %CompilerResult{revision: revision}} <- compile(composition, head, opts),
          :ok <- usable(revision) do
-      write_link(composition, revision.revision_id)
+      write_link(composition, head, revision.revision_id)
     else
       {:error, reason} -> Repo.rollback(reason)
     end
   end
 
+  # Only a recorded version of the mission's authored layer is a head (P3 M1, #451): an
+  # unrecorded layer id never compiles into something a craft could run.
+  defp recorded_head(_organization_id, _mission_id, nil), do: :ok
+
+  defp recorded_head(organization_id, mission_id, head) do
+    if MapSet.member?(AuthoredHead.recorded(organization_id, mission_id, [head]), head),
+      do: :ok,
+      else: {:error, :authored_head_not_recorded}
+  end
+
   # A 64-bit key from sha256, so unrelated compositions rarely wait on each other (api-ops).
-  defp advisory_lock(organization_id, mission_id, composition_id),
-    do: lock(["mission_model_effective_revision", organization_id, mission_id, composition_id])
+  defp advisory_lock(organization_id, mission_id, composition_id, head),
+    do:
+      lock([
+        "mission_model_effective_revision",
+        organization_id,
+        mission_id,
+        composition_id,
+        head || ""
+      ])
 
   defp lock(parts) do
     <<key::signed-64, _rest::binary>> = :crypto.hash(:sha256, Enum.join(parts, <<0>>))
     Repo.query!("SELECT pg_advisory_xact_lock($1)", [key])
   end
 
-  defp link(organization_id, mission_id, composition_id, compiler_version) do
+  defp link(organization_id, mission_id, composition_id, head, compiler_version) do
     EffectiveRevisionRow
     |> where(
       [link],
       link.organization_id == ^organization_id and link.mission_id == ^mission_id and
-        link.composition_id == ^composition_id and is_nil(link.authored_head) and
-        link.compiler_version == ^compiler_version
+        link.composition_id == ^composition_id and link.compiler_version == ^compiler_version
     )
+    |> at_head(head)
     |> Repo.one()
   end
 
-  defp compile(composition, opts) do
-    layer_ids = Enum.map(composition.imported_layers, & &1.layer_id)
+  defp at_head(query, nil), do: where(query, [link], is_nil(link.authored_head))
+  defp at_head(query, head), do: where(query, [link], link.authored_head == ^head)
+
+  # The composition's imported layers at their mounts, then the authored head last: an authored
+  # layer is never mounted, it addresses the composed tree (Mount, #444).
+  defp compile(composition, head, opts) do
+    imported = Enum.map(composition.imported_layers, & &1.layer_id)
+    layer_ids = if head, do: imported ++ [head], else: imported
     mounts = Map.new(composition.imported_layers, &{&1.layer_id, &1.mount})
 
-    if reusable?(Keyword.get(opts, :compiled), layer_ids, mounts),
+    if is_nil(head) and reusable?(Keyword.get(opts, :compiled), layer_ids, mounts),
       do: {:ok, Keyword.fetch!(opts, :compiled)},
       else:
         MissionModels.compose(composition.organization_id, composition.mission_id, layer_ids,
@@ -339,7 +363,7 @@ defmodule Cadence.MissionModels.Compositions do
 
   # The link's compiler version is the revision row's own (mms-security, condition 1); the
   # composite foreign key refuses any other.
-  defp write_link(composition, revision_id) do
+  defp write_link(composition, head, revision_id) do
     %{organization_id: org, mission_id: mission, composition_id: composition_id} = composition
     version = revision_compiler_version!(org, mission, revision_id)
 
@@ -350,7 +374,7 @@ defmodule Cadence.MissionModels.Compositions do
           organization_id: org,
           mission_id: mission,
           composition_id: composition_id,
-          authored_head: nil,
+          authored_head: head,
           compiler_version: version,
           revision_id: revision_id,
           inserted_at: DateTime.utc_now()
@@ -359,7 +383,7 @@ defmodule Cadence.MissionModels.Compositions do
       on_conflict: :nothing
     )
 
-    case link(org, mission, composition_id, version) do
+    case link(org, mission, composition_id, head, version) do
       %EffectiveRevisionRow{revision_id: ^revision_id} -> revision_id
       _other -> Repo.rollback({:mission_model_effective_revision_conflict, revision_id})
     end

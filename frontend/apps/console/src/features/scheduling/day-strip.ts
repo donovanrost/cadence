@@ -141,6 +141,7 @@ export function stripCell(d: PlanDay, now: Date = new Date()): StripCell {
     day: d.day,
     label: cellDay(d.day),
     ...w,
-    name: `${longDay(d.day)}: ${w.word.toLowerCase()}${firstWindow}`,
+    // WCAG 2.5.3 (axe label-content-name-mismatch): the name starts with what the cell shows.
+    name: `${cellDay(d.day)} ${w.word}, ${longDay(d.day)}${firstWindow}`,
   };
 }

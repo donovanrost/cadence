@@ -177,10 +177,10 @@ defmodule Cadence.MissionModels.CompositionsTest do
              ) == 1
     end
 
-    test "authored heads wait for phase 3", c do
+    test "a head that isn't a recorded authored version is refused (P3 M1, #451)", c do
       {:ok, composition} = Compositions.for_revision(c.org, c.mid, c.revision_id)
 
-      assert {:error, :authored_layers_not_supported} =
+      assert {:error, :authored_head_not_recorded} =
                Compositions.effective_revision(c.org, c.mid, composition.composition_id, "head-1")
     end
   end

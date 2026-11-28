@@ -60,7 +60,8 @@ defmodule Cadence.Reads.Applications.TelemetryDecomStatus do
       {:ok, activation} ->
         %{
           binding_set_id: activation.binding_set_id,
-          binding_set_version: activation.binding_set_version
+          binding_set_version: activation.binding_set_version,
+          generation: activation.generation
         }
 
       {:error, _reason} ->

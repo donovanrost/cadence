@@ -41,6 +41,10 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Assignments do
     |> Map.new(&{&1.spacecraft_id, &1})
   end
 
+  @doc "Resolves every spacecraft head in a mission."
+  @spec list_latest(binary(), binary()) :: [AssignmentRow.t()]
+  def list_latest(org, mission), do: org |> headed_assignments(mission) |> resolved()
+
   @doc "Returns the mission's spacecraft IDs and their head assignment IDs."
   @spec latest_for_mission(binary(), binary()) :: [
           %{spacecraft_id: binary(), configuration_revision_id: binary()}
