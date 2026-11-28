@@ -71,7 +71,7 @@ freshness to the second; at 1 Hz feeds, throttle that to about 10 s client-side)
 ### Semantics
 
 - `telemetry`: `ok`, or `degraded` when the durable history store (QuestDB) didn't answer within
-  3 s (`config :cadence, :fleet_durable_receipts_timeout_ms`). The read still answers, with
+  3 s (`config :cadence, :durable_receipts_timeout_ms`). The read still answers, with
   freshness taken from live values and limit states only, so a spacecraft not heard since the last
   restart can read `never_heard`. Say "Telemetry history unavailable: freshness may be incomplete".
   The same timeout protects `GET /spacecraft` and the spacecraft detail, which read the same
@@ -241,7 +241,7 @@ Each row is one point from one source, so a point in both stores has two adjacen
   have never changed state are not listed (the rule inventory waits for #451).
 - **Freshness.** `last_sample_at` is the newer of this node's current-value store (node-local: it
   holds the spacecraft only on the node that owns its partition) and the durable history's
-  per-point receipt (cached up to `fleet_durable_receipts_ttl_ms`, 60 s). `stale` means older than
+  per-point receipt (cached up to `durable_receipts_ttl_ms`, 60 s). `stale` means older than
   `meta.stale_after_s` (the setting Fleet uses) or never sampled; `unknown` means no sample is known
   and `meta.telemetry` is `degraded` (the history did not answer).
 - **Order:** by the point's worst row: critical, caution, stale or unknown, the rest; then point id,

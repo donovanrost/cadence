@@ -7,8 +7,8 @@ defmodule Cadence.Reads.DurableReceiptCache do
   The history store (QuestDB in production) can hang and is a query against a time-series store, so
   it is not asked on every read: the first read of a key waits for it (so a restart never reports
   something heard as never heard), later reads use the last answer, refreshed in the background once
-  it is `fleet_durable_receipts_ttl_ms` old (60 s; 0 asks every time). A slow or failed store
-  (`fleet_durable_receipts_timeout_ms`, 3 s) answers `telemetry: :degraded`, kept for 5 s only, so
+  it is `durable_receipts_ttl_ms` old (60 s; 0 asks every time). A slow or failed store
+  (`durable_receipts_timeout_ms`, 3 s) answers `telemetry: :degraded`, kept for 5 s only, so
   a recovered store is picked up soon.
 
   The answers live in an ETS table owned by this supervised process (a refresh is one `insert`;
@@ -16,6 +16,16 @@ defmodule Cadence.Reads.DurableReceiptCache do
   spacecraft viewed). A key nobody has read for ten times the TTL (at least ten minutes) is swept
   away, so the table is bounded by what is being looked at, not by everything ever looked at.
   Without the process (a unit test that does not start the application) every read asks the store.
+
+  **A fetch that raises or exits answers `:degraded` too**, for any fetch, not only one that
+  returns `{:error, _}`: it runs in a task under `Cadence.Reads.DurableReceiptCache.Tasks` (not
+  linked to the reader) and the background refreshes run there as well, so they stop with the tree.
+  A key nobody has cached yet asks the store once per concurrent reader until the first answer is
+  stored (fine at these read rates; a spacecraft page several operators open right after a restart
+  asks once each).
+
+  The settings are `durable_receipts_ttl_ms` and `durable_receipts_timeout_ms`; the old
+  `fleet_durable_receipts_*` names are still read when the new ones are not set.
 
   The caller's `fetch` returns `{:ok, receipts}` or an error; the cache answers
   `%{receipts: receipts, telemetry: :ok | :degraded}`.
@@ -31,6 +41,25 @@ defmodule Cadence.Reads.DurableReceiptCache do
   @min_keep_ms 600_000
 
   @type answer :: %{receipts: map(), telemetry: :ok | :degraded}
+
+  @tasks Cadence.Reads.DurableReceiptCache.Tasks
+
+  # The cache's process, with the supervisor of the tasks that ask the store (one rest-for-one
+  # unit under the application: the tasks go when the cache does).
+  def child_spec(opts) do
+    %{
+      id: __MODULE__,
+      type: :supervisor,
+      start:
+        {Supervisor, :start_link,
+         [
+           [{Task.Supervisor, name: @tasks}, owner(opts)],
+           [strategy: :one_for_all, name: Cadence.Reads.DurableReceiptCache.Supervisor]
+         ]}
+    }
+  end
+
+  defp owner(opts), do: %{id: :owner, start: {__MODULE__, :start_link, [opts]}}
 
   def start_link(opts \\ []), do: GenServer.start_link(__MODULE__, opts, name: __MODULE__)
 
@@ -118,7 +147,7 @@ defmodule Cadence.Reads.DurableReceiptCache do
     unless is_integer(cached.refreshing_since) and now - cached.refreshing_since < 10_000 do
       store(key, %{cached | refreshing_since: now})
 
-      Task.start(fn ->
+      Task.Supervisor.start_child(@tasks, fn ->
         fetch |> ask() |> remember(key, System.monotonic_time(:millisecond))
       end)
     end
@@ -126,13 +155,39 @@ defmodule Cadence.Reads.DurableReceiptCache do
     :ok
   end
 
+  # The fetch runs in a task of its own, not linked to the reader, and whatever it does (return an
+  # error, raise, exit, take too long) is a degraded answer, never a crash of the request.
   defp ask(fetch) do
-    task = Task.async(fetch)
+    if Process.whereis(@tasks) == nil,
+      do: ask_inline(fetch),
+      else: ask_in_task(fetch)
+  end
+
+  defp ask_in_task(fetch) do
+    task = Task.Supervisor.async_nolink(@tasks, fn -> guarded(fetch) end)
+
+    case Task.yield(task, timeout_ms()) || Task.shutdown(task, :brutal_kill) do
+      {:ok, {:ok, receipts}} -> %{receipts: receipts, telemetry: :ok}
+      _unavailable_slow_or_crashed -> %{receipts: %{}, telemetry: :degraded}
+    end
+  end
+
+  # Without the supervisor (a unit test without the application): the same, in a bare task.
+  defp ask_inline(fetch) do
+    task = Task.async(fn -> guarded(fetch) end)
 
     case Task.yield(task, timeout_ms()) || Task.shutdown(task, :brutal_kill) do
       {:ok, {:ok, receipts}} -> %{receipts: receipts, telemetry: :ok}
       _unavailable_or_slow -> %{receipts: %{}, telemetry: :degraded}
     end
+  end
+
+  defp guarded(fetch) do
+    fetch.()
+  rescue
+    error -> {:error, error}
+  catch
+    kind, reason -> {:error, {kind, reason}}
   end
 
   defp sweep(now) do
@@ -143,8 +198,18 @@ defmodule Cadence.Reads.DurableReceiptCache do
     ])
   end
 
-  defp ttl_ms, do: Application.get_env(:cadence, :fleet_durable_receipts_ttl_ms, @durable_ttl_ms)
+  defp ttl_ms,
+    do: setting(:durable_receipts_ttl_ms, :fleet_durable_receipts_ttl_ms, @durable_ttl_ms)
 
   defp timeout_ms,
-    do: Application.get_env(:cadence, :fleet_durable_receipts_timeout_ms, @durable_timeout_ms)
+    do:
+      setting(
+        :durable_receipts_timeout_ms,
+        :fleet_durable_receipts_timeout_ms,
+        @durable_timeout_ms
+      )
+
+  # The new name, else the old one (`fleet_durable_receipts_*`), else the default.
+  defp setting(name, old_name, default),
+    do: Application.get_env(:cadence, name, Application.get_env(:cadence, old_name, default))
 end
