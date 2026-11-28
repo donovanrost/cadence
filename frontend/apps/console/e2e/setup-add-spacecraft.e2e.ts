@@ -105,15 +105,17 @@ test.describe("Add spacecraft wizard, organization admin", () => {
 test.describe("Add spacecraft wizard, organization member", () => {
   test.use({ storageState: storageStateFor("operator") });
 
-  test("can look but not stage, and is told why", async ({ page }) => {
+  // #1160: adding spacecraft stages a reviewed change, so any mission operator may (config.stage).
+  test("may stage: no role refusal on the page or on Stage", async ({ page }) => {
     await openConsole(page, wizard);
     await chooseProfile(page);
     await continueTo(page, "orbit & routing");
     await continueTo(page, "review");
     const stage = page.getByRole("button", { name: /^Stage/ });
-    await expect(stage).toHaveAttribute("aria-disabled", "true");
-    await expect(stage).toHaveAccessibleDescription(
-      "Only an organization admin can add spacecraft.",
+    await expect(stage).toBeVisible();
+    await expect(stage).not.toHaveAccessibleDescription(
+      "Only mission operators can add spacecraft.",
     );
+    await expect(page.getByText("Only mission operators can add spacecraft")).toHaveCount(0);
   });
 });

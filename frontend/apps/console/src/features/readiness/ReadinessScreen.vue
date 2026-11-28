@@ -2,7 +2,8 @@
 import { computed } from "vue";
 import { useRemoteQuery } from "@/api";
 import { useMissionInvalidation } from "@/live";
-import { canAdministerOrganization, useMissionScope, useSession } from "@/shell";
+import { useMissionScope } from "@/shell";
+import { useCanStage } from "@/features/changes/index.ts";
 import { ApButton, ApEmptyState, ApPageHeader, ApPanel, ApRemote, ApTag } from "@/ui";
 import AreaTile from "./AreaTile.vue";
 import FindingsPanel from "./FindingsPanel.vue";
@@ -20,9 +21,10 @@ useMissionInvalidation(
   refetch,
 );
 
-// Setup writes need manage_mission, which the server grants to organization admins (qa #4).
-const session = useSession();
-const canManage = computed(() => canAdministerOrganization(session, scope.value.organization));
+// #1160: each header action reads the server's own check: adding spacecraft stages a change
+// (config.stage), importing is the upload's (catalog.import). Both are any mission operator.
+const canStage = useCanStage(scope.value.mission.id);
+const canImport = computed(() => state.value.status === "ready" && state.value.value.canImport);
 
 const label = computed(() => `${scope.value.mission.name} · mission readiness`);
 const title = computed(() => {
@@ -48,9 +50,9 @@ const notProvided = computed(
       <template v-if="state.status === 'ready' && verdictSubline(state.value)" #subtitle>
         <span class="text-md text-text-3">{{ verdictSubline(state.value) }}</span>
       </template>
-      <div v-if="canManage" class="flex flex-wrap gap-2">
-        <ApButton :to="{ name: 'setup.spacecraft.new' }">Add spacecraft</ApButton>
-        <ApButton :to="{ name: 'setup.catalog.import' }">Import catalog</ApButton>
+      <div v-if="canStage || canImport" class="flex flex-wrap gap-2">
+        <ApButton v-if="canStage" :to="{ name: 'setup.spacecraft.new' }">Add spacecraft</ApButton>
+        <ApButton v-if="canImport" :to="{ name: 'setup.catalog.import' }">Import catalog</ApButton>
       </div>
     </ApPageHeader>
 

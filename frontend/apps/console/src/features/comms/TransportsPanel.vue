@@ -1,16 +1,19 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { useRemoteQuery } from "@/api";
-import { FailureOutcomeCallout, type RefusalOutcome } from "@/features/changes/index.ts";
-import { canAdministerOrganization, useMissionScope, useSession } from "@/shell";
+import {
+  FailureOutcomeCallout,
+  type RefusalOutcome,
+  useCanStage,
+} from "@/features/changes/index.ts";
+import { useMissionScope } from "@/shell";
 import { ApButton, ApEmptyState, ApPanel, ApRemote, type ApColumn } from "@/ui";
 import { fetchTransports } from "./api.ts";
 import TransportsTable from "./TransportsTable.vue";
 
 /** Transports (rail 05 tab). Adds and edits stage into the change set (transport kind). */
 const scope = useMissionScope();
-const session = useSession();
-const canStage = computed(() => canAdministerOrganization(session, scope.value.organization));
+const canStage = useCanStage(scope.value.mission.id);
 /** ux U82: archived transports are hidden unless asked for, listed after the active ones. */
 const showArchived = ref(false);
 const { state, refetch } = useRemoteQuery(

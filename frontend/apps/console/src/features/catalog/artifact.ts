@@ -11,7 +11,7 @@ import {
 } from "@/api";
 import { failureOutcome } from "@/features/changes/index.ts";
 import { formatShort } from "@/ui";
-import { importRunRow } from "./api.ts";
+import { catalogPermissions, importRunRow } from "./api.ts";
 import { formatBytes } from "./importRun.ts";
 
 /** The artifact page lists the newest 50 import runs of its file (paging: #217). */
@@ -53,7 +53,7 @@ const artifactReader = d.object({
     200,
   ),
   import_runs: d.array(importRunRow, artifactRunCap),
-  permissions: d.array(d.known(["catalog.import"] as const), 10),
+  permissions: catalogPermissions,
 });
 export type ArtifactPage = Decoded<typeof artifactReader>;
 export type ArtifactKey = Readonly<{ missionId: MissionId; artifactId: string }>;

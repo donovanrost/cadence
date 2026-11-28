@@ -94,9 +94,16 @@ const database = object({
   import_runs: array(importRunRow, indexRunCap),
 });
 
+/**
+ * #1160: the server's `catalog.import`, from the check an upload and a reimport make
+ * (`:operate_mission`; the candidate revision still needs an organization admin's approval).
+ */
+export const catalogPermissions = array(decoders.known(["catalog.import"] as const), 10);
+
 export const catalogIndexReader = object({
   databases: array(object({ id: token, name: string, slug: token }), 100),
   database: nullable(database),
+  permissions: catalogPermissions,
 });
 
 export type CatalogIndex = Decoded<typeof catalogIndexReader>;

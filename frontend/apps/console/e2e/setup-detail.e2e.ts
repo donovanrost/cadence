@@ -60,7 +60,7 @@ test.describe("Setup catalog", () => {
 
   test("a mission without a catalog says so and offers the import", async ({ page }) => {
     await page.route(missionApi("catalog"), (route) =>
-      route.fulfill(jsonData({ databases: [], database: null })),
+      route.fulfill(jsonData({ databases: [], database: null, permissions: [] })),
     );
     await openConsole(page, missionPath("setup/catalog"));
     await expect(page.getByRole("heading", { level: 1, name: "No catalog yet" })).toBeVisible();

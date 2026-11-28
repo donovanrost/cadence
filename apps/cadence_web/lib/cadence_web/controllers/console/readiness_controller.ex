@@ -3,6 +3,7 @@ defmodule CadenceWeb.Console.ReadinessController do
 
   use CadenceWeb, :controller
 
+  alias Cadence.Catalog.Upload
   alias Cadence.Control.Configuration
   alias Cadence.Reads.Readiness
   alias CadenceWeb.Console.Problem
@@ -16,7 +17,13 @@ defmodule CadenceWeb.Console.ReadinessController do
             verdict: readiness.verdict,
             areas: readiness.areas,
             findings: Enum.map(readiness.findings, &Map.delete(&1, :area)),
-            recent_changes: recent_changes(conn)
+            recent_changes: recent_changes(conn),
+            # #1160: the header's Import catalog; Add spacecraft reads config.stage (config state).
+            permissions:
+              Upload.permissions(
+                conn.assigns.current_scope,
+                conn.assigns.current_mission.mission_id
+              )
           }
         })
 
