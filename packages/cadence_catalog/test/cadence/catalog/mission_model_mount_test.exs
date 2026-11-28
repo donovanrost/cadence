@@ -15,7 +15,9 @@ defmodule Cadence.Catalog.MissionModelMountTest do
 
   # Compiled on develop 847a3ea4e, before #444: one import alone must stay byte-identical (#108).
   # The revision ids are as then. The plan ids are as #443 defines them (from the plan, not the
-  # revision), recomputed once.
+  # revision), recomputed once. The monitoring plan's moved again with P3 (#451): contract 2, whose
+  # entries carry rule_id/rule_digest/origin/scope. These fixtures declare no policy, so only the
+  # contract version changed it.
   @golden %{
     yaml: %{
       revision_id:
@@ -29,8 +31,8 @@ defmodule Cadence.Catalog.MissionModelMountTest do
           {"mission_model_plan:78110393fa3e3bd54ddb4170f15a1d077d176a6d2d0b7f6bb303e6d97b18782f",
            "78110393fa3e3bd54ddb4170f15a1d077d176a6d2d0b7f6bb303e6d97b18782f"},
         monitoring:
-          {"mission_model_plan:f2ae9e2d2513a30e3b69f6bbc7b9fc350b0b36f751d078d1533c3ab896af796a",
-           "f2ae9e2d2513a30e3b69f6bbc7b9fc350b0b36f751d078d1533c3ab896af796a"},
+          {"mission_model_plan:d1b748660ecccaf933933b1930011890815b669a1a6559644a7dc81ac5d1c79d",
+           "d1b748660ecccaf933933b1930011890815b669a1a6559644a7dc81ac5d1c79d"},
         telemetry:
           {"mission_model_plan:0a170285a78a1438a81bc1a157558b8d80f846bef25e4829a9c55aa41feb8dce",
            "0a170285a78a1438a81bc1a157558b8d80f846bef25e4829a9c55aa41feb8dce"}
@@ -48,8 +50,8 @@ defmodule Cadence.Catalog.MissionModelMountTest do
           {"mission_model_plan:370e10394674778a9cc9a02a43a87e1dce88fb78e0465e55e3c45018c3528162",
            "370e10394674778a9cc9a02a43a87e1dce88fb78e0465e55e3c45018c3528162"},
         monitoring:
-          {"mission_model_plan:f2ae9e2d2513a30e3b69f6bbc7b9fc350b0b36f751d078d1533c3ab896af796a",
-           "f2ae9e2d2513a30e3b69f6bbc7b9fc350b0b36f751d078d1533c3ab896af796a"},
+          {"mission_model_plan:d1b748660ecccaf933933b1930011890815b669a1a6559644a7dc81ac5d1c79d",
+           "d1b748660ecccaf933933b1930011890815b669a1a6559644a7dc81ac5d1c79d"},
         telemetry:
           {"mission_model_plan:1ce1ef42fd68603c6cd82e0914409e2a5b07d05619a2539c74a69a8cceaa1cdc",
            "1ce1ef42fd68603c6cd82e0914409e2a5b07d05619a2539c74a69a8cceaa1cdc"}
