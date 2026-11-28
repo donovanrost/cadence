@@ -5,19 +5,7 @@
       "path": "./apps/console"
     },
     {
-      "path": "./apps/ops-console"
-    },
-    {
-      "path": "./apps/surface-fixture"
-    },
-    {
       "path": "./packages/apogee-ui"
-    },
-    {
-      "path": "./packages/plugin-sdk"
-    },
-    {
-      "path": "./packages/ui"
     },
     {
       "path": "./tsconfig.tools.json"

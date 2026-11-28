@@ -8,8 +8,6 @@
 **/tmp
 **/.cache
 **/*.tsbuildinfo
-**/priv/static/assets
-**/priv/static/cache_manifest.json
 var
 cover
 .DS_Store

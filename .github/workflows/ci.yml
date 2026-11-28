@@ -34,10 +34,8 @@ jobs:
       contents: read
       pull-requests: read
     # Pushes run everything. A PR runs the jobs its paths can affect:
-    # - code: anything but docs (browser, console e2e, publication, JS audit)
-    # - backend: code outside the console app and its kit (Elixir quality and suites). Elixir tests
-    #   still execute frontend/apps/ops-console producer code and compile frontend/apps/host/src/routes.json,
-    #   so those count.
+    # - code: anything but docs (browser assets, console e2e, JS audit)
+    # - backend: code outside the console app and its kit (Elixir quality and suites)
     # - frontend: code outside the Elixir projects (frontend quality)
     # - scale: Console client, build, fixture and the scaled server entry points
     outputs:
@@ -383,56 +381,7 @@ jobs:
         working-directory: apps/cadence_web
         run: mix test --partitions 2 --exclude frontend_publication --slowest-modules 10
 
-  test-web-publication:
-    name: Web tests needing the federation publication
-    needs: [changes, browser-assets]
-    if: needs.changes.outputs.code == 'true'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 25
-    services:
-      postgres:
-        # Keep the image's default en_US.utf8 collation (glibc, linguistic), as production
-        # databases have; don't switch it to C. It caught a real bug that C-collated local
-        # databases hide (03e701ce: artifact order followed the collation).
-        image: postgres:17
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --tmpfs /var/lib/postgresql/data:rw
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-      - name: Tune Postgres for throwaway test data
-        run: scripts/ci/tune_postgres.sh
-      - uses: ./.github/actions/setup-cadence
-      # cadence_web uses Cadence.Repo but, unlike apps/cadence, has no DB setup alias.
-      - name: Create and migrate the cadence test database
-        working-directory: apps/cadence
-        run: mix db.setup.test
-      - name: Download the browser assets (built once by browser-assets)
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: browser-assets
-          path: apps/cadence_web/priv/static
-      - name: mix test --only frontend_publication
-        working-directory: apps/cadence_web
-        shell: bash
-        run: |
-          mix test --only frontend_publication 2>&1 | tee "$RUNNER_TEMP/web-publication.log"
-          # --only passes when nothing matches; these tests must run, never silently skip.
-          grep -Eq '^Result: [1-9][0-9]* passed' "$RUNNER_TEMP/web-publication.log" ||
-            { echo "::error::No :frontend_publication test ran"; exit 1; }
-
-  # The federation publication and digests (assets.deploy), built once for test-web-publication
-  # and console-e2e.
+  # The console build, made once for console-e2e.
   browser-assets:
     name: Browser assets (built once)
     needs: changes
@@ -446,19 +395,11 @@ jobs:
       - uses: ./.github/actions/setup-cadence
         with:
           xmllint: "false"
-      - name: Build the browser assets (mix assets.deploy, behind the publication build lock)
-        working-directory: apps/cadence_web
-        run: node ../../frontend/tools/phoenix/run_federation_publication_build.mjs assets.deploy
-      # The browser smokes sign in through the console's sign-in API, which needs the CSRF meta of
-      # the console document (priv/static/console/index.html, uploaded with the rest below).
-      - name: Build the console (the browser smokes' sign-in document)
+      # console-e2e serves this build from priv/static/console, and signs in through the console's
+      # sign-in API, which needs the CSRF meta of its document (priv/static/console/index.html).
+      - name: Build the console
         working-directory: frontend
-        run: |
-          if [ ! -f apps/console/package.json ]; then
-            echo "No console on this branch."
-            exit 0
-          fi
-          corepack pnpm --filter @cadence/console run build
+        run: corepack pnpm --filter @cadence/console run build
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: browser-assets
@@ -1036,7 +977,6 @@ jobs:
         test-core,
         test-web,
         browser-assets,
-        test-web-publication,
         test-packages,
         js-audit,
         frontend-quality,
