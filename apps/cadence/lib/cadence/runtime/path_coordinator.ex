@@ -567,6 +567,8 @@ defmodule Cadence.Runtime.PathCoordinator do
         realized_contact_id: state.realized_contact_id,
         path_id: state.path.path_id,
         provider_binding_id: provider_binding.provider_binding_id,
+        organization_id: state.organization_id,
+        provider_binding_metadata: provider_binding.metadata,
         process_namespace: state.process_namespace,
         source_endpoint_ref: state.path.source_endpoint_ref,
         source_endpoint_spacecraft_id: state.path.source_endpoint_spacecraft_id,

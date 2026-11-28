@@ -15,6 +15,7 @@ defmodule Cadence.Management.Transports do
   alias Cadence.Comms.{ProviderTransportBasis, Transport, TransportKind, TransportStore}
   alias Cadence.GroundNetworks.{MissionProviders, ProviderAudit, ProviderAuditEntry}
   alias Cadence.Management.Providers
+  alias Cadence.Platform.ScopedReadUpdates
 
   @type field_error :: %{path: String.t(), message: String.t()}
   @type derived :: %{
@@ -104,6 +105,7 @@ defmodule Cadence.Management.Transports do
           end
         end
       )
+      |> ScopedReadUpdates.publish_result(:configuration_changed, org, mission_id)
     end
   end
 
@@ -227,12 +229,12 @@ defmodule Cadence.Management.Transports do
         "The provider changed since you chose it. Choose it again."
       )
 
-  defp field_error(:provider_delivery_mtls_unavailable),
+  defp field_error(:delivery_tls_identity_unavailable),
     do:
       coded(
         "delivery_profile_ref",
-        :provider_delivery_mtls_unavailable,
-        "This delivery requires the inbound mutual TLS listener."
+        :delivery_tls_identity_unavailable,
+        "Configure the server certificate and client trust for mutual TLS."
       )
 
   defp field_error(:provider_delivery_auth_unsupported),

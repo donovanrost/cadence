@@ -37,6 +37,11 @@ defmodule Cadence.DeliveryCredentialFixtures do
   end
 
   def csr(opts \\ []) do
+    {request, _key} = client_request(opts)
+    request
+  end
+
+  def client_request(opts \\ []) do
     {algorithm, parameters, public, key, signature_algorithm, signature_parameters} =
       keypair(Keyword.get(opts, :key, :p256))
 
@@ -67,7 +72,9 @@ defmodule Cadence.DeliveryCredentialFixtures do
        {:CertificationRequest_signatureAlgorithm, signature_algorithm, signature_parameters},
        signature}
 
-    pem(:CertificationRequest, :public_key.der_encode(:CertificationRequest, request))
+    {pem(:CertificationRequest, :public_key.der_encode(:CertificationRequest, request)),
+     :public_key.pem_entry_encode(:PrivateKeyInfo, key)
+     |> then(fn {type, der, _} -> {type, der} end)}
   end
 
   defp keypair({:rsa, bits}) do

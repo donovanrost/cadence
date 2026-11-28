@@ -472,10 +472,10 @@ frame. The simulator reports loopback (`127.0.0.1/32`, `::1/128`) unless configu
 
 A provider that supports mutual TLS declares `delivery.delivery_auth: "mtls"` in capabilities.
 An opted-in downlink delivery profile declares top-level `delivery_auth: "mtls"` and
-`egress.delivery_credential_ref` with the opaque Cadence-issued binding reference. The source
-allowlist remains required. Omit the profile's `delivery_auth` for plaintext delivery. Exchange
-certificates during enrollment and keep private keys in the provider's secret store. Cadence
-refuses to materialize opted-in profiles until the authenticated listener gate is available.
+`egress.delivery_credential_ref` with the opaque Cadence-issued reference for that transport
+binding. A supplied source allowlist applies in addition to mutual TLS. Omit the profile's
+`delivery_auth` for plaintext delivery, which requires a source allowlist. Exchange certificates
+during enrollment and keep private keys in the provider's secret store.
 
 Provisioning a TCP destination is a setup operation, not a reservation field:
 

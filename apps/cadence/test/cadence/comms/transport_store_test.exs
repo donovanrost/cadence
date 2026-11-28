@@ -257,7 +257,7 @@ defmodule Cadence.Comms.TransportStoreTest do
              }
     end
 
-    test "declared mutual TLS fails closed until the listener gate is available" do
+    test "a direct transport cannot claim a provider-managed delivery credential" do
       org = "org-mtls-listen"
       mission = "mission-mtls-listen"
       persist_mission_scope(org, mission)
@@ -277,7 +277,7 @@ defmodule Cadence.Comms.TransportStoreTest do
           }
         })
 
-      assert {:error, :provider_delivery_mtls_unavailable} =
+      assert {:error, :delivery_binding_unavailable} =
                TransportStore.persist_transport(org, transport)
     end
 

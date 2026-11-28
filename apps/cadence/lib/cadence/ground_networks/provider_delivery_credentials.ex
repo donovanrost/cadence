@@ -300,23 +300,27 @@ defmodule Cadence.GroundNetworks.ProviderDeliveryCredentials do
   end
 
   defp summarize(credential, generations) do
+    now = DateTime.utc_now()
+
     %{
       credential_ref: credential.credential_ref,
       provider_binding_id: credential.provider_binding_id,
       retired_at: credential.retired_at,
-      generations:
-        Enum.map(
-          generations,
-          &Map.take(&1, [
-            :fingerprint,
-            :generation,
-            :state,
-            :expires_at,
-            :overlap_ends_at,
-            :revoked_at
-          ])
-        )
+      generations: Enum.map(generations, &summarize_generation(&1, now))
     }
+  end
+
+  defp summarize_generation(generation, now) do
+    generation
+    |> Map.take([:fingerprint, :generation, :state, :expires_at, :overlap_ends_at, :revoked_at])
+    |> Map.put(:within_acceptance_window, within_acceptance_window?(generation, now))
+  end
+
+  defp within_acceptance_window?(%GenerationRow{state: :revoked}, _now), do: false
+
+  defp within_acceptance_window?(leaf, now) do
+    DateTime.after?(leaf.expires_at, now) and
+      (is_nil(leaf.overlap_ends_at) or DateTime.after?(leaf.overlap_ends_at, now))
   end
 
   defp live_provider(org, mission, id) do

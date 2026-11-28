@@ -339,6 +339,7 @@ defmodule Cadence.Architecture.PlaneBoundary do
     "lib/cadence/contacts/transport_profile.ex" => :management,
     "lib/cadence/contacts/known_atom.ex" => :adapter,
     "lib/cadence/ground_networks/delivery_policy.ex" => :shared,
+    "lib/cadence/comms/provider_delivery_listener_read.ex" => :shared,
     "lib/cadence/ground_networks/provider_audit.ex" => :management,
     "lib/cadence/ground_networks/provider_audit_entry.ex" => :management,
     "lib/cadence/ground_networks/provider_audit/entry_row.ex" => :management,
