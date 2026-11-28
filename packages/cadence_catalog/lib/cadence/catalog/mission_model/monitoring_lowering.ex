@@ -22,10 +22,13 @@ defmodule Cadence.Catalog.MissionModel.MonitoringLowering do
       definition's `spacecraft_ids`) becomes one entry per craft.
 
   **Per-craft overrides.** A policy with an `:overrides` reference to another policy replaces that
-  policy for its `spacecraft_ids` only: its entries take the overridden policy's `rule_id`, so the
-  craft's episode continues across the override. An override must name a policy on the same
-  parameter and must list at least one craft (a mission-wide change is a `:replace`, never an
-  override). A partition resolves its craft's effective rules from the whole plan: the spacecraft
+  policy for its `spacecraft_ids` only: its entries take the overridden policy's `rule_id` and
+  `policy_id` (partition state, the latest alarm state and episodes key on it), so the craft's
+  episode continues across the override; `declaration_id` stays the override's own. An override
+  must name a mission-wide policy (never another override, so no chain or cycle, and never a
+  scoped policy) on the same parameter, and must list at least one craft (a mission-wide change is
+  a `:replace`). Two entries for one `{rule_id, scope, spacecraft_id}` are refused. Each refusal
+  is a blocking diagnostic on the monitoring target, so the change that causes it is a NO-GO. A partition resolves its craft's effective rules from the whole plan: the spacecraft
   entry for a `rule_id` when there is one, else the mission entry.
 
   The plan is compiled once per revision and holds every craft's entries, so a partition never
@@ -47,28 +50,56 @@ defmodule Cadence.Catalog.MissionModel.MonitoringLowering do
       when is_list(declarations) and is_map(origins) and is_map(systems) do
     by_id = Map.new(declarations, &{&1.semantic_id, &1})
 
-    {entries, diagnostics} =
-      Enum.reduce(declarations, {[], []}, fn declaration, {entries, diagnostics} ->
+    {lowered, diagnostics} =
+      Enum.reduce(declarations, {[], []}, fn declaration, {lowered, diagnostics} ->
         case entries(declaration, by_id, origins, systems) do
-          {:ok, new} -> {entries ++ new, diagnostics}
-          {:error, diagnostic} -> {entries, [diagnostic | diagnostics]}
+          {:ok, new} -> {[{declaration, new} | lowered], diagnostics}
+          {:error, diagnostic} -> {lowered, [diagnostic | diagnostics]}
         end
       end)
 
-    {entries, Enum.reverse(diagnostics)}
+    lowered = Enum.reverse(lowered)
+    entries = Enum.flat_map(lowered, &elem(&1, 1))
+    {entries, Enum.reverse(diagnostics) ++ duplicates(lowered)}
   end
 
-  @doc "The digest of what the evaluator reads from an entry (its parameter and definition)."
+  @evaluated ~w(parameter_id contexts default_rules minimum_violations minimum_conformance
+    missing_state invalid_state disabled)
+
+  @doc "The identity a partition resolves and carries an entry by: `{rule_id, scope, spacecraft_id}`."
+  @spec key(map()) :: {binary(), binary(), binary() | nil}
+  def key(entry), do: {entry["rule_id"], entry["scope"], entry["spacecraft_id"]}
+
+  @doc """
+  The digest of what the evaluator reads from an entry: its parameter, contexts, default rules,
+  persistence counts, missing/invalid states and `disabled` (what `MonitoringPlan.new/1` reads).
+  A description or label edit leaves it alone, so it resets no persistence counter.
+  """
   @spec rule_digest(map()) :: binary()
   def rule_digest(entry) when is_map(entry) do
-    evaluated =
-      Map.drop(
-        entry,
-        ~w(rule_id rule_digest origin declaration_id scope spacecraft_id policy_id
-           space_system_id space_system_path runtime_name)
-      )
-
+    evaluated = Map.take(entry, @evaluated)
     "monitoring_rule:v#{@digest_version}:" <> Canonical.sha256({@digest_version, evaluated})
+  end
+
+  # Two entries for one `{rule_id, scope, spacecraft_id}` leave a partition no single rule to
+  # run: refuse each repeat, naming both declarations.
+  defp duplicates(lowered) do
+    lowered
+    |> Enum.flat_map(fn {declaration, entries} -> Enum.map(entries, &{key(&1), declaration}) end)
+    |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
+    |> Enum.flat_map(fn
+      {_key, [_one]} ->
+        []
+
+      {{_rule, _scope, craft}, [first | repeats]} ->
+        Enum.map(repeats, fn declaration ->
+          diagnostic(
+            declaration,
+            "MM_MONITORING_OVERRIDE_DUPLICATE",
+            "#{declaration.qualified_name} and #{first.qualified_name} both set this rule for #{craft}"
+          )
+        end)
+    end)
   end
 
   defp entries(declaration, by_id, origins, systems) do
@@ -100,15 +131,34 @@ defmodule Cadence.Catalog.MissionModel.MonitoringLowering do
        )}
 
   defp override(declaration, base, target, spacecraft_ids) do
-    if parameter_id(target) == base["parameter_id"],
-      do: {:ok, scoped(base, "policy:" <> target.semantic_id, spacecraft_ids)},
-      else:
+    cond do
+      not is_nil(overridden(target)) or spacecraft_ids(target) != [] ->
+        {:error,
+         diagnostic(
+           declaration,
+           "MM_MONITORING_OVERRIDE_CHAIN",
+           "an override must name a mission-wide policy, never another override or a scoped policy"
+         )}
+
+      parameter_id(target) == base["parameter_id"] ->
+        override_entries(base, target, spacecraft_ids)
+
+      true ->
         {:error,
          diagnostic(
            declaration,
            "MM_MONITORING_OVERRIDE_PARAMETER",
            "an override must be on the same parameter as the policy it overrides"
          )}
+    end
+  end
+
+  # The craft's state, latest alarm state and episodes key on policy_id: an override is the
+  # target policy for its craft, so it keeps that id as well as the rule_id (and its own
+  # declaration_id).
+  defp override_entries(base, target, spacecraft_ids) do
+    base = Map.put(base, "policy_id", target.semantic_id)
+    {:ok, scoped(base, "policy:" <> target.semantic_id, spacecraft_ids)}
   end
 
   defp base(declaration, origins, systems) do

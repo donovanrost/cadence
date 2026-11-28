@@ -57,6 +57,15 @@ defmodule Cadence.SemanticRuntime.MonitoringPlan do
   @origins %{"catalog" => :catalog, "mission_layer" => :mission_layer}
   @scopes %{"mission" => :mission, "spacecraft" => :spacecraft}
 
+  @doc """
+  The identity a partition resolves and carries a plan by: `{rule_id, scope, spacecraft_id}`.
+  One policy can be several entries (its mission entry and per-craft overrides share `policy_id`
+  and `rule_id`), so `policy_id` alone is not unique in a plan.
+  """
+  @spec key(t()) :: {binary() | nil, :mission | :spacecraft | nil, binary() | nil}
+  def key(%__MODULE__{rule_id: rule_id, scope: scope, spacecraft_id: spacecraft_id}),
+    do: {rule_id, scope, spacecraft_id}
+
   @spec new(map()) :: t()
   def new(attrs) when is_map(attrs) do
     %__MODULE__{

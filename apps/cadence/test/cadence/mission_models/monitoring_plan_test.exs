@@ -75,6 +75,7 @@ defmodule Cadence.MissionModels.MonitoringPlanTest do
 
     assert %MonitoringPlan{origin: :mission_layer, spacecraft_id: "sc-1"} = craft_plan
     assert craft_plan.rule_id == mission_plan.rule_id
+    assert craft_plan.policy_id == mission_plan.policy_id
     assert craft_plan.rule_digest != mission_plan.rule_digest
     assert craft_plan.parameter_id == mission_plan.parameter_id
     refute craft_plan.declaration_id == mission_plan.declaration_id
