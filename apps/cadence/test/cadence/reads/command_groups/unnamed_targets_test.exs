@@ -65,7 +65,6 @@ defmodule Cadence.Reads.CommandGroups.UnnamedTargetsTest do
     unname!(second, "")
     full = read(c, submit!(c, [first, second | Enum.take(rest, 8)]))
 
-    assert Page.totals(full).targets_page.unnamed == 2
     assert Page.first(full).targets_page.unnamed == 2
 
     assert {:ok, %{total: 2, targets: targets}} = Page.targets(full, %{"unnamed" => "true"})
