@@ -78,6 +78,14 @@ The URLs are printed by `dev/stack status`. For the console, open the Phoenix UR
 Logs and PID files are under `var/stack/`; QuestDB data is under `var/questdb/`, and the
 simulator store under `var/reflect_orbital/`. All are gitignored.
 
+Simulator downlinks use plaintext and the source allowlist by default. A local seed can enroll
+an existing provider-managed binding using `Cadence.Dev.Seed.DeliveryTLS.enroll!/5` from
+`dev/seed/delivery_tls.exs`, with the mission admin scope and the simulator run ID. Pass the
+returned reference as `egress.delivery_credential_ref` when provisioning a downlink profile with
+`delivery_auth: "mtls"`. Version the transport to pin that profile before booking. The helper uses
+the operator enrollment action and stores the provider key and certificate in the private
+`provider/<run id>/` directory under `CADENCE_DEV_DELIVERY_TLS_DIRECTORY`.
+
 The QA personas share a random password within this worktree, loaded from
 `E2E_PERSONA_PASSWORD`; the environment admin uses `CADENCE_ADMIN_PASSWORD`. Both are in
 `mise.local.toml`. To rotate the personas, replace that local value and run `dev/stack reset`.
