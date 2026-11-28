@@ -13,12 +13,15 @@ defmodule Cadence.Reads.CommandPreflight do
   alias Cadence.Commanding
   alias Cadence.Commanding.Groups.{CommandGroup, GroupStore, Validation}
   alias Cadence.Comms.UplinkResolution
-  alias Cadence.Reads.{CommandGroups, Passes}
+  alias Cadence.Control.WithdrawnPins
+  alias Cadence.Reads.{CommandGroups, CompositionActors, Passes}
   alias Cadence.Reads.CommandPreflight.{ResolvedArguments, VerifierGroups}
 
   @contact_horizon_s 6 * 3_600
   # DECISIONS #60: HOLDs the submitter may acknowledge with a note. Every other HOLD is hard.
-  @ackable_holds [:conflicts]
+  # `model_approval_withdrawn` (E2c, #546): a craft is still on a model whose approval was taken
+  # back. Commanding it stays possible, but a person says so.
+  @ackable_holds [:conflicts, :model_approval_withdrawn]
   @open_queue_states [:pending, :release_pending]
 
   @doc """
@@ -97,6 +100,7 @@ defmodule Cadence.Reads.CommandPreflight do
         MapSet.new(Keyword.get(opts, :exclude_request_ids, []))
       ),
       contact_check(org, mission, draft, validated.targets),
+      model_approval_check(org, mission, validated.targets),
       two_person_check(validated.policy)
     ]
 
@@ -238,6 +242,70 @@ defmodule Cadence.Reads.CommandPreflight do
   defp later(nil, now), do: now
   defp later(%DateTime{} = at, now), do: if(DateTime.compare(at, now) == :gt, do: at, else: now)
 
+  # E2c (#546): a target whose ACTIVE generation runs a revision whose approval was withdrawn
+  # (`Control.WithdrawnPins`, keyed on what the craft runs, since that's the model a command is
+  # encoded and verified against). An ackable HOLD, never a NO-GO: the craft keeps its last
+  # generation and telemetry keeps flowing (E2 design, §5). Each held target carries the facts the
+  # console's words need (the decision's who, when and why, and the composition it was on). The
+  # basis covers exactly those craft on exactly those decisions, so a later withdrawal, or one more
+  # craft on the same revision, needs its own acknowledgement.
+  defp model_approval_check(org, mission, targets) do
+    pins = WithdrawnPins.for_spacecraft(org, mission, Enum.map(targets, & &1.spacecraft_id))
+
+    compositions =
+      CompositionActors.for_revisions(
+        org,
+        mission,
+        pins |> Map.values() |> Enum.map(& &1.revision_id)
+      )
+
+    per_target =
+      Enum.map(targets, fn target ->
+        case Map.get(pins, target.spacecraft_id) do
+          nil -> %{spacecraft_id: target.spacecraft_id, result: :go}
+          pin -> held_target(target.spacecraft_id, pin, Map.get(compositions, pin.revision_id))
+        end
+      end)
+
+    held = Enum.filter(per_target, &(&1.result == :hold))
+
+    evidence = %{
+      count: length(held),
+      composed: Enum.any?(held, &composed?(&1.composition))
+    }
+
+    basis =
+      held
+      |> Enum.map(&{&1.spacecraft_id, Map.fetch!(pins, &1.spacecraft_id).hold_basis})
+      |> Enum.sort()
+      |> then(&hold_basis(:model_approval_withdrawn, &1, %{}))
+
+    check(
+      :model_approval_withdrawn,
+      if(held == [], do: :go, else: :hold),
+      per_target,
+      evidence,
+      basis
+    )
+  end
+
+  defp held_target(spacecraft_id, pin, composition) do
+    %{
+      spacecraft_id: spacecraft_id,
+      result: :hold,
+      reason: :model_approval_withdrawn,
+      revision_id: pin.revision_id,
+      kind: pin.decision.kind,
+      decided_by: Map.take(pin.decision.by || %{}, [:id, :name]),
+      decided_at: pin.decision.at,
+      reason_text: pin.decision.reason,
+      composition: composition
+    }
+  end
+
+  defp composed?(%{imported_layers: layers}), do: length(layers) > 1
+  defp composed?(_none), do: false
+
   # Not a HOLD (DECISIONS #60/#61): it never blocks submit, and the second GO is what satisfies it.
   # Until then it reads `second_go` ("needs a second GO"), never `go`.
   defp two_person_check(%{second_go_required: false}),
@@ -246,7 +314,9 @@ defmodule Cadence.Reads.CommandPreflight do
   defp two_person_check(%{reasons: reasons}),
     do: check(:two_person, :second_go, [], %{reasons: reasons})
 
-  defp check(key, result, per_target, evidence) do
+  # `basis`: a HOLD whose facts aren't its per-target rows (the withdrawal's own decisions) names
+  # its basis itself.
+  defp check(key, result, per_target, evidence, basis \\ nil) do
     hold? = result == :hold
 
     %{
@@ -255,7 +325,7 @@ defmodule Cadence.Reads.CommandPreflight do
       per_target: per_target,
       evidence: evidence,
       ackable: if(hold?, do: key in @ackable_holds),
-      hold_basis: if(hold?, do: hold_basis(key, per_target, evidence))
+      hold_basis: if(hold?, do: basis || hold_basis(key, per_target, evidence))
     }
   end
 
