@@ -38,7 +38,7 @@ defmodule CadenceWeb.Console.FleetSource do
 
   require Logger
 
-  alias Cadence.Reads.FleetStatus
+  alias Cadence.Reads.{FleetStatus, MonitoredParameters}
   alias CadenceWeb.Console.FleetJSON
 
   @registry CadenceWeb.Console.FleetSources
@@ -238,7 +238,10 @@ defmodule CadenceWeb.Console.FleetSource do
 
   defp read(organization_id, mission_id) do
     fleet = FleetStatus.load(organization_id, mission_id)
-    limits_configured? = Cadence.Limits.list_limit_definitions(mission_id) != []
+
+    limits_configured? =
+      MonitoredParameters.configured?(organization_id, mission_id)
+
     FleetJSON.mission(fleet, limits_configured?)
   end
 

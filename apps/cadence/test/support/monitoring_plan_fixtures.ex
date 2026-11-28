@@ -37,6 +37,31 @@ defmodule Cadence.MonitoringPlanFixtures do
     %{monitoring: monitoring}
   end
 
+  @doc """
+  Makes a revision compiled from `catalog` and `authored` the mission's ACTIVE one, as an activation
+  of `binding_set_id` at `version` that names it (no runtime is applied): what the reads that ask
+  "which monitoring plan is active" (`Reads.MonitoredParameters`) find. Returns the runtime plans.
+  """
+  @spec activate!(binary(), binary(), {binary(), pos_integer()}, [tuple()], [tuple()]) ::
+          %{monitoring: struct()}
+  def activate!(organization_id, mission_id, {binding_set_id, version}, catalog, authored \\ []) do
+    plans = compile!(organization_id, mission_id, catalog, authored)
+
+    {:ok, _activation} =
+      Cadence.Activations.record_binding_set_activation(
+        mission_id,
+        binding_set_id,
+        version,
+        binding_set_content_sha256: "sha256:monitoring-fixture",
+        publish: false,
+        metadata: %{
+          "mission_model" => %{"revision_id" => plans.monitoring.mission_model_revision_id}
+        }
+      )
+
+    plans
+  end
+
   defp imported_layer(organization_id, mission_id, catalog) do
     parameters =
       catalog

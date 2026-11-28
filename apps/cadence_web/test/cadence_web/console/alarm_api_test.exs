@@ -148,6 +148,13 @@ defmodule CadenceWeb.Console.AlarmAPITest do
     end
 
     test "the fleet row reflects the caution", c do
+      Cadence.MonitoringPlanFixtures.activate!(
+        c.org.organization_id,
+        c.mission.mission_id,
+        {"read-models", 1},
+        [{"counter", "/parameters/counter", above: 10}]
+      )
+
       data = c |> get_json("/fleet") |> json_response(200) |> Map.fetch!("data")
 
       assert [row] = data["spacecraft"]

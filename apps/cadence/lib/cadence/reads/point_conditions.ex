@@ -7,12 +7,13 @@ defmodule Cadence.Reads.PointConditions do
 
   - `:ground_limit`, `telemetry_latest_limit_states`: written by limit-evaluation jobs, so its
     state may be old; it says when the job ran (`evaluated_at`) and, from the evaluation history,
-    when the point entered the state (`entered_at`). A point with an active ground limit
-    definition and a sample but no state yet is `evaluated: false` (nominal, no time).
+    when the point entered the state (`entered_at`).
   - `:catalog_monitoring`, `semantic_latest_alarm_states`: written on every state transition by the
     runtime, so it is live and its `receipt_time` is when the parameter entered the state. A
     parameter that never left normal has no row; neither has a monitoring rule that never changed
-    state (the rule inventory belongs to the compiled plan, #451), which the screen says.
+    state. The inventory is the compiled plan's (`MonitoredParameters`, #451): a parameter the plan
+    evaluates on this spacecraft that has a sample but no state yet is `evaluated: false` (nominal,
+    no time), which the screen says.
 
   **Staleness.** A point is stale when its newest sample is older than `stale_after_s` (the one
   setting Fleet uses, `FleetStatus.stale_after_s/0`). The newest sample time is the current-value
@@ -32,7 +33,7 @@ defmodule Cadence.Reads.PointConditions do
 
   alias Cadence.Limits.Store.{AlarmPage, SpacecraftStates}
   alias Cadence.Ops.PointCatalog
-  alias Cadence.Reads.{DurableReceiptCache, FleetStatus, PointInfo}
+  alias Cadence.Reads.{DurableReceiptCache, FleetStatus, MonitoredParameters, PointInfo}
   alias Cadence.SemanticObservations
   alias Cadence.SemanticRuntime.AlarmLevel
   alias Cadence.SpacecraftStore
@@ -56,7 +57,7 @@ defmodule Cadence.Reads.PointConditions do
 
       rows =
         organization_id
-        |> rows(mission_id, spacecraft_id, points, samples)
+        |> rows(mission_id, spacecraft_id, points, samples, opts)
         |> Enum.map(&freshness(&1, samples, telemetry, now, stale_after_s))
         |> rank_points()
         |> filter(Keyword.get(opts, :state), Keyword.get(opts, :query))
@@ -85,7 +86,7 @@ defmodule Cadence.Reads.PointConditions do
 
   # -- rows ---------------------------------------------------------------------------------------
 
-  defp rows(organization_id, mission_id, spacecraft_id, points, samples) do
+  defp rows(organization_id, mission_id, spacecraft_id, points, samples, opts) do
     by_parameter =
       for %{parameter_id: p, point_id: id} <- points, is_binary(p), into: %{}, do: {p, id}
 
@@ -94,11 +95,25 @@ defmodule Cadence.Reads.PointConditions do
     ground = SpacecraftStates.list(organization_id, mission_id, spacecraft_id)
     live = SemanticObservations.list_for_spacecraft(organization_id, mission_id, spacecraft_id)
 
-    evaluated = MapSet.new(ground, & &1.event.point_id)
+    live_rows = Enum.map(live, &live_row(&1, by_parameter, names))
+
+    evaluated =
+      ground
+      |> MapSet.new(& &1.event.point_id)
+      |> MapSet.union(MapSet.new(live_rows, & &1.point_id))
 
     Enum.map(ground, &ground_row/1) ++
-      Enum.map(live, &live_row(&1, by_parameter, names)) ++
-      not_evaluated_rows(organization_id, mission_id, evaluated, samples, names)
+      live_rows ++
+      not_evaluated_rows(
+        organization_id,
+        mission_id,
+        spacecraft_id,
+        by_parameter,
+        evaluated,
+        samples,
+        names,
+        opts
+      )
   end
 
   defp ground_row(%{event: event, evaluated_at: evaluated_at}) do
@@ -140,14 +155,31 @@ defmodule Cadence.Reads.PointConditions do
     }
   end
 
-  # A point with an active ground limit and a sample on this spacecraft, never evaluated.
-  defp not_evaluated_rows(organization_id, mission_id, evaluated, samples, names) do
-    organization_id
-    |> Cadence.Limits.active_limit_point_ids(mission_id)
+  # A point the compiled monitoring plan evaluates on this spacecraft (#451 T3a), with a sample and
+  # no state yet. The plan, not the limit definitions, is the inventory.
+  defp not_evaluated_rows(
+         organization_id,
+         mission_id,
+         spacecraft_id,
+         by_parameter,
+         evaluated,
+         samples,
+         names,
+         opts
+       ) do
+    monitored =
+      case MonitoredParameters.for_spacecraft(organization_id, mission_id, spacecraft_id, opts) do
+        {:ok, parameters} -> parameters
+        :none -> MapSet.new()
+      end
+
+    monitored
+    |> Enum.map(&Map.get(by_parameter, &1, &1))
+    |> Enum.sort()
     |> Enum.filter(&(Map.has_key?(samples, &1) and not MapSet.member?(evaluated, &1)))
     |> Enum.map(fn point_id ->
       %{
-        source: :ground_limit,
+        source: :catalog_monitoring,
         point_id: point_id,
         point_name: Map.get(names, point_id, point_id),
         policy_id: nil,
