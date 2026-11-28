@@ -4,6 +4,7 @@ import type { SpacecraftId } from "@/api";
 import { ApListRow, ApTag } from "@/ui";
 import AppActions from "./AppActions.vue";
 import type { App } from "./api.ts";
+import type { AppStatus } from "./host.ts";
 import type { UninstallScope } from "./uninstall-words.ts";
 import { versionMeta } from "./versions.ts";
 
@@ -18,6 +19,15 @@ defineProps<{
   spacecraftId?: SpacecraftId | null;
 }>();
 defineEmits<{ changed: [] }>();
+/** L19: what the server's status adds to the lifecycle tag; states the tag already says are null. */
+const statusWords: Readonly<Record<AppStatus["state"], string | null>> = {
+  active: null,
+  not_installed: null,
+  disabled: null,
+  activation_pending: "Waiting for activation approval",
+  failed: "Failed to load its status",
+  unrecognized: "Status not known",
+};
 const word = (a: App) =>
   a.platform
     ? "Platform · always on"
@@ -53,8 +63,9 @@ const word = (a: App) =>
     <template #action>
       <div class="flex flex-col items-end gap-2">
         <ApTag :state="app.state === 'installed' ? 'nominal' : 'off'" :label="word(app)" />
-        <!-- L19: the server's own status for this app here (for example, what it still needs). -->
-        <span v-if="app.status?.label" class="text-sm text-text-3">{{ app.status.label }}</span>
+        <span v-if="app.status && statusWords[app.status.state]" class="text-sm text-text-3">{{
+          statusWords[app.status.state]
+        }}</span>
         <AppActions
           v-if="!app.platform && canInstall"
           :mission-id="missionId"

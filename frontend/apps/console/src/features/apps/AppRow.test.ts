@@ -40,14 +40,21 @@ const render = (a: App) =>
   });
 
 describe("an app row (L19)", () => {
-  it("shows the server's own status label for the app", () => {
-    const w = render(app({ state: "active", label: "Needs a packet binding", version: "1" }));
-    expect(w.text()).toContain("Needs a packet binding");
+  it("says what the server's status adds, in the console's own words", () => {
+    const w = render(app({ state: "activation_pending", label: "free server text", version: "1" }));
+    expect(w.text()).toContain("Waiting for activation approval");
+    expect(w.text()).not.toContain("free server text");
   });
 
-  it("shows nothing extra when the server sends no label", () => {
-    const w = render(app({ state: "active", label: null, version: "1" }));
-    expect(w.text()).not.toContain("Needs");
+  it("adds nothing when the lifecycle tag already says it", () => {
+    const w = render(app({ state: "active", label: "Active", version: "1" }));
     expect(w.text()).toContain("Platform · always on");
+    expect(w.text()).not.toContain("Waiting");
+    expect(w.text()).not.toContain("Status not known");
+  });
+
+  it("says an unknown state is not known rather than guessing", () => {
+    const w = render(app({ state: "rebooting", label: null, version: "1" }));
+    expect(w.text()).toContain("Status not known");
   });
 });
