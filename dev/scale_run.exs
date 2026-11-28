@@ -2,6 +2,7 @@ defmodule Cadence.Dev.ScaleRun do
   @moduledoc false
 
   alias Cadence.Dev.ReflectOrbital.{Activation, Fixture, LiveContacts}
+  alias Cadence.Observability.ScaleSampler.Host
   alias CadenceSimulator.Load.Shape
   alias Mix.Tasks.Cadence.Scale.Run, as: Sampler
   alias Mix.Tasks.CadenceSimulator.Load, as: SimulatorLoad
@@ -19,6 +20,7 @@ defmodule Cadence.Dev.ScaleRun do
     duration: :integer,
     label: :string,
     per_site: :integer,
+    dedicated_runner: :boolean,
     module: :keep,
     reset: :boolean
   ]
@@ -83,6 +85,15 @@ defmodule Cadence.Dev.ScaleRun do
           @contact_setup_timeout
         )
 
+      sampler_opts =
+        if opts[:dedicated_runner] do
+          Mix.shell().info("Waiting for the dedicated runner's pre-run load and swap to settle")
+          pre_run = :erpc.call(node, Host, :settle, [], to_timeout(minute: 6))
+          Keyword.put(sampler_opts, :pre_run_host, pre_run)
+        else
+          sampler_opts
+        end
+
       expires_in =
         Enum.min_by(contacts, & &1.ends_at, DateTime).ends_at |> DateTime.diff(DateTime.utc_now())
 
@@ -131,7 +142,7 @@ defmodule Cadence.Dev.ScaleRun do
 
       _ ->
         Mix.raise(
-          "Usage: mix cadence.scale.run --spacecraft N --shape average|peak --duration S [--label LABEL] [--per-site 8|16] [--reset]"
+          "Usage: mix cadence.scale.run --spacecraft N --shape average|peak --duration S [--label LABEL] [--per-site 8|16] [--dedicated-runner] [--reset]"
         )
     end
   end
@@ -203,6 +214,7 @@ defmodule Cadence.Dev.ScaleRun do
         "across #{rows} rows\n",
       "- Simulator paths sending #{load.paths_sending}/#{load.paths_expected}\n",
       "- Simulator frames sent #{load.frames_sent}, target #{load.frames_per_second_expected} frames/s\n",
+      Sampler.host_findings(load.summary, opts[:spacecraft]),
       "- Sampler JSONL \`#{Path.relative_to(out, @root)}\`\n",
       "- Summary JSON \`#{Path.relative_to(load.summary_path, @root)}\`\n\n",
       "## Run settings\n\n| Setting | Value |\n| --- | --- |\n",

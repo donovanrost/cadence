@@ -1,0 +1,169 @@
+name: Earendil scale scorecards
+
+# Dispatch only when the PR queue is short. This workflow shares the CI job slots.
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Commit, tag, or branch to run. Dispatch only when the PR queue is short."
+        default: develop
+        required: true
+        type: string
+      spacecraft:
+        description: "Comma-separated fleet sizes. Use 50 first to check hosted timing."
+        default: "50,500,1000"
+        required: true
+        type: string
+      shape:
+        description: "Simulator contact load"
+        default: peak
+        required: true
+        type: choice
+        options:
+          - peak
+          - average
+      duration:
+        description: "Measurement duration in seconds"
+        default: 600
+        required: true
+        type: number
+
+permissions:
+  contents: read
+
+jobs:
+  select-fleets:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    outputs:
+      spacecraft: ${{ steps.select.outputs.spacecraft }}
+    steps:
+      - name: Validate the fleet list and duration
+        id: select
+        env:
+          FLEET_SIZES: ${{ inputs.spacecraft }}
+          DURATION: ${{ inputs.duration }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+
+          fields = [item.strip() for item in os.environ["FLEET_SIZES"].split(",")]
+          if len(fields) > 256 or any(not item.isdecimal() for item in fields):
+              raise SystemExit("Supply up to 256 comma-separated integer fleet sizes.")
+
+          sizes = [int(item) for item in fields]
+          if any(size not in range(1, 1024) for size in sizes) or len(set(sizes)) != len(sizes):
+              raise SystemExit("Fleet sizes must be distinct and between 1 and 1023.")
+
+          # Leave an hour of the six-hour GitHub-hosted job limit for setup and teardown.
+          duration = os.environ["DURATION"]
+          if not duration.isdecimal() or int(duration) not in range(1, 18_001):
+              raise SystemExit("Duration must be a whole number of seconds between 1 and 18000.")
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              print(f"spacecraft={json.dumps(sizes)}", file=output)
+          PY
+
+  scorecard:
+    name: ${{ matrix.spacecraft }} craft (${{ inputs.shape }})
+    needs: select-fleets
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        spacecraft: ${{ fromJSON(needs.select-fleets.outputs.spacecraft) }}
+    env:
+      MIX_ENV: dev
+      MISE_DISABLE_TOOLS: hk,pkl,vp
+      PGHOST: 127.0.0.1
+      PGUSER: postgres
+      EARENDIL_SITE_COUNT: "15"
+      CADENCE_INGRESS_JOURNAL_ENABLED: "true"
+      CADENCE_INGRESS_JOURNAL_DURABILITY: sync
+      SCORECARD_SPACECRAFT: ${{ matrix.spacecraft }}
+      SCORECARD_SHAPE: ${{ inputs.shape }}
+      SCORECARD_DURATION: ${{ inputs.duration }}
+      SCORECARD_LABEL: hosted-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.spacecraft }}
+      SCALE_RUNNER_TYPE: GitHub-hosted ubuntu-24.04 x64 (4 vCPU, 16 GB RAM)
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Check out the dispatch workflow revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - name: Keep the report collector available when testing another ref
+        run: cp scripts/ci/collect_scale_scorecard.py "$RUNNER_TEMP/"
+      - name: Check out the requested scorecard ref
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - uses: jdx/mise-action@924e7c586e33d7d4bae9c14e26c5d22e2beb6e78 # v5.3.0
+        with:
+          version: "2026.11.9"
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "24.16.0"
+      - uses: ./.github/actions/install-xmllint
+      - name: Install BEAM and console dependencies
+        run: |
+          mise exec -- mix setup --check-locked
+          corepack enable
+          (cd frontend && corepack pnpm install --frozen-lockfile)
+      - name: Check Postgres and prepare local credentials
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -d postgres -Atc 'SELECT 1' | grep -qx 1
+          dev/stack env
+          python3 - <<'PY'
+          import tomllib
+
+          with open("mise.local.toml", "rb") as config:
+              env = tomllib.load(config)["env"]
+          for key in ("CADENCE_ADMIN_PASSWORD", "E2E_PERSONA_PASSWORD",
+                      "EARENDIL_DEMO_PROVIDER_TOKEN", "CADENCE_ERLANG_COOKIE"):
+              print(f"::add-mask::{env[key]}")
+          PY
+      - name: Pull the dev stack QuestDB image
+        run: |
+          if ! docker pull questdb/questdb:9.4.3; then
+            sleep 5
+            docker pull questdb/questdb:9.4.3
+          fi
+      - name: Run the seeded scorecard
+        id: measure
+        run: |
+          export CADENCE_STORAGE_PATH="$RUNNER_TEMP/scale-data"
+          export CADENCE_INGRESS_JOURNAL_PATH="$CADENCE_STORAGE_PATH/journal"
+          trap 'dev/stack down' EXIT
+          mise exec -- mix cadence.scale.run \
+            --spacecraft "$SCORECARD_SPACECRAFT" --shape "$SCORECARD_SHAPE" \
+            --duration "$SCORECARD_DURATION" --label "$SCORECARD_LABEL" --dedicated-runner
+          dev/stack status | tee "$RUNNER_TEMP/stack-status"
+          grep -Fxq postgres=up "$RUNNER_TEMP/stack-status"
+      - name: Publish the scorecard to the job summary
+        if: ${{ !cancelled() && (steps.measure.outcome == 'success' || steps.measure.outcome == 'failure') }}
+        env:
+          SCORECARD_OUTCOME: ${{ steps.measure.outcome }}
+        run: python3 "$RUNNER_TEMP/collect_scale_scorecard.py"
+      - name: Upload the scorecard and raw samples
+        if: ${{ !cancelled() && (steps.measure.outcome == 'success' || steps.measure.outcome == 'failure') }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: scale-scorecard-${{ matrix.spacecraft }}-${{ inputs.shape }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/scale-scorecard/

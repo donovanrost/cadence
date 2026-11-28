@@ -169,6 +169,31 @@ defmodule Cadence.Observability.ScaleSamplerTest do
       assert Host.count_agents(ps) == 3
     end
 
+    test "classifies a Linux runner at its nproc limit with swap disabled" do
+      load = Host.parse_load("4.00 2.10 1.50 1/389 12345\n")
+
+      swap =
+        Host.parse_linux_swap("""
+        MemTotal:       16384000 kB
+        SwapCached:            0 kB
+        SwapTotal:             0 kB
+        SwapFree:              0 kB
+        """)
+
+      assert swap == %{swap_used_mb: 0.0, swap_total_mb: 0.0}
+      cores = Host.parse_nproc("4\n")
+      assert cores == 4
+
+      assert Host.capacity([Map.put(swap, :load, load)], cores) == %{
+               classification: :baseline,
+               max_load_one: 4.0,
+               max_swap_percent: 0.0
+             }
+
+      assert Host.parse_nproc("0\n") == nil
+      assert Host.parse_nproc("4 CPUs\n") == nil
+    end
+
     test "a baseline permits load equal to the core count and swap below half" do
       samples = [host_sample(8.0, 256, 1024), host_sample(5.0, 0, 0)]
 
@@ -193,6 +218,78 @@ defmodule Cadence.Observability.ScaleSamplerTest do
 
       assert %{classification: :ceiling_check, max_swap_percent: 50.0} =
                Host.capacity([quiet, smaller_swap, quiet], 8)
+    end
+
+    test "a quiet dedicated runner reports saturation as a finding on a baseline" do
+      during = host_sample(6.0, 768, 1024)
+
+      pre_run =
+        Host.settle(logical_cpus: 4, read_host: fn -> host_sample(3.5, 0, 0) end, timeout_ms: 0)
+
+      capacity = Host.capacity([during], 4, pre_run)
+
+      assert capacity == %{
+               classification: :baseline,
+               pre_run: pre_run,
+               max_load_one: 6.0,
+               max_swap_percent: 75.0
+             }
+
+      summary =
+        Stats.summarize([%{host: during, beam: %{scheduler_utilization: 0.98}}])
+        |> Map.merge(%{host_capacity: capacity, meta: %{host: %{logical_cpus: 4}}})
+
+      report = Run.host_findings(summary, 500) |> IO.iodata_to_binary()
+      assert report =~ "Pre-run settle time"
+      assert report =~ "Pre-run 1-minute load 3.5 (4 logical cores), swap 0.0%"
+
+      assert report =~
+               "CPU-bound at 500 spacecraft on 4 vCPU (p99 BEAM scheduler utilization 98.0%)"
+    end
+
+    test "a busy dedicated runner gives a ceiling check even if the window is quiet" do
+      during = [host_sample(2.0, 0, 0)]
+
+      pre_run =
+        Host.settle(logical_cpus: 4, read_host: fn -> host_sample(4.01, 0, 0) end, timeout_ms: 0)
+
+      assert Host.capacity(during, 4, pre_run) == %{
+               classification: :ceiling_check,
+               pre_run: pre_run,
+               max_load_one: 2.0,
+               max_swap_percent: 0.0
+             }
+
+      pre_run =
+        Host.settle(
+          logical_cpus: 4,
+          read_host: fn -> host_sample(2.0, 512, 1024) end,
+          timeout_ms: 0
+        )
+
+      assert %{classification: :ceiling_check} = Host.capacity(during, 4, pre_run)
+    end
+
+    test "a settle timeout records the last readings and the ceiling reason" do
+      pre_run =
+        Host.settle(logical_cpus: 4, read_host: fn -> host_sample(6.0, 0, 0) end, timeout_ms: 1)
+
+      assert %{settled?: false, settle_ms: elapsed, load_one: 6.0} = pre_run
+      assert elapsed >= 1
+
+      capacity = Host.capacity([host_sample(8.0, 0, 0)], 4, pre_run)
+      assert capacity.classification == :ceiling_check
+
+      summary = %{
+        host_capacity: capacity,
+        meta: %{host: %{logical_cpus: 4}},
+        metrics: %{"beam.scheduler_utilization" => %{p99: 0.99}}
+      }
+
+      report = Run.host_findings(summary, 500) |> IO.iodata_to_binary()
+      assert report =~ "Pre-run settle time"
+      assert report =~ "Pre-run quiet check timed out."
+      refute report =~ "CPU-bound"
     end
 
     test "missing host readings or core count make a ceiling check" do
