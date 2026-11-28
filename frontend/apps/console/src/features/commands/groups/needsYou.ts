@@ -43,21 +43,13 @@ function lastReading(series: VerifierSeries | null, t: GroupTarget, m: GroupMemb
 }
 
 function verifyLine(
-  group: Group,
   series: VerifierSeries | null,
   t: GroupTarget,
   m: GroupMember | undefined,
   cmd: string,
 ): string {
-  const failure = [...group.events]
-    .reverse()
-    .find(
-      (e) =>
-        e.kind === "member_failed" &&
-        e.payload?.spacecraft_id === t.spacecraft_id &&
-        e.payload.position === m?.position,
-    );
-  const timedOut = failure?.payload?.reason === "verify_timed_out";
+  // #795: the member's own failure_reason, the fact its member_failed event states.
+  const timedOut = m?.failure_reason === "verify_timed_out";
   const reading = lastReading(series, t, m);
   if (reading === undefined)
     return `${cmd} was sent, but verification ${timedOut ? "timed out" : "failed"}.`;
@@ -91,8 +83,7 @@ function card(group: Group, series: VerifierSeries | null, t: GroupTarget): Need
     const time = targetVerifyTime(t);
     return {
       ...base,
-      explanation:
-        verifyLine(group, series, t, m, cmd) + (time ? ` ${time}.` : "") + stoppedLine(t),
+      explanation: verifyLine(series, t, m, cmd) + (time ? ` ${time}.` : "") + stoppedLine(t),
       resend: true,
     };
   }
@@ -121,8 +112,16 @@ function card(group: Group, series: VerifierSeries | null, t: GroupTarget): Need
   };
 }
 
-export function needsYouCards(group: Group, series: VerifierSeries | null): NeedsYouCard[] {
-  return group.targets.flatMap((t) => {
+/**
+ * The cards for `targets`: #795, the page of the group's targets the server keeps for Needs you
+ * (`needs_you=true`), never a scan of the targets on screen.
+ */
+export function needsYouCards(
+  group: Group,
+  targets: readonly GroupTarget[],
+  series: VerifierSeries | null,
+): NeedsYouCard[] {
+  return targets.flatMap((t) => {
     if (!NEEDS_YOU.includes(t.stage) && !t.blocked) return [];
     const c = card(group, series, t);
     return c ? [c] : [];

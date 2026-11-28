@@ -5,7 +5,7 @@ import { useMissionScope } from "@/shell/index.ts";
 import { fetchEncoding, hexBytes, type EncodingView } from "../groups/encoding.ts";
 import ValueChanges from "./ValueChanges.vue";
 import { radiateMeta } from "./ownValues.ts";
-import { formatClock, formatDayTime, plural, ApPanel, ApTag } from "@/ui";
+import { formatClock, formatCount, formatDayTime, plural, ApPanel, ApTag } from "@/ui";
 import { catalogRevisionWords } from "../api.ts";
 import type { Group } from "../groups/show.ts";
 import type { PersonName } from "../groups/words.ts";
@@ -96,8 +96,8 @@ const bytesLine = (position: number) => {
           {{ t.name ?? "Unknown spacecraft" }}
           <span class="text-text-4">SCID {{ t.scid ?? "—" }}</span>
         </li>
-        <li v-if="group.targets.length > LIMIT" class="font-mono text-sm text-text-4">
-          and {{ group.targets.length - LIMIT }} more
+        <li v-if="group.target_count > LIMIT" class="font-mono text-sm text-text-4">
+          and {{ formatCount(group.target_count - LIMIT) }} more
         </li>
       </ul>
       <ValueChanges :group="group" />
