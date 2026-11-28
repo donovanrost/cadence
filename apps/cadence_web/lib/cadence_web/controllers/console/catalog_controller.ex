@@ -9,7 +9,15 @@ defmodule CadenceWeb.Console.CatalogController do
   alias Cadence.Auth.Policy
   alias Cadence.Catalog
   alias Cadence.Catalog.{Artifact, Reimport}
-  alias Cadence.Reads.{CatalogApids, CatalogOverview, CatalogRevisionSpacecraft, CatalogRollout}
+
+  alias Cadence.Reads.{
+    CatalogApids,
+    CatalogOverview,
+    CatalogRevisionSpacecraft,
+    CatalogRollout,
+    CatalogSystems
+  }
+
   alias CadenceWeb.Console.{ConfigJSON, Problem}
 
   def index(conn, params) do
@@ -37,6 +45,17 @@ defmodule CadenceWeb.Console.CatalogController do
   def apids(conn, %{"revision_id" => revision_id}) do
     case CatalogApids.load(org_id(conn), mission_id(conn), revision_id) do
       {:ok, apids} -> json(conn, %{data: apids})
+      {:error, :catalog_revision_not_found} -> Problem.respond(conn, :catalog_revision_not_found)
+    end
+  end
+
+  @doc """
+  `GET …/catalog/revisions/:revision_id/systems` (ADR-020 P5): `{revision_id, available, systems}`,
+  the SpaceSystems of the revision's model and what each holds.
+  """
+  def systems(conn, %{"revision_id" => revision_id}) do
+    case CatalogSystems.load(org_id(conn), mission_id(conn), revision_id) do
+      {:ok, systems} -> json(conn, %{data: systems})
       {:error, :catalog_revision_not_found} -> Problem.respond(conn, :catalog_revision_not_found)
     end
   end

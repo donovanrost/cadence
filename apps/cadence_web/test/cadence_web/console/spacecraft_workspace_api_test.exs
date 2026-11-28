@@ -275,6 +275,54 @@ defmodule CadenceWeb.Console.SpacecraftWorkspaceAPITest do
     assert saved["catalog_set_by"] == "spacecraft"
   end
 
+  test "ADR-020 P5: the systems the saved APIDs amount to, beside the document", c do
+    data = workspace(c)
+    assert %{"systems" => nil} = data
+
+    revision =
+      CatalogFixtures.persist_imported_revision!(c.mission.organization_id, c.mission.mission_id)
+
+    # The fixture catalog has one packet (HEALTH, APID 42); the root system owns it.
+    document =
+      data["document"]
+      |> Map.put("catalog_revision_id", revision.catalog_revision_id)
+      |> Map.put("handled_apids", [42])
+
+    assert %{"data" => saved} = put_draft(c, data["token"], document) |> json_response(200)
+
+    assert [%{"path" => "/", "bound" => "all", "apids" => [42], "system_id" => system_id}] =
+             saved["systems"]
+
+    assert is_binary(system_id)
+
+    # Choosing no APID binds no system.
+    unbound = Map.put(document, "handled_apids", [])
+    assert %{"data" => none} = put_draft(c, saved["token"], unbound) |> json_response(200)
+    assert none["systems"] == []
+  end
+
+  test "ADR-020 P5: a catalog revision's systems and what each holds", c do
+    revision =
+      CatalogFixtures.persist_imported_revision!(c.mission.organization_id, c.mission.mission_id)
+
+    path = "/api/v1/missions/#{c.mission.mission_id}/catalog/revisions/"
+
+    assert %{"data" => %{"available" => true, "systems" => systems}} =
+             conn(c)
+             |> get(path <> revision.catalog_revision_id <> "/systems")
+             |> json_response(200)
+
+    assert %{
+             "path" => "/",
+             "packets" => [%{"name" => "HEALTH", "apid" => 42, "runtime_name" => "/HEALTH"}],
+             "commands" => _commands,
+             "algorithms" => _count
+           } = Enum.find(systems, &(&1["path"] == "/"))
+
+    assert %{"error" => %{"code" => "catalog_revision_not_found"}} =
+             conn(c) |> get(path <> "nope/systems") |> json_response(404)
+  end
+
   test "packets for an unknown catalog; an unknown craft; an unknown section", c do
     assert %{"error" => %{"code" => "catalog_revision_not_found"}} =
              conn(c) |> get(c.path <> "/catalogs/nope/packets") |> json_response(404)

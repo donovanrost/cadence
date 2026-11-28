@@ -184,6 +184,14 @@ defmodule Cadence.Catalog.MissionModelSystemOwnerTest do
     assert hk["runtime_name"] == "/HK"
   end
 
+  test "the id token drops the root's slash and keeps the system path below it" do
+    assert SystemOwner.token("/HK") == "HK"
+    assert SystemOwner.token("/bus/HK") == "bus/HK"
+    assert SystemOwner.token("/payload/Vehicle/PAYLOAD_HK") == "payload/Vehicle/PAYLOAD_HK"
+    # A definition with no declared system carries its short name already.
+    assert SystemOwner.token("HK") == "HK"
+  end
+
   test "a declaration with no declared system above it carries nothing but its name" do
     declaration = Declaration.new(%{kind: :container, qualified_name: "/x/containers/HK"})
 

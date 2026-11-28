@@ -43,6 +43,16 @@ defmodule Cadence.Catalog.MissionModel.SystemOwner do
     end
   end
 
+  @doc """
+  The id a definition's runtime name gives it (#1078 B3): the runtime name without its leading
+  root slash. A definition the root system owns keeps its short name (`/HK` is `HK`, so every id
+  stored for a one-import mission is unchanged); one below it is qualified (`/bus/HK` is
+  `bus/HK`). The one function points (`<token>.<field>`) and commands both mint from.
+  """
+  @spec token(binary()) :: binary()
+  def token("/" <> rest), do: rest
+  def token(runtime_name) when is_binary(runtime_name), do: runtime_name
+
   defp owner(nil, _index), do: nil
 
   defp owner(path, index) do

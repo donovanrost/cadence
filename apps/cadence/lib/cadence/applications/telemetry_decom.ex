@@ -55,7 +55,7 @@ defmodule Cadence.Applications.TelemetryDecom do
   alias Cadence.Governance
   alias Cadence.Management.Activations.ActivationRequest
   alias Cadence.MissionModels
-  alias Cadence.MissionModels.TelemetryProjection
+  alias Cadence.MissionModels.{SystemSelection, TelemetryProjection}
   alias Cadence.Missions
   alias Cadence.Repo
   alias Cadence.SourceEndpoints
@@ -1135,10 +1135,8 @@ defmodule Cadence.Applications.TelemetryDecom do
     end
   end
 
-  defp selected_packets(packet_definitions, handled_apids) do
-    allowed_apids = MapSet.new(handled_apids)
-    Enum.filter(packet_definitions, &MapSet.member?(allowed_apids, &1.apid))
-  end
+  defp selected_packets(packet_definitions, handled_apids),
+    do: SystemSelection.select(packet_definitions, {:apids, handled_apids})
 
   defp unassigned_apids(packet_definitions, handled_apids) do
     packet_definitions
