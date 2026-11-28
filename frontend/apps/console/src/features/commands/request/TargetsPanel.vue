@@ -70,7 +70,7 @@ const ownOf = (t: GroupTarget) =>
             <ApStatusMark :state="STAGE_STATE[t.stage]" class="self-center" />
             <span class="font-mono text-md text-readout"
               >{{ t.name ?? "Unknown spacecraft" }}
-              <span class="text-text-4">SCID {{ t.scid ?? "—" }}</span></span
+              <span class="text-text-4">SCID {{ t.scid ?? "not set" }}</span></span
             >
             <span class="min-w-0 truncate font-mono text-sm text-text-3">
               <template v-for="m in t.members" :key="m.request_id"
