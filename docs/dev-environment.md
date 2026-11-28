@@ -50,6 +50,8 @@ For a fresh REST harness, use `dev/stack reset --no-seed` then `dev/stack seed-r
 The environment admin in `mise.local.toml` is the bootstrap credential; the client signs in
 through the console. Set `EARENDIL_SPACECRAFT_COUNT` to 500 (default) or 1,000 and
 `EARENDIL_SITE_COUNT` to 2–15 (default 10). Each phase prints wall time.
+If you change either value on an existing stack, run `dev/stack reset` before seeding again;
+the simulator retains site and profile state across ordinary `up` runs.
 
 The Earendil seed imports and independently approves its command and telemetry catalog,
 starts the simulator, provisions and syncs its provider, and probes the QuestDB dashboard
