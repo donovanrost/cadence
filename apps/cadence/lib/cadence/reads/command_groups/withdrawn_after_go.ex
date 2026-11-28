@@ -9,7 +9,7 @@ defmodule Cadence.Reads.CommandGroups.WithdrawnAfterGo do
   Computed once per group read, from one `Control.WithdrawnPins.for_spacecraft/3` over the group's
   craft and one read of the waiting members' approval rows: a fixed number of queries for any
   number of targets. Each target row carries `withdrawn_after_go` (nil, or `%{revision_id,
-  decision: %{kind, by: %{id, name}, at, reason}}`), and the group gets a summary over every
+  decision: %{kind, by, at, reason}}`, `by` being the `ActorRef` actor document `{kind, id, name}` or nil with no decider, as the workspace's `approval_withdrawn` has it), and the group gets a summary over every
   target, not a page: `%{count, latest}` (the newest decision by `at`), or nil.
   """
 
@@ -56,7 +56,7 @@ defmodule Cadence.Reads.CommandGroups.WithdrawnAfterGo do
         revision_id: pin.revision_id,
         decision: %{
           kind: pin.decision.kind,
-          by: Map.take(pin.decision.by || %{}, [:id, :name]),
+          by: pin.decision.by,
           at: pin.decision.at,
           reason: pin.decision.reason
         }

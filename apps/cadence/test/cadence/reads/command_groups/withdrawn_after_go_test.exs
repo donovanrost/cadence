@@ -57,7 +57,8 @@ defmodule Cadence.Reads.CommandGroups.WithdrawnAfterGoTest do
                }
                when revision == c.revision_id,
                target.withdrawn_after_go
-             ) and is_map(target.withdrawn_after_go.decision.by)
+             ) and is_map(target.withdrawn_after_go.decision.by) and
+               Map.has_key?(target.withdrawn_after_go.decision.by, :kind)
            end)
 
     assert %{count: 4, latest: %{revision_id: revision, decision: %{at: %DateTime{}}}} =

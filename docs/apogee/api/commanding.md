@@ -330,7 +330,7 @@ Body: the draft plus `preflight_digest` (from the preflight the operator saw) an
   409, so disable GO up front; NO-GO, send back and abort stay allowed.
 - **`withdrawn_after_go` (E2, #546; the release panel's caution).** Each target row, on the show's
   first page and on every `GET …/targets` page, carries `withdrawn_after_go`: `null`, or
-  `{revision_id, decision: {kind, by: {id, name}, at, reason}}` when the target's craft runs a
+  `{revision_id, decision: {kind, by, at, reason}}` (`by` is the deciding person's `{kind, id, name}` actor document, or `null` with no decider, as on the workspace's `approval_withdrawn`) when the target's craft runs a
   withdrawn revision and a member still waiting for its contact has an approval row that recorded
   a different withdrawal (or none, or predates the record), which is the comparison an unattended
   release refuses on. The show also carries the group's own `withdrawn_after_go`: `null`, or
