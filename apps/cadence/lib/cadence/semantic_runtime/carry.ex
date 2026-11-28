@@ -16,11 +16,11 @@ defmodule Cadence.SemanticRuntime.Carry do
   """
 
   alias Cadence.Platform.ContentHash
-  alias Cadence.SemanticRuntime.{AlgorithmPlan, MonitoringPlan, State}
+  alias Cadence.SemanticRuntime.{AlgorithmPlan, MonitoringPlan, Scope, State}
 
   @type fingerprints :: %{
           algorithms: %{binary() => binary()},
-          monitoring: %{binary() => binary()},
+          monitoring: %{(binary() | {binary(), binary()}) => binary()},
           parameters: %{binary() => binary()}
         }
 
@@ -38,7 +38,7 @@ defmodule Cadence.SemanticRuntime.Carry do
       when is_map(runtime_plans) do
     %{
       algorithms: Map.new(algorithms, &{&1.algorithm_id, digest(&1)}),
-      monitoring: Map.new(monitoring, &{&1.policy_id, digest(&1)}),
+      monitoring: Map.new(monitoring, &{monitoring_key(&1), digest(&1)}),
       parameters: parameters(runtime_plans, algorithms)
     }
   end
@@ -69,10 +69,37 @@ defmodule Cadence.SemanticRuntime.Carry do
     {kept, %{kept: after_, dropped: before - after_}}
   end
 
+  # A monitoring entry is kept when the policy THIS spacecraft runs is the same as the one it
+  # evolved under (the fingerprint of its own entry, else the mission's), so a craft's override
+  # changes only that craft's state (#451). Fingerprints written before overrides are keyed by
+  # policy id alone, which is the mission entry's key still.
+  defp keep(entries, old, new, :monitoring) do
+    old = Map.get(old, :monitoring, %{})
+    new = Map.fetch!(new, :monitoring)
+
+    Map.filter(entries, fn {{scope, id}, _value} ->
+      craft = Scope.spacecraft_id(scope)
+      current = ran(new, id, craft)
+      current != nil and current == ran(old, id, craft)
+    end)
+  end
+
   defp keep(entries, old, new, kind) do
     stable = stable_ids(Map.get(old, kind, %{}), Map.fetch!(new, kind))
     Map.filter(entries, fn {{_scope, id}, _value} -> MapSet.member?(stable, id) end)
   end
+
+  # The fingerprint of the entry a spacecraft runs: its own, else the mission's.
+  defp ran(fingerprints, id, craft),
+    do: (craft && Map.get(fingerprints, {id, craft})) || Map.get(fingerprints, id)
+
+  # A mission entry is keyed by its policy id; a spacecraft entry (an override, or a policy for one
+  # craft) shares its policy id with the mission entry, so its key carries the craft.
+  defp monitoring_key(%MonitoringPlan{scope: :spacecraft, spacecraft_id: craft} = plan)
+       when is_binary(craft),
+       do: {plan.policy_id, craft}
+
+  defp monitoring_key(%MonitoringPlan{policy_id: policy_id}), do: policy_id
 
   # A timer's key is "semantic:<algorithm id>:<trigger index>": it follows its algorithm.
   defp keep_timers(%State{timer_cursors: cursors, fingerprints: old}, new) do
