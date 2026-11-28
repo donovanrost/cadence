@@ -5,6 +5,7 @@ defmodule Cadence.Runtime.PartitionStreamKeys.RetentionTest do
   alias Cadence.Repo
   alias Cadence.Runtime.PartitionStreamKeys
   alias Cadence.Runtime.PartitionStreamKeys.Retention, as: Rule
+  alias Cadence.TestSupport.RetentionLock
 
   @now ~U[2026-11-26 12:00:00Z]
 
@@ -39,7 +40,15 @@ defmodule Cadence.Runtime.PartitionStreamKeys.RetentionTest do
         1
 
   defp sweep(opts \\ []),
-    do: Sweeper.sweep(Rule, Rule.initial_cursor(), Keyword.merge([now: @now, pause_ms: 0], opts))
+    do:
+      Sweeper.sweep(
+        Rule,
+        Rule.initial_cursor(),
+        Keyword.merge(
+          [now: @now, pause_ms: 0, lock_key: RetentionLock.key(Rule)],
+          opts
+        )
+      )
 
   test "a key past the replay horizon goes; one inside it survives", c do
     # Horizon: 30 d (archives) + 7 d margin = 37 d.

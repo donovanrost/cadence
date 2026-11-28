@@ -39,6 +39,10 @@ defmodule Cadence.Persistence.Retention.Sweeper do
   @doc """
   One sweep of `rule` from `cursor`: `%{chunks, rows, stopped, cursor}`, `stopped` one of `:done`,
   `:budget`, `:locked` or `{:error, reason}`. Options override the settings (`:now`, `:pause_ms`).
+
+  `:lock_key` names the advisory lock the chunks take (default `"retention:<rule name>"`, the
+  one every node shares). A test that sweeps a real rule passes a key of its own, so a session
+  outside the test that holds the rule's lock cannot make its sweep report `:locked` (#939).
   """
   @spec sweep(module(), term(), keyword()) :: map()
   def sweep(rule, cursor, opts \\ []) do
@@ -148,7 +152,7 @@ defmodule Cadence.Persistence.Retention.Sweeper do
     result =
       Repo.transaction(
         fn ->
-          if lock?(rule), do: rule.sweep_chunk(cursor, now, settings), else: :locked
+          if lock?(rule, settings), do: rule.sweep_chunk(cursor, now, settings), else: :locked
         end,
         timeout: @chunk_timeout_ms
       )
@@ -175,9 +179,9 @@ defmodule Cadence.Persistence.Retention.Sweeper do
     error -> {:error, Exception.message(error)}
   end
 
-  defp lock?(rule) do
-    %{rows: [[locked]]} =
-      Repo.query!("SELECT pg_try_advisory_xact_lock(hashtext($1))", ["retention:#{rule.name()}"])
+  defp lock?(rule, settings) do
+    key = Keyword.get(settings, :lock_key) || "retention:#{rule.name()}"
+    %{rows: [[locked]]} = Repo.query!("SELECT pg_try_advisory_xact_lock(hashtext($1))", [key])
 
     locked
   end
