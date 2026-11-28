@@ -79,13 +79,14 @@ defmodule Cadence.Protocol.TMFramePipeline do
     with {:ok, frame_infos, decode_anomalies, rest} <-
            FrameCodec.decode_detailed(frame_bytes, codec_opts) do
       {expected, context} = Map.pop(ctx, :expected_scid)
+      {router, context} = Map.pop(context, :scid_router)
 
       context =
         context
         |> Map.put_new(:direction, :downlink)
         |> Map.put_new(:sdu_kind_hint, :space_packet)
 
-      {kept, mismatch_anomalies, scid_check} = check_scids(frame_infos, expected)
+      {kept, mismatch_anomalies, scid_check} = check_scids(frame_infos, expected, router)
 
       with {:ok, sdu_octets, kept_frames, anomalies, rest, next_state} <-
              reduce_frames(kept, decode_anomalies ++ mismatch_anomalies, rest, state, context) do
@@ -94,7 +95,32 @@ defmodule Cadence.Protocol.TMFramePipeline do
     end
   end
 
-  defp check_scids(frame_infos, expected) when is_integer(expected) do
+  # A router (`ctx.scid_router`, the source endpoint's `RelayIndex`, #1078 E1b) decides each frame:
+  # its own craft's and a relayed origin craft's frames are kept; any other SCID is refused as a
+  # `:scid_mismatch`, and an archived origin craft's as `:relay_origin_archived`. Both are the
+  # frames' own anomaly, one per observed SCID per call, so a misconfigured SCID is counted.
+  defp check_scids(frame_infos, expected, router) when is_function(router, 1) do
+    {kept, refused} =
+      Enum.split_with(frame_infos, &kept_verdict?(router.(&1.frame.scid)))
+
+    anomalies =
+      refused
+      |> Enum.group_by(& &1.frame.scid)
+      |> Enum.sort_by(fn {scid, _frames} -> scid end)
+      |> Enum.map(fn {scid, [first | _] = frames} ->
+        refusal_anomaly(router.(scid), scid, first, length(frames), expected)
+      end)
+
+    check = %{
+      expected_scid: expected,
+      frames: length(frame_infos),
+      refused: Map.new(anomalies, &{&1.scid, &1.metadata.frames})
+    }
+
+    {kept, anomalies, check}
+  end
+
+  defp check_scids(frame_infos, expected, _no_router) when is_integer(expected) do
     {kept, refused} = Enum.split_with(frame_infos, &(&1.frame.scid == expected))
 
     anomalies =
@@ -123,7 +149,30 @@ defmodule Cadence.Protocol.TMFramePipeline do
     {kept, anomalies, check}
   end
 
-  defp check_scids(frame_infos, _no_expected), do: {frame_infos, [], nil}
+  defp check_scids(frame_infos, _no_expected, _no_router), do: {frame_infos, [], nil}
+
+  defp kept_verdict?(:direct), do: true
+  defp kept_verdict?({:relayed, _craft}), do: true
+  defp kept_verdict?(_refused), do: false
+
+  defp refusal_anomaly(verdict, scid, first, frames, expected) do
+    {kind, extra} =
+      case verdict do
+        {:archived, craft} -> {:relay_origin_archived, %{origin_spacecraft_id: craft}}
+        _mismatch -> {:scid_mismatch, %{}}
+      end
+
+    %{
+      anomaly_kind: kind,
+      scid: scid,
+      vcid: first.frame.vcid,
+      map_id: first.frame.map_id,
+      frame_seq: first.frame.frame_seq,
+      raw_frame_offset_bytes: first.raw_frame_offset_bytes,
+      raw_frame_length_bytes: first.raw_frame_length_bytes,
+      metadata: Map.merge(%{expected_scid: expected, frames: frames}, extra)
+    }
+  end
 
   @spec decode_space_packets(binary(), keyword(), state(), map()) ::
           {:ok, [binary()], binary(), state()} | {:error, term(), state()}

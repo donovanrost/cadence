@@ -137,6 +137,40 @@ defmodule Cadence.Runtime.MonitoringReplayIdsE2ETest do
     refute log =~ "MM_REPLAY_ID_CONFLICT"
   end
 
+  # #1078 E1b-1: the partition checks each frame's SCID against its endpoint's craft's, with no pass
+  # metadata naming it, and counts what it refuses.
+  test "a frame whose SCID is not its endpoint's craft's is refused and counted", c do
+    {:ok, _} = Cadence.SpacecraftStore.update_spacecraft(c.org, %{c.craft | scid: 11})
+    handler = {__MODULE__, make_ref()}
+    parent = self()
+
+    :telemetry.attach(
+      handler,
+      [:cadence, :protocol, :scid_check, :refused],
+      fn _event, measurements, metadata, _ ->
+        send(parent, {:refused, measurements, metadata})
+      end,
+      nil
+    )
+
+    on_exit(fn -> :telemetry.detach(handler) end)
+
+    own = frames(mode: 50, aux: 0, sequence: 1)
+    foreign = frames(mode: 50, aux: 0, sequence: 2, scid: 7)
+
+    assert transition?(ingest!(evidence(c, own, 0)), :critical)
+    refute_received {:refused, _, _}
+
+    refused = ingest!(evidence(c, foreign, byte_size(own)))
+    refute transition?(refused, :critical)
+    assert [] = refused.packet_records
+
+    assert_received {:refused, %{frames: frames_refused},
+                     %{reason: :scid_mismatch, scid: 7, expected_scid: 11}}
+
+    assert frames_refused > 0
+  end
+
   # #161/#162: a sample's id comes from its packet (the journal position), not from the evidence
   # that carried it, so a replay cut into other batches re-derives the same sample ids, and the
   # monitoring evaluation and transition ids built over them: nothing is written twice.
@@ -604,12 +638,17 @@ defmodule Cadence.Runtime.MonitoringReplayIdsE2ETest do
         do: {start, DateTime.add(~U[2026-11-17 01:00:00.000000Z], start, :millisecond)}
   end
 
-  defp frames(mode: mode, aux: aux, sequence: sequence) do
+  defp frames(opts) do
+    mode = Keyword.fetch!(opts, :mode)
+    aux = Keyword.fetch!(opts, :aux)
+    sequence = Keyword.fetch!(opts, :sequence)
+    scid = Keyword.get(opts, :scid, 11)
+
     packet = <<0::3, 0::1, 0::1, 42::11, 3::2, sequence::14, 1::16, mode::8, aux::8>>
 
     sdu = %SDUOctets{
       profile: :tm,
-      scid: 11,
+      scid: scid,
       vcid: 2,
       map_id: nil,
       direction: :downlink,

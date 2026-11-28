@@ -58,6 +58,7 @@ defmodule Cadence.Architecture.ContextBoundary do
     # P3 M2 (#451): the monitoring lane's limits and alarm rules kind.
     "lib/cadence/control/monitoring_policy_kind.ex" => :composition,
     "lib/cadence/control/withdrawn_pins.ex" => :composition,
+    "lib/cadence/control/scid_routes.ex" => :composition,
     "lib/cadence/control/configuration_switches.ex" => :composition,
     "lib/cadence/control/configuration_apids.ex" => :composition,
     "lib/cadence/control/limit_definition_kind.ex" => :composition,
