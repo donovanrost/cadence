@@ -1,10 +1,12 @@
 defmodule Cadence.NotificationsTest do
   use Cadence.DataCase, async: false
 
+  import Ecto.Query
+
   alias Cadence.Accounts.{User, UserRow}
   alias Cadence.Ids
   alias Cadence.Notifications
-  alias Cadence.Notifications.Notification
+  alias Cadence.Notifications.{Notification, NotificationRow}
   alias Cadence.Repo
 
   setup do
@@ -66,17 +68,95 @@ defmodule Cadence.NotificationsTest do
     assert Enum.map(unread, & &1.notification_id) == [b.notification_id]
   end
 
-  test "count_unread_notifications excludes read and other users", %{user: user} do
-    other = user_fixture()
-    {:ok, n1} = Notifications.persist_notification(build_notification(user))
-    {:ok, _} = Notifications.persist_notification(build_notification(user))
-    {:ok, _} = Notifications.persist_notification(build_notification(other))
+  describe "listed notices (#709: the console lists organization_access_granted only)" do
+    defp granted(user, org \\ "Acme") do
+      {:ok, n} =
+        Notifications.persist_notification(
+          build_notification(user,
+            kind: :organization_access_granted,
+            title: "You were added to #{org}",
+            metadata: %{
+              "organization_id" => "org_#{org}",
+              "organization_display_name" => org,
+              "membership_role" => "member"
+            }
+          )
+        )
 
-    assert Notifications.count_unread_notifications(user.user_id) == 2
+      n
+    end
 
-    {:ok, _} = Notifications.mark_notification_read(n1.notification_id, user.user_id)
+    test "a page lists only the listed kinds, the person's own, newest first", %{user: user} do
+      other = user_fixture()
+      first = granted(user, "Acme")
+      second = granted(user, "Borealis")
+      {:ok, _invitation} = Notifications.persist_notification(build_notification(user))
+      granted(other)
 
-    assert Notifications.count_unread_notifications(user.user_id) == 1
+      assert {:ok, %{entries: entries, next_cursor: nil}} =
+               Notifications.listed_page(user.user_id)
+
+      assert Enum.map(entries, & &1.notification_id) == [
+               second.notification_id,
+               first.notification_id
+             ]
+    end
+
+    test "pages by cursor without repeating or skipping, ties broken by id", %{user: user} do
+      ids = for i <- 1..5, do: granted(user, "Org#{i}").notification_id
+      at = ~U[2026-11-27 10:00:00.000000Z]
+
+      Repo.update_all(from(n in NotificationRow, where: n.notification_id in ^ids),
+        set: [inserted_at: at]
+      )
+
+      walk = fn walk, cursor, seen ->
+        {:ok, page} = Notifications.listed_page(user.user_id, cursor: cursor, limit: 2)
+        seen = seen ++ Enum.map(page.entries, & &1.notification_id)
+        if page.next_cursor, do: walk.(walk, page.next_cursor, seen), else: seen
+      end
+
+      seen = walk.(walk, nil, [])
+      assert length(seen) == 5
+      assert Enum.sort(seen) == Enum.sort(ids)
+    end
+
+    test "refuses a cursor it didn't make", %{user: user} do
+      assert {:error, :invalid_cursor} = Notifications.listed_page(user.user_id, cursor: "nope")
+
+      forged = Base.url_encode64(Jason.encode!(["not a time", "notif_x"]), padding: false)
+      assert {:error, :invalid_cursor} = Notifications.listed_page(user.user_id, cursor: forged)
+    end
+
+    test "the unread count counts exactly the listed, unread rows", %{user: user} do
+      a = granted(user)
+      granted(user)
+      {:ok, _invitation} = Notifications.persist_notification(build_notification(user))
+      granted(user_fixture())
+
+      assert Notifications.listed_unread_count(user.user_id) == 2
+      {:ok, _} = Notifications.mark_listed_read(user.user_id, a.notification_id)
+      assert Notifications.listed_unread_count(user.user_id) == 1
+    end
+
+    test "Mark read is the owner's, of a listed kind, and idempotent", %{user: user} do
+      notice = granted(user)
+      {:ok, invitation} = Notifications.persist_notification(build_notification(user))
+      other = user_fixture()
+
+      assert {:error, :not_found} =
+               Notifications.mark_listed_read(other.user_id, notice.notification_id)
+
+      assert {:error, :not_found} =
+               Notifications.mark_listed_read(user.user_id, invitation.notification_id)
+
+      assert {:error, :not_found} = Notifications.mark_listed_read(user.user_id, "notif_missing")
+
+      assert {:ok, read} = Notifications.mark_listed_read(user.user_id, notice.notification_id)
+      refute Notification.unread?(read)
+      assert {:ok, again} = Notifications.mark_listed_read(user.user_id, notice.notification_id)
+      assert again.read_at == read.read_at
+    end
   end
 
   test "mark_notification_read enforces ownership and broadcasts", %{user: user} do

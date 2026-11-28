@@ -15,10 +15,7 @@ defmodule CadenceWeb.OrganizationAuth do
         cond do
           scope.organization_membership != nil or
               (Scope.admin_mode?(scope) and scope.organization != nil) ->
-            {:cont,
-             socket
-             |> assign(:nav_context, :organization)
-             |> CadenceWeb.NotificationsBell.attach()}
+            {:cont, assign(socket, :nav_context, :organization)}
 
           Scope.admin_mode?(scope) ->
             # L7: platform admin lives in the console (the legacy /admin only redirects there).

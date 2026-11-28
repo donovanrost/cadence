@@ -28,7 +28,6 @@ defmodule Cadence.Applications.CatalogRegistry do
     OpsConsole,
     DerivedTelemetry
   ]
-  @additional_contributors [Cadence.Applications.OrganizationAdmin]
 
   @spec validate() :: :ok | {:error, :invalid_application_catalog_registry}
   def validate do
@@ -82,7 +81,7 @@ defmodule Cadence.Applications.CatalogRegistry do
 
   defp contributors do
     @contributors ++
-      @additional_contributors ++ FixtureContributors.exporting(:catalog_contributions, 0)
+      FixtureContributors.exporting(:catalog_contributions, 0)
   end
 
   defp collect(contributors), do: collect_contributors(contributors)

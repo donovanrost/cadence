@@ -45,8 +45,6 @@ defmodule CadenceWeb.MissionAuthTest do
 
       assert socket.assigns.current_mission.mission_id == mission.mission_id
       assert socket.assigns.nav_context == :mission
-      assert socket.assigns.unread_notifications_count == 0
-      assert socket.assigns.recent_notifications == []
     end
 
     test "halts and redirects to the console's missions when mission id does not exist" do
