@@ -114,10 +114,6 @@ rule should come out of the Cedar work.
 
 ## Not a policy decision (tenancy hygiene)
 
-- `applications/ops_console/actions/historical_workflow_request.ex:150` · historical run ids are
-  client-supplied; a tenant suffix prevents cross-tenant collisions. The real fix is server-minted
-  ids or a unique index per organization and mission. It's marked `todo(authz)` because it's a
-  tenancy boundary, but it's a data-model fix, not a Cedar rule.
 
 ## What Cedar needs overall (entity sketch)
 

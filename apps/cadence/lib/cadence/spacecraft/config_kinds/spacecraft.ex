@@ -41,12 +41,10 @@ defmodule Cadence.Spacecraft.ConfigKinds.Spacecraft do
 
   @impl true
   def load(organization_id, mission_id, ids) do
-    ids
-    |> Enum.chunk_every(100)
-    |> Enum.flat_map(fn chunk ->
-      {:ok, found} = SpacecraftStore.fetch_spacecrafts(organization_id, mission_id, chunk)
-      Map.values(found)
-    end)
+    {:ok, found} = SpacecraftStore.fetch_spacecrafts_in_batches(organization_id, mission_id, ids)
+
+    found
+    |> Map.values()
     |> Enum.reject(&SpacecraftAsset.archived?/1)
     |> Map.new(&{&1.spacecraft_id, document(&1)})
   end

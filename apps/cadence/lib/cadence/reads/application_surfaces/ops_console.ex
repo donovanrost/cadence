@@ -338,14 +338,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
   defp dispatch("data_source_settings", scope, mission, params),
     do: envelope("OpsDataSources", Presentation.data_sources(scope, mission, params, :settings))
 
-  defp dispatch("data_operations", scope, mission, params),
-    do:
-      envelope("OpsDataOperations", Presentation.data_operations(scope, mission, params, :reader))
-
-  defp dispatch("data_operations_manage", scope, mission, params),
-    do:
-      envelope("OpsDataOperations", Presentation.data_operations(scope, mission, params, :manage))
-
   defp dispatch("contact_schedule", scope, mission, params) do
     case ContactSchedule.load(scope, mission, params) do
       {:ok, model} -> envelope("OpsContactSchedule", model)
@@ -423,7 +415,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
   end
 
   defp generic_props("telemetry_explore", page, params), do: telemetry_props(page, params)
-  defp generic_props("data_operations", page, _params), do: data_operations_props(page)
 
   defp alarms(_scope, mission, params) do
     envelope("OpsAlarms", %{
@@ -474,38 +465,11 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
   defp component_name("fleet_planning_run"), do: "OpsFleetPlanningRun"
   defp component_name("commands"), do: "OpsCommands"
   defp component_name("telemetry_explore"), do: "OpsTelemetryExplore"
-  defp component_name("data_operations"), do: "OpsDataOperations"
-  defp component_name("data_operations_manage"), do: "OpsDataOperationsManage"
   defp component_name("data_sources"), do: "OpsDataSources"
   defp component_name("data_source_registration"), do: "OpsDataSourceRegistration"
   defp component_name("data_source_settings"), do: "OpsDataSourceSettings"
   defp component_name("alarms"), do: "OpsAlarms"
   defp component_name("timeline"), do: "OpsTimeline"
-
-  defp form(id, submit_label, keys),
-    do: %{
-      "id" => id,
-      "fields" =>
-        Map.new(
-          keys,
-          &{&1,
-           %{
-             "id" => "#{id}-#{&1}",
-             "name" => &1,
-             "label" => String.capitalize(String.replace(&1, "_", " ")),
-             "type" => "text",
-             "value" => "",
-             "required" => false,
-             "options" => [],
-             "errors" => []
-           }}
-        ),
-      "submit" => %{"id" => "#{id}-submit", "label" => submit_label},
-      "error" => nil
-    }
-
-  defp link(id, label, href),
-    do: %{"id" => id, "label" => label, "href" => href, "icon" => "hero-arrow-left"}
 
   defp telemetry_props(page, params),
     do: %{
@@ -517,30 +481,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
     do: String.valid?(value) and not Regex.match?(~r/[\x00-\x1f\x7f]/u, value)
 
   defp exploration_value?(_), do: false
-
-  defp data_operations_props(page),
-    do: %{
-      "page" =>
-        Map.merge(page, %{
-          "groups_empty" => true,
-          "selected_group_id" => nil,
-          "navigation" => %{
-            "manage" => link("data-sources", "Data Sources", "#"),
-            "reader" => link("ops-home", "Operations", "#")
-          }
-        }),
-      "request_form" =>
-        form("historical-workflow-form", "Request workflow", [
-          "run_id",
-          "realm",
-          "data_source_id",
-          "workflow",
-          "reason",
-          "confirmed"
-        ]),
-      "selected_group" => nil,
-      "data_operation_groups" => []
-    }
 
   defp valid_text?(value), do: is_binary(value) and value != ""
 

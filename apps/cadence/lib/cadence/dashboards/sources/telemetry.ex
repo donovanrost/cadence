@@ -22,7 +22,6 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
   alias Cadence.DataSources.SourceWatermark
 
   alias Cadence.Dashboards.Sources.Telemetry.{FrameBuilder, FrameContext, QueryOptions, Warnings}
-  alias Cadence.Dashboards.Sources.Telemetry.HistoricalWorkflows
   alias Cadence.Dashboards.Sources.Telemetry.RevisionState
   alias Cadence.Reads.Telemetry, as: TelemetryReads
   alias Cadence.Telemetry.{PhysicalSampleQuery, Sample}
@@ -269,16 +268,6 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
           end)
           |> resolve_revision_state(request, source_binding, organization_id, mission_id, opts)
 
-        frames =
-          annotate_active_historical_workflows(
-            frames,
-            request,
-            source_binding,
-            organization_id,
-            mission_id,
-            opts
-          )
-
         partial_warnings =
           Warnings.partial_coverage(request, source_binding, frames)
 
@@ -345,16 +334,6 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
             partial_warnings =
               Warnings.partial_coverage(request, source_binding, frames)
 
-            frames =
-              annotate_active_historical_workflows(
-                frames,
-                request,
-                source_binding,
-                organization_id,
-                mission_id,
-                opts
-              )
-
             {frames,
              data_view_warnings ++ time_warnings ++ aggregate_warnings ++ partial_warnings,
              :native_decimated_envelope}
@@ -394,16 +373,6 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
       entries
       |> Enum.map(fn {frame, samples, _history_warnings} -> {frame, samples} end)
       |> resolve_revision_state(request, source_binding, organization_id, mission_id, opts)
-
-    frames =
-      annotate_active_historical_workflows(
-        frames,
-        request,
-        source_binding,
-        organization_id,
-        mission_id,
-        opts
-      )
 
     history_warnings =
       entries
@@ -649,33 +618,6 @@ defmodule Cadence.Dashboards.Sources.Telemetry do
       identity_state_opts(request, source_binding, organization_id, mission_id),
       opts
     )
-  end
-
-  defp annotate_active_historical_workflows(
-         frames,
-         %PlannedSourceRequest{} = request,
-         source_binding,
-         organization_id,
-         mission_id,
-         opts
-       )
-       when is_list(frames) do
-    {source_from, source_to, _warnings} = QueryOptions.receipt_time_bounds(request)
-
-    query_opts =
-      [
-        organization_id: organization_id,
-        realm: realm(request, source_binding),
-        replay_run_id: replay_run_id(request),
-        data_source_id: data_source_id(request, source_binding),
-        binding_id: source_binding_id(source_binding),
-        source_from: source_from,
-        source_to: source_to,
-        limit: 1_000
-      ]
-      |> Enum.reject(fn {_key, value} -> is_nil(value) or value == "" end)
-
-    HistoricalWorkflows.annotate(frames, mission_id, query_opts, opts)
   end
 
   defp identity_state_opts(

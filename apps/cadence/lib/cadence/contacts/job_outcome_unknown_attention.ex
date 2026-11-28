@@ -152,17 +152,14 @@ defmodule Cadence.Contacts.JobOutcomeUnknownAttention do
   end
 
   defp context(%Job{payload: payload}, _org, _mission, _providers) when is_map(payload) do
-    attrs = if is_map(payload["attrs"]), do: payload["attrs"], else: %{}
-
     {%{
        operation: text(payload["operation"]),
        source_name: text(payload["display_name"] || payload["data_source_name"]),
        artifact_name: text(payload["artifact_name"]),
-       workflow: text(payload["workflow"]),
        definition_name: text(payload["definition_name"]),
        definition_count: payload["definition_count"],
-       span_from: text(payload["span_from"] || attrs["receipt_from"]),
-       span_to: text(payload["span_to"] || attrs["receipt_to"])
+       span_from: text(payload["span_from"]),
+       span_to: text(payload["span_to"])
      }, nil}
   end
 

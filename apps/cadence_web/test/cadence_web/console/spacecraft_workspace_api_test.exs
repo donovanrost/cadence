@@ -166,6 +166,47 @@ defmodule CadenceWeb.Console.SpacecraftWorkspaceAPITest do
              put_draft(c, token, %{"protocol" => "x"}) |> json_response(422)
   end
 
+  test "the workspace GET uses the same statement count at 5 and 50 spacecraft", c do
+    [neighbour | _] = add_spacecraft(c, 2..5)
+    neighbour_workspace = %{c | path: workspace_path(c, neighbour)}
+    draft = workspace(neighbour_workspace)
+
+    assert %{"data" => %{"saved_version" => 1}} =
+             neighbour_workspace
+             |> put_draft(draft["token"], draft["document"])
+             |> json_response(200)
+
+    {small, small_count} = count_request(c, &get(&1, c.path))
+    add_spacecraft(c, 6..50)
+    {large, large_count} = count_request(c, &get(&1, c.path))
+
+    assert large_count == small_count, "5 craft: #{small_count}, 50 craft: #{large_count}"
+    assert small["fleet_total"] == 5
+    assert large["fleet_total"] == 50
+
+    for result <- [small, large] do
+      assert Enum.find(result["fleet"], &(&1["id"] == neighbour.spacecraft_id))["has_changes"]
+      refute Enum.find(result["fleet"], &(&1["id"] == c.craft.spacecraft_id))["has_changes"]
+    end
+  end
+
+  test "the draft PUT uses the same statement count at 5 and 50 spacecraft", c do
+    add_spacecraft(c, 2..5)
+    initial = workspace(c)
+    document = initial["document"]
+
+    assert %{"data" => %{"saved_version" => 1, "token" => token}} =
+             c |> put_draft(initial["token"], document) |> json_response(200)
+
+    {small, small_count} = count_draft_put(c, token, document)
+    add_spacecraft(c, 6..50)
+    {large, large_count} = count_draft_put(c, small["token"], document)
+
+    assert large_count == small_count, "5 craft: #{small_count}, 50 craft: #{large_count}"
+    assert %{"saved_version" => 2, "fleet_total" => 5, "document" => ^document} = small
+    assert %{"saved_version" => 3, "fleet_total" => 50, "document" => ^document} = large
+  end
+
   test "submit: before a save, then without a catalog, is refused; activate applies on a direct mission",
        c do
     data = workspace(c)
@@ -275,6 +316,25 @@ defmodule CadenceWeb.Console.SpacecraftWorkspaceAPITest do
     end
 
     assert workspace(c)["saved_version"] == nil
+  end
+
+  defp add_spacecraft(c, range) do
+    Enum.map(range, &TestFixtures.persist_spacecraft!(c.mission, display_name: "Fleet #{&1}"))
+  end
+
+  defp workspace_path(c, craft),
+    do: String.replace(c.path, c.craft.spacecraft_id, craft.spacecraft_id)
+
+  defp count_draft_put(c, token, document) do
+    count_request(c, &put(&1, c.path <> "/draft", %{"token" => token, "document" => document}))
+  end
+
+  defp count_request(c, request) do
+    conn = conn(c)
+
+    TestFixtures.count_statements(fn ->
+      conn |> request.() |> json_response(200) |> Map.fetch!("data")
+    end)
   end
 
   defp conn(c), do: TestFixtures.member_conn(c.user)

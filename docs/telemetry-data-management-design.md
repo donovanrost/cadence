@@ -570,6 +570,12 @@ context, or incomplete source watermarks.
 
 ## 11. Backfill And Late Arrival
 
+> **Deleted (#702, 2026-11-27).** Cadence no longer runs backfill, import or late-data
+> workflows: the historical data operations, their job handler and their write path were
+> removed, with no console rebuild (decision on #144). What follows is the original design, kept
+> as history. Existing `telemetry_backfill_lifecycle_events` rows are still read by the
+> dashboards events products and the data-link resolver.
+
 Backfill is not merely inserting old rows. It changes the knowledge state of the
 system.
 

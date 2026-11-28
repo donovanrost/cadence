@@ -6,6 +6,7 @@ defmodule Cadence.Limits.Store.LimitEventRow do
   import Ecto.Changeset
 
   alias Cadence.Limits.Event
+  alias Cadence.Limits.StateText
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Persistence.OrganizationScope
 
@@ -73,8 +74,8 @@ defmodule Cadence.Limits.Store.LimitEventRow do
       limit_definition_version: event_row.limit_definition_version,
       limit_set_name: event_row.limit_set_name,
       evaluated_value: JsonDocument.unwrap_value(event_row.evaluated_value),
-      limit_state: String.to_existing_atom(event_row.limit_state),
-      normalized_state: String.to_existing_atom(event_row.normalized_state),
+      limit_state: StateText.limit_state(event_row.limit_state),
+      normalized_state: StateText.normalized_state(event_row.normalized_state),
       violation: event_row.violation,
       generation_time: event_row.generation_time,
       receipt_time: event_row.receipt_time,

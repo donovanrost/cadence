@@ -1,6 +1,7 @@
 defmodule Cadence.Dashboards.DataLinkResolverTelemetryLifecycleTest do
   use Cadence.RuntimeCase, async: false
 
+  import Cadence.BackfillLifecycleFixtures
   import Cadence.Dashboards.DataLinkResolverFixtures
 
   alias Cadence.Dashboards.{DataLink, DataLinkResolver, LifecycleEvent}
@@ -17,7 +18,6 @@ defmodule Cadence.Dashboards.DataLinkResolverTelemetryLifecycleTest do
     as: DashboardLifecycleEventRow
 
   alias Cadence.Repo
-  alias Cadence.Telemetry.Storage
   alias Cadence.Telemetry.Storage.ObservationIdentityDecisionEvent
 
   alias Cadence.Telemetry.Storage.ObservationIdentityStates.DecisionEventRow,
@@ -450,7 +450,7 @@ defmodule Cadence.Dashboards.DataLinkResolverTelemetryLifecycleTest do
              |> Repo.insert()
 
     assert {:ok, event} =
-             Storage.record_backfill_lifecycle_event(
+             record_backfill_lifecycle_event(
                %{
                  backfill_lifecycle_event_id: "resolver-backfill-event-1",
                  backfill_run_id: "resolver-backfill-run-1",
@@ -644,7 +644,7 @@ defmodule Cadence.Dashboards.DataLinkResolverTelemetryLifecycleTest do
     persist_mission_scope(organization_id, mission_id)
 
     assert {:ok, event} =
-             Storage.record_backfill_lifecycle_event(
+             record_backfill_lifecycle_event(
                %{
                  backfill_lifecycle_event_id: "resolver-missing-replacement-inspection-1",
                  backfill_run_id: "resolver-corrected-run-1",
@@ -750,7 +750,7 @@ defmodule Cadence.Dashboards.DataLinkResolverTelemetryLifecycleTest do
     events =
       Enum.map(requested_items, fn {event_id, run_id, point_id, item_index} ->
         assert {:ok, event} =
-                 Storage.record_backfill_lifecycle_event(
+                 record_backfill_lifecycle_event(
                    Map.merge(base_event, %{
                      backfill_lifecycle_event_id: event_id,
                      backfill_run_id: run_id,
@@ -809,7 +809,7 @@ defmodule Cadence.Dashboards.DataLinkResolverTelemetryLifecycleTest do
     assert failed_current_job.status == :failed
 
     assert {:ok, failed_voltage_event} =
-             Storage.record_backfill_lifecycle_event(
+             record_backfill_lifecycle_event(
                Map.merge(base_event, %{
                  backfill_lifecycle_event_id: "resolver-backfill-group-failed-002",
                  backfill_run_id: "resolver-backfill-group-run-002",
@@ -830,7 +830,7 @@ defmodule Cadence.Dashboards.DataLinkResolverTelemetryLifecycleTest do
              )
 
     assert {:ok, failed_current_event} =
-             Storage.record_backfill_lifecycle_event(
+             record_backfill_lifecycle_event(
                Map.merge(base_event, %{
                  backfill_lifecycle_event_id: "resolver-backfill-group-failed-003",
                  backfill_run_id: "resolver-backfill-group-run-003",
@@ -851,7 +851,7 @@ defmodule Cadence.Dashboards.DataLinkResolverTelemetryLifecycleTest do
              )
 
     assert {:ok, _retry_event} =
-             Storage.record_backfill_lifecycle_event(
+             record_backfill_lifecycle_event(
                Map.merge(base_event, %{
                  backfill_lifecycle_event_id: "resolver-backfill-group-retry-002",
                  backfill_run_id: "resolver-backfill-group-run-002",
@@ -875,7 +875,7 @@ defmodule Cadence.Dashboards.DataLinkResolverTelemetryLifecycleTest do
              )
 
     assert {:ok, _correction_event} =
-             Storage.record_backfill_lifecycle_event(
+             record_backfill_lifecycle_event(
                Map.merge(base_event, %{
                  backfill_lifecycle_event_id: "resolver-backfill-group-correction-003",
                  backfill_run_id: "resolver-backfill-group-run-003-corrected",

@@ -19,10 +19,9 @@ defmodule Cadence.Applications.OpsConsoleTest do
 
     assert Enum.at(definition.surfaces, 1).actions == ["validate", "search", "reserve", "cancel"]
 
-    assert length(definition.surfaces) == 17
-    # 33: the data operations surfaces declare no host actions (native path only).
+    assert length(definition.surfaces) == 15
     assert length(definition.actions) == 33
-    assert Enum.count(definition.surfaces, &(&1.placement == :ops_workspace)) == 16
+    assert Enum.count(definition.surfaces, &(&1.placement == :ops_workspace)) == 14
 
     assert Enum.uniq(Enum.map(definition.surfaces, & &1.surface_id)) ==
              Enum.map(definition.surfaces, & &1.surface_id)
@@ -33,7 +32,7 @@ defmodule Cadence.Applications.OpsConsoleTest do
   test "contributes exact release identity for each surface" do
     contributions = OpsConsole.release_contributions()
 
-    assert length(contributions) == 17
+    assert length(contributions) == 15
 
     assert Enum.take(contributions, 1) |> Enum.map(&ReleaseContribution.key/1) == [
              {"ops_console", 1, "workspace", 1}
@@ -97,7 +96,6 @@ defmodule Cadence.Applications.OpsConsoleTest do
 
     assert Enum.all?(
              [
-               "data_operations_manage",
                "data_source_registration",
                "data_source_settings"
              ],
@@ -159,10 +157,6 @@ defmodule Cadence.Applications.OpsConsoleTest do
              {"commands", :operations, :mission, :ops_workspace, "cadence.ops.commands", []},
              {"telemetry_explore", :operations, :mission, :ops_workspace,
               "cadence.ops.telemetry_explore", ["apply_filters", "apply_question"]},
-             {"data_operations", :operations, :mission, :ops_workspace,
-              "cadence.ops.data_operations", []},
-             {"data_operations_manage", :operations, :mission, :ops_workspace,
-              "cadence.ops.data_operations_manage", []},
              {"data_sources", :configuration, :mission, :ops_workspace,
               "cadence.ops.data_sources",
               [

@@ -27,13 +27,6 @@ defmodule Cadence.Reads.Telemetry do
     TelemetryStorage.list_backfill_lifecycle_events(mission_id, opts)
   end
 
-  defdelegate list_backfill_lifecycle_groups(mission_id, opts), to: TelemetryStorage
-
-  defdelegate fetch_backfill_lifecycle_group_events(mission_id, group_id, opts),
-    to: TelemetryStorage
-
-  defdelegate backfill_lifecycle_event_corrected?(event_id, opts), to: TelemetryStorage
-
   def fetch_backfill_lifecycle_event(backfill_lifecycle_event_id, opts) do
     TelemetryStorage.fetch_backfill_lifecycle_event(backfill_lifecycle_event_id, opts)
   end
