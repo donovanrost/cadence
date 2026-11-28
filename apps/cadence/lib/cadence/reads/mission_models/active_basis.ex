@@ -11,6 +11,7 @@ defmodule Cadence.Reads.MissionModels.ActiveBasis do
   alias Cadence.Control.SpacecraftModelBindings
 
   alias Cadence.Activations
+  alias Cadence.Activations.GenerationReceipts
   alias Cadence.Commanding.AuthoringIdentity
   alias Cadence.Control.MissionModelPromotion
   alias Cadence.Runtime.MissionModelPlanDecoder
@@ -18,6 +19,16 @@ defmodule Cadence.Reads.MissionModels.ActiveBasis do
   @doc "Reads the immutable active generation for saved-versus-active configuration comparison."
   def fetch_activation(organization_id, mission_id),
     do: Activations.fetch_active_activation(organization_id, mission_id)
+
+  @doc "Reads the latest completed generation and its fleet entries for the requested spacecraft."
+  def applied_fleet(organization_id, mission_id, spacecraft_ids) do
+    with {activation, applied_at} <- GenerationReceipts.latest(organization_id, mission_id),
+         {:ok, entries} <- FleetSnapshot.entries_for(activation.metadata, spacecraft_ids) do
+      %{activation: activation, applied_at: applied_at, entries: entries}
+    else
+      _no_applied_fleet -> nil
+    end
+  end
 
   def with_command_catalog(organization_id, mission_id, operation) do
     Activations.with_locked_command_basis(organization_id, mission_id, fn activation ->

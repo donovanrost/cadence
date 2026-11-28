@@ -116,7 +116,7 @@ defmodule Cadence.Applications.ApplicationInstallationsTest do
              )
 
     configuration_ref = %ConfigurationReference{
-      kind: "spacecraft_application_binding",
+      kind: "test_configuration",
       id: "binding-1",
       version: 3
     }
@@ -364,7 +364,7 @@ defmodule Cadence.Applications.ApplicationInstallationsTest do
                context.host_context,
                "telemetry_decom",
                %ConfigurationReference{
-                 kind: "spacecraft_application_binding",
+                 kind: "test_configuration",
                  id: "binding-1",
                  version: 3
                }

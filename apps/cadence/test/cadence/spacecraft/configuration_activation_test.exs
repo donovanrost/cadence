@@ -152,11 +152,8 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
                }
              )
 
-    # The control plane hands TelemetryDecom the admitted entries (it can't read stored fleets).
-    {:ok, entries} = FleetSnapshot.entries(activation.metadata)
-
-    assert :ok =
-             TelemetryDecom.activation_applied(active.binding_set, {:fleet, entries})
+    assert {:ok, approved} = ManagementActivations.fetch_approved(request.activation_request_id)
+    assert {:ok, %{status: :succeeded}} = ControlActivations.execute(approved)
 
     {:ok, first_config} =
       TelemetryDecom.fetch_config(
@@ -172,7 +169,8 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
         c.second.spacecraft_id
       )
 
-    refute first_config.applied_binding_set_version == active.binding_set.version
+    assert is_nil(first_config.applied_generation)
+    assert second_config.applied_generation == activation.generation
     assert second_config.applied_binding_set_version == active.binding_set.version
 
     assert {:ok, %{review: %{state: "active"}}} =

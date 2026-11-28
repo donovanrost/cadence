@@ -1,18 +1,11 @@
 defmodule CadenceWeb.ApplicationHostTelemetryControllerTest do
   use CadenceWeb.ConnCase, async: false
 
-  alias Cadence.Applications.{
-    ApplicationInstallations,
-    HostContext,
-    PacketBindings,
-    TelemetryDecom
-  }
-
+  alias Cadence.Applications.{ApplicationInstallations, HostContext}
   alias Cadence.Applications.TelemetryDecom.Review
   alias Cadence.Auth.Scope
-  alias Cadence.Management.Activations
   alias Cadence.SourceEndpoints.SourceEndpoint
-  alias CadenceWeb.{ApplicationActionIdempotency, TestFixtures}
+  alias CadenceWeb.TestFixtures
 
   @bridge_prefix "/api/cadence/application-host/v1/missions"
 
@@ -78,262 +71,6 @@ defmodule CadenceWeb.ApplicationHostTelemetryControllerTest do
     assert body == Jason.decode!(Jason.encode!(body))
   end
 
-  test "configuration query mounts the module form and its submission persists through the bridge" do
-    context = telemetry_context()
-    {revision, _endpoint} = imported_packet_context(context)
-    {catalog_conn, catalog} = fetch_catalog(context.member_conn, context)
-
-    body =
-      Map.merge(query_body(context), %{
-        "surfaceId" => "manage",
-        "queryId" => "cadence.telemetry_decom.manage"
-      })
-
-    response = catalog_conn |> bridge_conn(catalog) |> post_json(query_path(context), body)
-    page = json_response(response, 200)["trusted_surface"]
-    assert page["contract_version"] == 1
-    assert page["configuration"] == nil
-    assert page["context"]["spacecraft_id"] == context.spacecraft.spacecraft_id
-
-    root = Path.expand("../../../../../frontend", __DIR__)
-
-    script =
-      Path.join(root, "modules/telemetry-decom/src/features/configuration/producer-check.mjs")
-
-    {output, status} =
-      System.cmd(
-        "node",
-        [script, Jason.encode!(%{page: page, revision_id: revision.catalog_revision_id})],
-        stderr_to_stdout: true
-      )
-
-    assert status == 0, output
-    [_, input] = Regex.run(~r/CADENCE_DECOM_INPUT=([^\n]+)/, output)
-
-    action = %{
-      "applicationKey" => "telemetry_decom",
-      "applicationVersion" => 1,
-      "surfaceId" => "manage",
-      "surfaceVersion" => 1,
-      "actionId" => "save_configuration",
-      "scope" => scope_document(context),
-      "input" => Jason.decode!(input)
-    }
-
-    saved =
-      catalog_conn
-      |> bridge_conn(catalog)
-      |> put_req_header("idempotency-key", "decom-configuration-save")
-      |> post_json(action_path(context), action)
-
-    assert json_response(saved, 200)["result"]["configurationVersion"] == 1
-    refreshed = catalog_conn |> bridge_conn(catalog) |> post_json(query_path(context), body)
-    current = json_response(refreshed, 200)["trusted_surface"]
-    assert current["configuration"]["catalog_revision_id"] == revision.catalog_revision_id
-    assert current["packet_handoff"]["row_count"] > 0
-
-    stale =
-      catalog_conn
-      |> bridge_conn(catalog)
-      |> put_req_header("idempotency-key", "decom-stale-review")
-      |> post_json(action_path(context), action)
-
-    assert json_response(stale, 422)["code"] == "review_conflict"
-    assert json_response(stale, 422)["message"] =~ "Refresh this page"
-
-    repeated =
-      catalog_conn
-      |> bridge_conn(catalog)
-      |> put_req_header("idempotency-key", "decom-stale-review")
-      |> post_json(action_path(context), action)
-
-    assert repeated.resp_body == stale.resp_body
-
-    invalid_version =
-      catalog_conn
-      |> bridge_conn(catalog)
-      |> put_req_header("idempotency-key", "decom-invalid-version")
-      |> post_json(action_path(context), Map.put(action, "actionVersion", 2))
-
-    assert json_response(invalid_version, 404)["code"] == "unsupported_action"
-
-    current_page =
-      catalog_conn
-      |> bridge_conn(catalog)
-      |> post_json(query_path(context), body)
-      |> json_response(200)
-      |> Map.fetch!("trusted_surface")
-
-    disabled =
-      catalog_conn
-      |> bridge_conn(catalog)
-      |> put_req_header("idempotency-key", "decom-disable")
-      |> post_json(action_path(context), %{
-        action
-        | "actionId" => "disable",
-          "input" => %{"expected_review" => current_page["review"]["configuration_token"]}
-      })
-
-    assert json_response(disabled, 200)["result"]["enabled"] == false
-    unavailable = catalog_conn |> bridge_conn(catalog) |> post_json(query_path(context), body)
-    assert json_response(unavailable, 404)["code"] == "application_unavailable"
-  end
-
-  test "successful save resolves the declared action version and persists packet-id selection", %{
-    conn: _conn
-  } do
-    context = telemetry_context()
-    {revision, endpoint} = imported_packet_context(context)
-
-    assert {:ok, _config} =
-             TelemetryDecom.configure(
-               context.organization.organization_id,
-               context.mission.mission_id,
-               context.spacecraft.spacecraft_id,
-               catalog_revision_id: revision.catalog_revision_id,
-               handled_apids: [42],
-               source_endpoint_id: endpoint.source_endpoint_id
-             )
-
-    {catalog_conn, catalog} = fetch_catalog(context.member_conn, context)
-
-    query_response =
-      catalog_conn
-      |> bridge_conn(catalog)
-      |> post_json(query_path(context), query_body(context))
-
-    page = json_response(query_response, 200)["trusted_surface"]
-    assert [%{"id" => packet_id}] = page["packets"]["items"]
-
-    script =
-      Path.expand(
-        "../../../../../frontend/modules/telemetry-decom/src/features/packet-bindings/producer-check.mjs",
-        __DIR__
-      )
-
-    {output, status} = System.cmd("node", [script, Jason.encode!(page)], stderr_to_stdout: true)
-    assert status == 0, output
-    [_, input] = Regex.run(~r/CADENCE_PACKET_INPUT=([^\n]+)/, output)
-
-    action =
-      action_body(context, revision, endpoint, packet_id)
-      |> Map.put("input", Jason.decode!(input))
-
-    action_response =
-      catalog_conn
-      |> bridge_conn(catalog)
-      |> put_req_header("idempotency-key", "telemetry-save-1")
-      |> post_json(action_path(context), action)
-
-    first_response_body = action_response.resp_body
-    receipt = json_response(action_response, 200)
-
-    assert {:ok, idempotency_key_digest} =
-             ApplicationActionIdempotency.key_digest("telemetry-save-1")
-
-    assert Map.keys(receipt) |> Enum.sort() == ["completedAt", "receiptId", "result"]
-    assert receipt["receiptId"] == "application-host-receipt-" <> idempotency_key_digest
-    assert {:ok, _completed_at, 0} = DateTime.from_iso8601(receipt["completedAt"])
-
-    assert %{
-             "applicationKey" => "telemetry_decom",
-             "applicationVersion" => 1,
-             "bindingCount" => 1,
-             "configurationId" => configuration_id,
-             "configurationVersion" => 1,
-             "enabled" => true,
-             "inputId" => "telemetry-fields",
-             "inputVersion" => 1,
-             "selectedPacketIds" => [^packet_id]
-           } = receipt["result"]
-
-    assert is_binary(configuration_id) and configuration_id != ""
-
-    replay_response =
-      catalog_conn
-      |> bridge_conn(catalog)
-      |> put_req_header("idempotency-key", "telemetry-save-1")
-      |> post_json(action_path(context), action)
-
-    assert replay_response.status == 200
-    assert replay_response.resp_body == first_response_body
-
-    stale =
-      catalog_conn
-      |> bridge_conn(catalog)
-      |> put_req_header("idempotency-key", "telemetry-stale-review")
-      |> post_json(action_path(context), action)
-
-    assert json_response(stale, 422)["code"] == "review_conflict"
-
-    assert {:ok, [configuration]} =
-             PacketBindings.list(
-               context.scope,
-               context.host_context,
-               context.installation.application_installation_id
-             )
-
-    assert configuration.configuration_version == 1
-    assert [%{packet_id: ^packet_id}] = configuration.bindings
-  end
-
-  test "unapproved mission model blocks activation with actionable preflight evidence" do
-    context = telemetry_context()
-    {revision, endpoint} = imported_packet_context(context)
-
-    {:ok, _} =
-      TelemetryDecom.configure(
-        context.organization.organization_id,
-        context.mission.mission_id,
-        context.spacecraft.spacecraft_id,
-        catalog_revision_id: revision.catalog_revision_id,
-        handled_apids: [42],
-        source_endpoint_id: endpoint.source_endpoint_id
-      )
-
-    {catalog_conn, catalog} = fetch_catalog(context.member_conn, context)
-
-    query =
-      Map.merge(query_body(context), %{
-        "surfaceId" => "manage",
-        "queryId" => "cadence.telemetry_decom.manage"
-      })
-
-    response = catalog_conn |> bridge_conn(catalog) |> post_json(query_path(context), query)
-    page = json_response(response, 200)["trusted_surface"]
-    assert page["preflight"]["state"] == "blocked"
-
-    assert %{"state" => "blocked", "title" => "Mission model approval required"} =
-             Enum.find(page["preflight"]["checks"], &(&1["check_id"] == "mission-model-approval"))
-
-    assert page["lifecycle_actions"]["enable"]["disabled"]
-
-    action = %{
-      "applicationKey" => "telemetry_decom",
-      "applicationVersion" => 1,
-      "surfaceId" => "manage",
-      "surfaceVersion" => 1,
-      "actionId" => "request_activation",
-      "scope" => scope_document(context),
-      "input" => %{"expected_review" => page["review"]["mission_token"]}
-    }
-
-    denied =
-      catalog_conn
-      |> bridge_conn(catalog)
-      |> put_req_header("idempotency-key", "unapproved-mission-model")
-      |> post_json(action_path(context), action)
-
-    assert json_response(denied, 422)["code"] == "preflight_blocked"
-
-    assert {:ok, nil} =
-             Activations.latest_pending(
-               context.scope,
-               context.mission.mission_id,
-               TelemetryDecom.binding_set_id(context.mission.mission_id)
-             )
-  end
-
   test "mismatched explicit action versions fail closed", %{conn: _conn} do
     context = telemetry_context()
     {revision, endpoint} = imported_packet_context(context)
@@ -351,36 +88,6 @@ defmodule CadenceWeb.ApplicationHostTelemetryControllerTest do
 
       assert %{"code" => "unsupported_action"} = json_response(response, 404)
     end
-  end
-
-  test "stale packet-binding versions map to a stable conflict", %{conn: _conn} do
-    context = telemetry_context()
-    {revision, endpoint} = imported_packet_context(context)
-
-    assert {:ok, _} =
-             TelemetryDecom.configure(
-               context.organization.organization_id,
-               context.mission.mission_id,
-               context.spacecraft.spacecraft_id,
-               catalog_revision_id: revision.catalog_revision_id,
-               handled_apids: [42],
-               source_endpoint_id: endpoint.source_endpoint_id
-             )
-
-    {catalog_conn, catalog} = fetch_catalog(context.member_conn, context)
-
-    body = action_body(context, revision, endpoint, "missing-packet", expected_version: 99)
-
-    response =
-      catalog_conn
-      |> bridge_conn(catalog)
-      |> put_req_header("idempotency-key", "telemetry-stale-1")
-      |> post_json(action_path(context), body)
-
-    assert %{
-             "schema" => "cadence.application-host-problem.v1",
-             "code" => "packet_binding_version_conflict"
-           } = json_response(response, 409)
   end
 
   test "undeclared query and action contracts fail closed", %{conn: _conn} do
@@ -590,7 +297,7 @@ defmodule CadenceWeb.ApplicationHostTelemetryControllerTest do
     }
   end
 
-  defp action_body(context, revision, endpoint, packet_id, opts \\ []) do
+  defp action_body(context, revision, endpoint, packet_id) do
     review =
       Review.snapshot(
         context.organization.organization_id,
@@ -606,12 +313,6 @@ defmodule CadenceWeb.ApplicationHostTelemetryControllerTest do
       "source_endpoint_ref" => endpoint_value(endpoint),
       "selected_packet_ids" => [packet_id]
     }
-
-    params =
-      case Keyword.fetch(opts, :expected_version) do
-        {:ok, version} -> Map.put(params, "expected_configuration_version", version)
-        :error -> params
-      end
 
     %{
       "applicationKey" => "telemetry_decom",

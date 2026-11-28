@@ -7,6 +7,7 @@ defmodule Cadence.Catalog.TelemetryBindingTest do
   use Cadence.DataCase, async: true
 
   alias Cadence.Applications.TelemetryDecom
+  alias Cadence.Applications.TelemetryDecom.Config
   alias Cadence.Applications.TelemetryDecomFixtures
   alias Cadence.Catalog
   alias Cadence.Catalog.TelemetryBinding
@@ -49,12 +50,15 @@ defmodule Cadence.Catalog.TelemetryBindingTest do
     revision =
       TelemetryDecomFixtures.persist_imported_revision!(@organization_id, @mission_id)
 
-    # No endpoint named: decom provisions the spacecraft's managed one.
-    {:ok, config} =
-      TelemetryDecom.configure(@organization_id, @mission_id, spacecraft.spacecraft_id,
+    config =
+      Config.new(%{
+        organization_id: @organization_id,
+        mission_id: @mission_id,
+        spacecraft_id: spacecraft.spacecraft_id,
         catalog_revision_id: revision.catalog_revision_id,
-        handled_apids: [42]
-      )
+        handled_apids: [42],
+        source_endpoint_id: SourceEndpoints.managed_source_endpoint_id(spacecraft.spacecraft_id)
+      })
 
     assert {:ok, %{rules: [_ | _] = rules, capability_instances: instances}} =
              TelemetryDecom.compile_mission_contribution(@organization_id, @mission_id, [config])
