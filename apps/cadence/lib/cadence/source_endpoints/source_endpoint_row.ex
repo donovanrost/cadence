@@ -19,6 +19,7 @@ defmodule Cadence.SourceEndpoints.SourceEndpointRow do
     field(:source_ref, :string)
     field(:scid, :integer)
     field(:display_name, :string)
+    field(:relay, :map)
     field(:metadata, :map, default: %{})
 
     timestamps()
@@ -68,6 +69,7 @@ defmodule Cadence.SourceEndpoints.SourceEndpointRow do
       source_ref: row.source_ref,
       scid: row.scid,
       display_name: row.display_name,
+      relay: JsonDocument.unwrap_value(row.relay),
       metadata: JsonDocument.unwrap_value(row.metadata)
     }
   end

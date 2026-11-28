@@ -48,6 +48,7 @@ config :cadence,
     Cadence.Comms.ConfigKinds.GroundStation,
     # Composition: provider-managed transports cross Ground Networks and Comms (comms parity 2).
     Cadence.Management.ConfigKinds.Transport,
+    Cadence.SourceEndpoints.ConfigKind,
     Cadence.Spacecraft.ConfigKinds.Spacecraft,
     Cadence.Spacecraft.ConfigKinds.SpacecraftProfile,
     Cadence.Spacecraft.ConfigKinds.SpacecraftOverride,

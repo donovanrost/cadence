@@ -4,6 +4,9 @@ defmodule CadenceWeb.Console.SourceEndpointParams do
   import CadenceWeb.API.ParamParser
 
   @spec attributes(binary() | nil, map()) :: {:ok, map()} | {:error, term()}
+  def attributes(_scoped_spacecraft_id, %{"relay" => _relay}),
+    do: {:error, {:invalid_param, "relay", :requires_change_set}}
+
   def attributes(scoped_spacecraft_id, params) when is_map(params) do
     with {:ok, scid} <- optional_integer(params, "scid"),
          {:ok, spacecraft_id} <- resolve_spacecraft_id(params, scoped_spacecraft_id) do
