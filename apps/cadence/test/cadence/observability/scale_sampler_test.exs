@@ -220,6 +220,42 @@ defmodule Cadence.Observability.ScaleSamplerTest do
                Host.capacity([quiet, smaller_swap, quiet], 8)
     end
 
+    test "a quiet dedicated runner reports saturation as a finding on a baseline" do
+      during = host_sample(6.0, 768, 1024)
+      capacity = Host.capacity([during], 4, host_sample(3.5, 0, 0))
+
+      assert capacity == %{
+               classification: :baseline,
+               pre_run: %{load_one: 3.5, swap_percent: 0.0},
+               max_load_one: 6.0,
+               max_swap_percent: 75.0
+             }
+
+      summary =
+        Stats.summarize([%{host: during, beam: %{scheduler_utilization: 0.98}}])
+        |> Map.merge(%{host_capacity: capacity, meta: %{host: %{logical_cpus: 4}}})
+
+      report = Run.host_findings(summary, 500) |> IO.iodata_to_binary()
+      assert report =~ "Pre-run 1-minute load 3.5 (4 logical cores), swap 0.0%"
+
+      assert report =~
+               "CPU-bound at 500 spacecraft on 4 vCPU (p99 BEAM scheduler utilization 98.0%)"
+    end
+
+    test "a busy dedicated runner gives a ceiling check even if the window is quiet" do
+      during = [host_sample(2.0, 0, 0)]
+
+      assert Host.capacity(during, 4, host_sample(4.01, 0, 0)) == %{
+               classification: :ceiling_check,
+               pre_run: %{load_one: 4.01, swap_percent: 0.0},
+               max_load_one: 2.0,
+               max_swap_percent: 0.0
+             }
+
+      assert %{classification: :ceiling_check} =
+               Host.capacity(during, 4, host_sample(2.0, 512, 1024))
+    end
+
     test "missing host readings or core count make a ceiling check" do
       quiet = host_sample(4.0, 512, 2048)
 

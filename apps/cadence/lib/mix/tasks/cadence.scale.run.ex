@@ -69,14 +69,15 @@ defmodule Mix.Tasks.Cadence.Scale.Run do
     out = Path.expand(Keyword.get(opts, :out) || default_out(label))
     modules = opts |> Keyword.get_values(:module) |> Enum.map(&Module.concat([&1]))
 
-    sampler_opts = [
-      out: out,
-      # The sampler stops if this task dies, and in any case shortly after the run should end.
-      owner: self(),
-      max_ms: duration * 1_000 + 120_000,
-      modules: if(modules == [], do: @default_modules, else: modules),
-      questdb_exec: &RestClient.exec/1
-    ]
+    sampler_opts =
+      [
+        out: out,
+        # The sampler stops if this task dies, and in any case shortly after the run should end.
+        owner: self(),
+        max_ms: duration * 1_000 + 120_000,
+        modules: if(modules == [], do: @default_modules, else: modules),
+        questdb_exec: &RestClient.exec/1
+      ] ++ Keyword.take(opts, [:pre_run_host])
 
     case rpc!(node, :start, [sampler_opts]) do
       {:ok, _pid} ->
@@ -108,6 +109,38 @@ defmodule Mix.Tasks.Cadence.Scale.Run do
     {summary, path} = write_summary(summary, out)
     {summary, path, result}
   end
+
+  @doc false
+  def host_findings(%{host_capacity: %{pre_run: pre_run} = capacity} = summary, spacecraft) do
+    cores = summary.meta.host.logical_cpus
+    load = pre_run.load_one || "unavailable"
+    utilization = get_in(summary, [:metrics, "beam.scheduler_utilization", :p99])
+
+    [
+      "- Pre-run 1-minute load #{load} (#{cores} logical cores), swap #{formatted_percent(pre_run.swap_percent)}\n",
+      cpu_finding(capacity, spacecraft, cores, utilization)
+    ]
+  end
+
+  def host_findings(_summary, _spacecraft), do: []
+
+  defp cpu_finding(
+         %{classification: :baseline, max_load_one: load},
+         spacecraft,
+         cores,
+         utilization
+       )
+       when is_number(load) and is_integer(cores) and load > cores do
+    utilization = if is_number(utilization), do: utilization * 100
+
+    "- CPU-bound at #{spacecraft} spacecraft on #{cores} vCPU " <>
+      "(p99 BEAM scheduler utilization #{formatted_percent(utilization)})\n"
+  end
+
+  defp cpu_finding(_capacity, _spacecraft, _cores, _utilization), do: []
+
+  defp formatted_percent(value) when is_number(value), do: "#{Float.round(value * 1.0, 1)}%"
+  defp formatted_percent(_missing), do: "unavailable"
 
   defp write_summary(summary, out) do
     summary = put_in(summary, [:meta, :git_sha], git_sha())

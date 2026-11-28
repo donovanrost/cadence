@@ -153,7 +153,7 @@ jobs:
           trap 'dev/stack down' EXIT
           mise exec -- mix cadence.scale.run \
             --spacecraft "$SCORECARD_SPACECRAFT" --shape "$SCORECARD_SHAPE" \
-            --duration "$SCORECARD_DURATION" --label "$SCORECARD_LABEL"
+            --duration "$SCORECARD_DURATION" --label "$SCORECARD_LABEL" --dedicated-runner
           dev/stack status | tee "$RUNNER_TEMP/stack-status"
           grep -Fxq postgres=up "$RUNNER_TEMP/stack-status"
       - name: Publish the scorecard to the job summary

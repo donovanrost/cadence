@@ -23,13 +23,32 @@ defmodule Cadence.Observability.ScaleSampler.Host do
     Map.merge(swap, %{load: load(), agents: agents()})
   end
 
-  @doc "Classifies a run using every sample's 1-minute load and percentage of swap in use."
-  @spec capacity([map()], pos_integer() | :unknown) :: %{
+  @doc """
+  Reports the load and swap peaks during a run. A local run uses every sample to
+  determine capacity. A dedicated runner uses its host sample from before the
+  workload and reports during-run pressure separately.
+  """
+  @spec capacity([map()], pos_integer() | :unknown, :local | map()) :: %{
+          optional(:pre_run) => %{load_one: number() | nil, swap_percent: number() | nil},
           classification: :baseline | :ceiling_check,
           max_load_one: number() | nil,
           max_swap_percent: number() | nil
         }
-  def capacity(samples, logical_cpus) do
+  def capacity(samples, logical_cpus, pre_run \\ :local)
+
+  def capacity(samples, logical_cpus, :local), do: capacity_for(samples, logical_cpus)
+
+  def capacity(samples, logical_cpus, pre_run) when is_map(pre_run) do
+    during = capacity_for(samples, logical_cpus)
+    before = capacity_for([pre_run], logical_cpus)
+
+    Map.merge(during, %{
+      classification: before.classification,
+      pre_run: %{load_one: before.max_load_one, swap_percent: before.max_swap_percent}
+    })
+  end
+
+  defp capacity_for(samples, logical_cpus) do
     {max_load, load_complete?} = samples |> Enum.map(&get_in(&1, [:load, :one])) |> measured_max()
     {max_swap, swap_complete?} = samples |> Enum.map(&swap_percent/1) |> measured_max()
 
