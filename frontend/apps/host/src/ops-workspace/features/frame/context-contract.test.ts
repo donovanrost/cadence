@@ -11,7 +11,6 @@ test.each(["Aurora", null])(
     const value = readOpsFrameContext({
       ...context,
       ops_context: {
-        pinned_focus: { kind: "command", id: "request-1" },
         modules: [
           {
             key: "commands",
@@ -34,7 +33,10 @@ test.each(["Aurora", null])(
     });
     if (!value) throw Error("Expected command context to be admitted");
     expect(contextSections(value)).toMatchObject([
-      { content: { followed_command: { detail: `queued · ${name || "Unnamed target"}` } } },
+      {
+        destination: null,
+        content: { followed_command: { detail: `queued · ${name || "Unnamed target"}` } },
+      },
     ]);
   },
 );

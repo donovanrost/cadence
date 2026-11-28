@@ -32,12 +32,7 @@ const breadcrumbs = computed(() => {
 </script>
 
 <template>
-  <HostPage
-    v-if="route"
-    :title="title"
-    :route="route"
-    :breadcrumbs="breadcrumbs"
-    :workspace="routeCatalog[route].layer === 'ops'"
+  <HostPage v-if="route" :title="title" :route="route" :breadcrumbs="breadcrumbs"
     ><slot
   /></HostPage>
   <slot v-else />

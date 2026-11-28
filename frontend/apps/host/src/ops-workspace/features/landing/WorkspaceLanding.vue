@@ -23,7 +23,6 @@ const groups = computed(() => {
 });
 const descriptions: Record<string, string> = {
   observe: "Follow telemetry, investigate changes and inspect mission events.",
-  act: "Prepare commands and review operations that need a decision.",
   system: "Inspect source health and configure data sources.",
 };
 </script>

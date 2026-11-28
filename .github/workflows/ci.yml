@@ -36,7 +36,7 @@ jobs:
     # Pushes run everything. A PR runs the jobs its paths can affect:
     # - code: anything but docs (browser, console e2e, publication, JS audit)
     # - backend: code outside the console app and its kit (Elixir quality and suites). Elixir tests
-    #   still execute frontend/modules and frontend/apps/host producer code, so those count.
+    #   still execute frontend/apps/host producer code, so that counts.
     # - frontend: code outside the Elixir projects (frontend quality)
     # - scale: Console client, build, fixture and the scaled server entry points
     outputs:

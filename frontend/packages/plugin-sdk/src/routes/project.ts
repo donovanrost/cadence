@@ -22,7 +22,7 @@ export type CatalogEntry = {
   queryKeys: string[];
   resourceParam?: string;
   pageChrome?: string;
-  metadata?: { page_title?: string };
+  metadata?: { page_title?: string; nav_item?: string };
   // A string here: the catalog is JSON, so the kind is checked when projected.
   header?: { kind?: string; breadcrumbs?: boolean; eyebrow?: boolean; description?: string };
 };

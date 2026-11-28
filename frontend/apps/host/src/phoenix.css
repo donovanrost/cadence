@@ -1,6 +1,5 @@
 @import "../../../packages/ui/src/styles.css";
 @source "../..";
-@source "../../../modules";
 @source "../../../../apps/cadence_web/lib/cadence_web";
 @source "../../../../apps/cadence_web/deps/live_toast/lib";
 

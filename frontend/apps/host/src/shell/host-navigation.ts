@@ -2,7 +2,19 @@ import routes from "../routes.json";
 import { createRouter, type RouterHistory } from "vue-router";
 import { routeLayer } from "@cadence/plugin-sdk/routes";
 
-type CatalogRoute = (typeof routes)[number];
+// The fields the host reads from an Ops page entry. routes.json lists none since #708, so its
+// inferred type lacks them; #668 deletes this router with the host.
+type CatalogRoute = {
+  path: string;
+  kind: string;
+  scope: string;
+  mountId: string;
+  contribution?: string;
+  resourceParam?: string;
+  pageChrome?: string;
+  metadata: { page_title?: string; ops_nav_item?: string; nav_item?: string };
+};
+const catalog: readonly CatalogRoute[] = routes;
 function normalizeHostRoute(route: CatalogRoute) {
   switch (route.kind) {
     case "ops_module":
@@ -21,7 +33,7 @@ declare module "vue-router" {
 }
 // Only Ops pages are served by this router. The other catalog entries (application surfaces) exist
 // only so the components that still render them can type a page header.
-const hostRoutes = routes.filter((route) => route.kind === "ops_module");
+const hostRoutes = catalog.filter((route) => route.kind === "ops_module");
 const matchers = hostRoutes.map((route) => ({
   route,
   pattern: new RegExp(

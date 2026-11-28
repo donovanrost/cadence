@@ -6,18 +6,12 @@ type OpsNavigationContext = {
 } & Partial<
   Pick<
     OpsFrameContext,
-    | "ops_context"
-    | "ops_nav_item"
-    | "dashboard_navigation"
-    | "active_dashboard_id"
-    | "dashboard_author"
+    "ops_nav_item" | "dashboard_navigation" | "active_dashboard_id" | "dashboard_author"
   >
 >;
 export function opsNavigation(context: OpsNavigationContext) {
   const root = `/missions/${encodeURIComponent(context.mission.mission_id)}/ops`;
-  const focus = context.ops_context?.pinned_focus;
-  const href = (path: string) =>
-    `${root}/${path}${focus?.kind === "command" && focus.id ? `?focus_command_id=${encodeURIComponent(focus.id)}` : ""}`;
+  const href = (path: string) => `${root}/${path}`;
   const groups = workspaceGroups(href, context.ops_nav_item);
   const dashboard_groups = (
     [

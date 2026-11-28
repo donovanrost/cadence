@@ -14,7 +14,6 @@
     "test": "node --test phoenix-build-config.test.mjs && vp test --run --exclude phoenix-build-config.test.mjs"
   },
   "dependencies": {
-    "@cadence/commanding": "workspace:*",
     "@cadence/design-tokens": "workspace:*",
     "@cadence/plugin-sdk": "workspace:*",
     "@cadence/ui": "workspace:*",

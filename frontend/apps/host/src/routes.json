@@ -1,34 +1,5 @@
 [
   {
-    "path": "/missions/:mission_id/ops/commands/requests/:command_request_id/history",
-    "kind": "ops_module",
-    "contribution": "commanding.history",
-    "resourceParam": "command_request_id",
-    "scope": "mission",
-    "mountId": "ops-command-history-component",
-    "queryKeys": ["release", "release_after", "verifier_after", "verifier"],
-    "queryAliases": {},
-    "viewClass": "contents",
-    "metadata": {
-      "page_title": "Command history",
-      "ops_nav_item": "commands"
-    }
-  },
-  {
-    "path": "/missions/:mission_id/ops/commands",
-    "kind": "ops_module",
-    "contribution": "commanding.monitor",
-    "scope": "mission",
-    "mountId": "ops-commands-component",
-    "queryKeys": ["status", "target", "query", "focus_command_id", "page"],
-    "queryAliases": {},
-    "viewClass": "contents",
-    "metadata": {
-      "page_title": "Commands",
-      "ops_nav_item": "commands"
-    }
-  },
-  {
     "path": "/missions/:mission_id/applications/:application_key/:surface_id",
     "kind": "application_surface",
     "scope": "mission",

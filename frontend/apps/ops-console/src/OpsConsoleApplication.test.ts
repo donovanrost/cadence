@@ -40,7 +40,6 @@ const response = {
 
 const expectedSurfaceTable = [
   ["workspace", "overview", "mission", "application_workspace", "cadence.ops.workspace", []],
-  ["commands", "operations", "mission", "ops_workspace", "cadence.ops.commands", []],
   [
     "data_sources",
     "configuration",
@@ -93,7 +92,7 @@ const expectedSurfaceTable = [
 type TestQuery = (request: HostQueryRequest) => Promise<unknown>;
 type TestExecute = (request: HostActionRequest<unknown>) => Promise<HostActionReceipt<unknown>>;
 
-function propsFor(query: TestQuery, execute: TestExecute = vi.fn(), surfaceId = "commands") {
+function propsFor(query: TestQuery, execute: TestExecute = vi.fn(), surfaceId = "data_sources") {
   const surface = required(surfaceContracts.find((candidate) => candidate.surfaceId === surfaceId));
   return {
     application: {
@@ -198,12 +197,13 @@ describe("Ops Console federated application", () => {
 
     await flushPromises();
 
+    const surface = required(
+      surfaceContracts.find((candidate) => candidate.surfaceId === "data_sources"),
+    );
     expect(query).toHaveBeenCalledOnce();
     expect(query.mock.calls[0]?.[0]).toEqual({
-      queryId: required(surfaceContracts.find((candidate) => candidate.surfaceId === "commands"))
-        .dataContract.id,
-      version: required(surfaceContracts.find((candidate) => candidate.surfaceId === "commands"))
-        .dataContract.version,
+      queryId: surface.dataContract.id,
+      version: surface.dataContract.version,
       context,
     });
     expect(query.mock.calls[0]?.[0]).not.toHaveProperty("params");
@@ -309,7 +309,6 @@ describe("Ops Console federated application", () => {
 
   it("admits native route roots and excludes obsolete widgets and inherited object names", () => {
     const required = [
-      "OpsCommands",
       "OpsConsoleLanding",
       "OpsDataSourceRegistration",
       "OpsDataSourceSettings",
@@ -340,8 +339,8 @@ describe("Ops Console federated application", () => {
     expect(manifest.application).toMatchObject({ applicationKey: "ops_console", version: 1 });
     expect(manifest.application.installableScopes).toEqual(["mission"]);
     expect(manifest.surfaces).toEqual(surfaceContracts);
-    expect(surfaceContracts).toHaveLength(5);
-    expect(new Set(surfaceContracts.map((surface) => surface.surfaceId)).size).toBe(5);
+    expect(surfaceContracts).toHaveLength(4);
+    expect(new Set(surfaceContracts.map((surface) => surface.surfaceId)).size).toBe(4);
     expect(surfaceContracts.flatMap((surface) => surface.actions)).toHaveLength(22);
     expect(
       new Set(

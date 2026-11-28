@@ -1,33 +1,10 @@
-import { required } from "../../../../test-support/required";
-import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
-import { fixtureRecord } from "../../../../test-support/json-fixture";
+import { expect, test, vi } from "vite-plus/test";
 import { createMemoryHistory } from "vue-router";
-import {
-  createHostRouter,
-  hostRoute,
-  installHostNavigation,
-  shellForRoute,
-} from "./host-navigation";
+import { createHostRouter } from "./host-navigation";
 
-const navigationSettings = fixtureRecord(
-  fixtureRecord(fixtureRecord(fixtureRecord(window).happyDOM).settings).navigation,
-);
-const originalNavigationSettings = { ...navigationSettings };
-beforeEach(() => {
-  Object.assign(navigationSettings, {
-    disableMainFrameNavigation: true,
-    disableChildPageNavigation: true,
-    disableFallbackToSetURL: true,
-  });
-});
-
-const cleanups: (() => void)[] = [];
-afterEach(() => {
-  Object.assign(navigationSettings, originalNavigationSettings);
-  cleanups.splice(0).forEach((cleanup) => cleanup());
-  document.body.innerHTML = "";
-});
-
+// Since #708 the catalog has no route this host serves, so link interception (installHostNavigation)
+// and route resolution have nothing to exercise; only the router's history ownership is left (#668
+// deletes the host).
 test("a host releases only its own history subscriptions", async () => {
   const history = createMemoryHistory();
   const remove = vi.fn();
@@ -68,79 +45,4 @@ test("a host disposed before initial navigation finishes cannot retain a late hi
   router.options.history.destroy();
   await navigation;
   expect(listen).not.toHaveBeenCalled();
-});
-
-function clickLink(
-  href: string,
-  attrs = "",
-  options: MouseEventInit = {},
-  current = "https://cadence.test/missions/m-1/ops/commands",
-) {
-  const navigate = vi.fn();
-  cleanups.push(installHostNavigation(document, { href: current } as Location, navigate));
-  document.body.innerHTML = `<a href="${href}" ${attrs}><span>Open</span></a>`;
-  const link = required(document.querySelector("a"));
-  // The browser resolves the anchor against the same origin as the current page.
-  link.href = new URL(href, current).href;
-  const event = new MouseEvent("click", { bubbles: true, cancelable: true, ...options });
-  // Prevent the test DOM from performing native navigation for excluded links.
-  const preventNative = (event: Event) => event.preventDefault();
-  window.addEventListener("click", preventNative);
-  cleanups.push(() => window.removeEventListener("click", preventNative));
-  required(link.querySelector("span")).dispatchEvent(event);
-  return { link, preventedByNavigation: event.defaultPrevented, navigate };
-}
-
-test("ordinary links across feature areas are handled by the Vue host", () => {
-  const { link, preventedByNavigation } = clickLink(
-    "/missions/m-1/ops/commands/requests/request-1/history",
-    'data-phx-link="redirect"',
-  );
-  expect(link.dataset.phxLink).toBe("redirect");
-  expect(preventedByNavigation).toBe(true);
-});
-
-test("plain remote links and query changes use the same host navigation", () => {
-  const history = "/missions/m-1/ops/commands/requests/request-2/history";
-  expect(clickLink(history).navigate).toHaveBeenCalledWith(history, false);
-  expect(
-    clickLink("/missions/m-1?filter=active", 'data-phx-link-state="replace"').link.dataset
-      .phxLinkState,
-  ).toBe("replace");
-});
-
-test.each([
-  ["https://other.test/missions", "", {}, undefined],
-  ["/session", "", {}, undefined],
-  ["/missions/m-1/applications/spacecraft/list", "", {}, undefined],
-  ["/missions", 'target="_blank"', {}, undefined],
-  ["/missions", "download", {}, undefined],
-  ["/missions", "", { ctrlKey: true }, undefined],
-  ["/missions", "", { metaKey: true }, undefined],
-  ["/missions", "", { button: 1 }, undefined],
-  ["#details", "", {}, undefined],
-  ["/missions", "", {}, "https://cadence.test/sign-in"],
-])("preserves native or non-host navigation: %s %s %j", (href, attrs, options, current) => {
-  const result = clickLink(href, attrs, options, current);
-  expect(result.link.dataset.phxLink).toBeUndefined();
-  expect(result.navigate).not.toHaveBeenCalled();
-});
-
-test("remote component handlers can cancel navigation before the host processes a link", () => {
-  const navigate = vi.fn();
-  cleanups.push(
-    installHostNavigation(document, { href: "https://cadence.test/missions" }, navigate),
-  );
-  const link = document.createElement("a");
-  link.href = "https://cadence.test/missions/mission-1";
-  link.addEventListener("click", (event) => event.preventDefault());
-  document.body.append(link);
-  link.click();
-  expect(navigate).not.toHaveBeenCalled();
-});
-
-test("the mission commands page resolves to the operational shell", () => {
-  const route = hostRoute(new URL("https://cadence.test/missions/mission-1/ops/commands"));
-  expect(route?.kind === "ops_module" && route.contribution).toBe("commanding.monitor");
-  expect(shellForRoute(required(route))).toBe("ops");
 });
