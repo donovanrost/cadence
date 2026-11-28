@@ -1,96 +1,52 @@
 defmodule Cadence.Runtime.ProfileAcceptor do
   @moduledoc """
-  One TCP listener per listen-mode provider profile (DECISIONS #87, director 11-14). Overlapping
-  contacts on one profile used to each listen on the profile's fixed port, so the second failed
-  with `:eaddrinuse` until the first ended.
+  One shared TCP socket per mission and listen endpoint. Each adapter registers its stable
+  delivery binding, pinned profile and SCID. The socket is handed over only after binding and
+  allowlist admission and a unique SCID match within the binding.
 
-  The acceptor owns only the listening socket. A listen-mode `tcp_socket` adapter registers its
-  contact, binding, spacecraft and SCID instead of opening its own listener. Each admitted peer is
-  handed off with the bytes used to identify its SCID and the authenticated stream identity.
-
-  An acceptor belongs to one mission and one provider binding (its name), so a connection is
-  attributed to that binding before anything is read (#990, DECISIONS #115):
-
-  - in mutual TLS mode, the fingerprint must authorize an eligible registration during the
-    handshake and again before any frame is read. Each eligible registration also checks its
-    source allowlist when configured. Plaintext requires an allowlist;
-  - then the first frame's TM SCID must match exactly one contact registered through THIS
-    binding (the same truth the #38 release guard uses). The SCID only picks a contact within the
-    binding's mission; it never picks the mission;
-  - and the peer must be in THAT registration's own list. Two profile versions can overlap on one
-    acceptor; an address only an older version allows never reaches a newer contact (or the
-    reverse). Otherwise the connection is refused `peer_not_allowed` and nothing is handed over,
-    so nothing is stored.
-
-  There is no fallback: a peer whose first frame can't be read is refused.
-
-  Anything else is refused: closed, counted, and reported to EVERY registered adapter, so each
-  contact on the profile counts the profile's refusals (ux U50 words it as the shared listener's,
-  never one pass's fault); rate-limited in the log. The acceptor monitors its adapters, unregisters a stopped one and
-  closes the listener `linger_ms` after the last one leaves.
+  The acceptor monitors its registrations and lingers after the last one leaves. An own
+  listener can reclaim an idle endpoint at a pass boundary. Adapters monitor the acceptor and
+  can register again if it dies.
   """
 
-  # Temporary: an acceptor is never restarted by its supervisor. Its adapters register again on
-  # :DOWN (which starts a fresh one), so a supervisor restart only raced them for the port; a
-  # restart failing :eaddrinuse repeatedly took the DynamicSupervisor past max_restarts, and
-  # Runtime.Supervisor is one_for_all, so every contact's runtime with it.
   use GenServer, restart: :temporary
-
-  import Bitwise
 
   require Logger
 
-  alias Cadence.Comms.PeerAddresses
+  alias Cadence.Comms.ListenEndpoint
   alias Cadence.ProviderAdapters.InboundSocket
   alias Cadence.ProviderAdapters.InboundSocket.Authorization
   alias Cadence.Runtime.ProcessNamespace
+  alias Cadence.Runtime.ProfileAcceptor.Routing
 
-  @identify_timeout_ms 10_000
   @default_linger_ms 30_000
-  @max_tls_routes 8
-
-  @type registration :: %{
-          required(:adapter) => pid(),
-          required(:realized_contact_id) => binary(),
-          required(:path_id) => binary(),
-          required(:scid) => non_neg_integer() | nil,
-          optional(:provider_binding_id) => binary(),
-          optional(:allowed_peers) => [Cadence.Comms.PeerAddresses.range()],
-          optional(:frame_size) => pos_integer() | nil
-        }
+  @max_routes 8
+  @rate_window_seconds 60
+  @refusal_kinds [:tls_handshake_failed, :no_registered_contact]
 
   @doc "The acceptors' supervisor in a runtime namespace."
-  @spec supervisor_name(ProcessNamespace.t()) :: GenServer.name()
   def supervisor_name(%ProcessNamespace{} = namespace \\ ProcessNamespace.default()),
     do: ProcessNamespace.via(namespace, :profile_acceptor_supervisor)
 
-  @doc """
-  Registers `registration` with the acceptor of `{mission_id, profile_id}` (started, and its port
-  bound, on first use). `{:ok, port, acceptor}` or `{:error, {:tcp_provider_listen_failed,
-  profile_id, reason}}`, as a direct listen would have reported.
+  @doc "Registers with the endpoint owner and returns the actual port and the PID to monitor."
+  def register(namespace, mission_id, profile_id, listen, registration) do
+    if Map.get(registration, :provider_binding_id, profile_id) == profile_id do
+      registration =
+        registration
+        |> Map.put(:provider_binding_id, profile_id)
+        |> Map.put_new(:delivery_binding_id, profile_id)
 
-  `acceptor` is the process that stored the registration (its `self()`); the caller monitors that
-  pid. A pid looked up afterwards could be a newer acceptor that never heard of the registration,
-  or nil if this one died in between; monitoring a dead pid delivers `:DOWN` (`:noproc`) at once,
-  so the caller's re-registration covers that race.
-
-  An acceptor can be ending as it's called: its linger fires just as the next contact on the
-  profile registers, and `start_child` hands back the dying pid. The call then exits `:normal`
-  (or `:noproc`, `:shutdown`); register starts a fresh acceptor and tries again (api-ops, lead:
-  a contact start mustn't fail on it). Any other exit, or a third ending one, is
-  `{:error, {:tcp_provider_listen_failed, profile_id, {:acceptor_exited, reason}}}`, which a
-  re-registering adapter retries.
-  """
-  @spec register(ProcessNamespace.t(), binary(), binary(), map(), registration()) ::
-          {:ok, :inet.port_number(), pid()} | {:error, term()}
-  def register(namespace, mission_id, profile_id, listen, registration),
-    do: register(namespace, mission_id, profile_id, listen, registration, 3)
+      register(namespace, mission_id, profile_id, listen, registration, 3)
+    else
+      {:error, :wrong_binding}
+    end
+  end
 
   defp register(namespace, mission_id, profile_id, listen, registration, attempts) do
     case register_once(namespace, mission_id, profile_id, listen, registration) do
       {:exit, reason} ->
         if acceptor_ending?(reason) and attempts > 1 do
-          # The ended acceptor's name is released asynchronously; give the registry a moment.
+          # A linger or cutover may release the registry name just after this attempt.
           Process.sleep(10)
           register(namespace, mission_id, profile_id, listen, registration, attempts - 1)
         else
@@ -104,7 +60,13 @@ defmodule Cadence.Runtime.ProfileAcceptor do
 
   defp register_once(namespace, mission_id, profile_id, listen, registration) do
     with {:ok, pid} <- ensure_started(namespace, mission_id, profile_id, listen) do
-      GenServer.call(pid, {:register, Map.get(listen, :delivery_auth, :plaintext), registration})
+      case GenServer.call(
+             pid,
+             {:register, Map.get(listen, :delivery_auth, :plaintext), registration}
+           ) do
+        :retired -> {:exit, :normal}
+        result -> result
+      end
     end
   catch
     :exit, reason -> {:exit, reason}
@@ -115,34 +77,33 @@ defmodule Cadence.Runtime.ProfileAcceptor do
   defp acceptor_ending?({:shutdown, _detail}), do: true
   defp acceptor_ending?(_reason), do: false
 
-  @doc """
-  The registrations an acceptor holds (`[%{adapter, realized_contact_id, path_id, scid, ...}]`);
-  `[]` once it has gone.
-  """
-  @spec registrations(pid()) :: [map()]
   def registrations(acceptor) do
-    GenServer.call(acceptor, :routing).registrations
-  catch
-    :exit, _gone -> []
+    case snapshot(acceptor) do
+      %{registrations: registrations} -> registrations
+      nil -> []
+    end
   end
 
-  @doc "The running acceptor of `{mission_id, profile_id}`, if any (adapters monitor it)."
-  @spec whereis(ProcessNamespace.t(), binary(), binary()) :: pid() | nil
-  def whereis(namespace, mission_id, profile_id) do
-    case Registry.lookup(namespace.registry, {:profile_acceptor, mission_id, profile_id}) do
+  def snapshot(acceptor) do
+    GenServer.call(acceptor, :snapshot)
+  catch
+    :exit, _gone -> nil
+  end
+
+  def whereis(namespace, mission_id, profile_id, listen) do
+    case Registry.lookup(namespace.registry, key(mission_id, profile_id, listen)) do
       [{pid, _value}] -> pid
       [] -> nil
     end
   end
 
   defp ensure_started(namespace, mission_id, profile_id, listen) do
-    name = name(namespace, mission_id, profile_id)
+    key = key(mission_id, profile_id, listen)
+    name = ProcessNamespace.via(namespace, key)
 
     spec = %{
-      id: {__MODULE__, mission_id, profile_id},
-      start:
-        {__MODULE__, :start_link,
-         [[name: name, mission_id: mission_id, profile_id: profile_id, listen: listen]]},
+      id: key,
+      start: {__MODULE__, :start_link, [[name: name, profile_id: profile_id, listen: listen]]},
       restart: :temporary
     }
 
@@ -153,14 +114,56 @@ defmodule Cadence.Runtime.ProfileAcceptor do
     end
   end
 
-  defp name(namespace, mission_id, profile_id),
-    do: ProcessNamespace.via(namespace, {:profile_acceptor, mission_id, profile_id})
+  defp key(mission_id, profile_id, listen) do
+    endpoint =
+      case bind_endpoint(listen) do
+        %{host: host, port: port} -> {host, port}
+        nil -> {:ephemeral, profile_id}
+      end
+
+    {:profile_acceptor, mission_id, endpoint}
+  end
+
+  defp bind_endpoint(listen), do: ListenEndpoint.bind(listen[:host], listen[:port])
 
   def start_link(opts),
     do: GenServer.start_link(__MODULE__, opts, name: Keyword.fetch!(opts, :name))
 
-  def close_replaced_listener(namespace, mission_id, profile_id) do
-    if pid = whereis(namespace, mission_id, profile_id), do: GenServer.cast(pid, :check_mode)
+  @doc "Releases an idle shared listener before opening an own listener that overlaps it."
+  def release_idle(namespace, mission_id, listen) do
+    case bind_endpoint(listen) do
+      nil -> :ok
+      endpoint -> release_overlapping(namespace, mission_id, endpoint)
+    end
+  end
+
+  defp release_overlapping(namespace, mission_id, %{port: port} = endpoint) do
+    namespace.registry
+    |> Registry.select([
+      {{{:profile_acceptor, mission_id, {:"$1", port}}, :"$2", :_}, [], [{{:"$1", :"$2"}}]}
+    ])
+    |> Enum.filter(fn {host, _pid} ->
+      ListenEndpoint.overlaps?(endpoint, %{host: host, port: port})
+    end)
+    |> Enum.reduce_while(:ok, fn {_host, pid}, :ok ->
+      case release(pid) do
+        :ok -> {:cont, :ok}
+        {:error, _reason} = error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp release(pid) do
+    GenServer.call(pid, :release_idle)
+  catch
+    :exit, reason ->
+      if acceptor_ending?(reason), do: :ok, else: {:error, :eaddrinuse}
+  end
+
+  def close_replaced_listener(namespace, mission_id, profile_id, listen) do
+    if pid = whereis(namespace, mission_id, profile_id, listen),
+      do: GenServer.cast(pid, :check_mode)
+
     :ok
   end
 
@@ -169,24 +172,28 @@ defmodule Cadence.Runtime.ProfileAcceptor do
     listen = Keyword.fetch!(opts, :listen)
     profile_id = Keyword.fetch!(opts, :profile_id)
     mode = Map.get(listen, :delivery_auth, :plaintext)
+    bind = bind_endpoint(listen)
+    host = if bind, do: bind.host, else: Map.get(listen, :host)
+    port = Map.fetch!(listen, :port)
 
-    case InboundSocket.listen(Map.get(listen, :host), Map.fetch!(listen, :port), mode) do
+    case InboundSocket.listen(host, port, mode) do
       {:ok, listener} ->
         state = %{
-          profile_id: profile_id,
-          mission_id: Keyword.fetch!(opts, :mission_id),
           listener: listener,
           mode: mode,
-          port: actual_port(listener, listen.port),
+          port: actual_port(listener, port),
+          host: host,
+          plaintext_binding: nil,
           linger_ms: Map.get(listen, :linger_ms, @default_linger_ms),
           registrations: %{},
           active_routes: 0,
           accept_ref: nil,
           linger_ref: nil,
-          refused: 0
+          refused: 0,
+          refusal_buckets: %{}
         }
 
-        {:ok, schedule_accept(state)}
+        {:ok, state |> maybe_linger() |> schedule_accept()}
 
       {:error, reason} ->
         {:stop, {:tcp_provider_listen_failed, profile_id, reason}}
@@ -194,79 +201,144 @@ defmodule Cadence.Runtime.ProfileAcceptor do
   end
 
   @impl true
-  def handle_call({:register, mode, _registration}, _from, %{mode: active} = state)
-      when mode != active,
-      do: {:reply, {:error, :mode_mismatch}, state}
+  def handle_call({:register, mode, registration}, _from, state) do
+    case registration_status(state, mode, registration) do
+      :ok ->
+        state = put_registration(state, registration)
+        {:reply, {:ok, state.port, self()}, state}
 
-  def handle_call({:register, _mode, %{adapter: adapter} = registration}, _from, state) do
-    ref = Process.monitor(adapter)
-    state = cancel_linger(state)
-    {:reply, {:ok, state.port, self()}, put_in(state.registrations[ref], registration)}
+      {:error, reason}
+      when reason in [:mode_mismatch, :wrong_binding] and map_size(state.registrations) == 0 ->
+        {:stop, :normal, :retired, state}
+
+      {:error, _reason} = error ->
+        {:reply, error, state}
+    end
   end
 
-  def handle_call(:routing, _from, state) do
-    # Only this binding's contacts: the acceptor is the binding's (its name), so a registration
-    # from any other binding would be a fault, never a candidate.
-    registrations =
-      state.registrations
-      |> Map.values()
-      |> Enum.filter(&(Map.get(&1, :provider_binding_id, state.profile_id) == state.profile_id))
+  def handle_call(:release_idle, _from, %{registrations: regs} = state) when map_size(regs) == 0,
+    do: {:stop, :normal, :ok, state}
 
-    {:reply, %{registrations: registrations, mode: state.mode}, state}
+  def handle_call(:release_idle, _from, state), do: {:reply, {:error, :eaddrinuse}, state}
+
+  def handle_call(:routing, _from, state) do
+    {:reply,
+     %{
+       registrations: Map.values(state.registrations),
+       mode: state.mode,
+       plaintext_binding: state.plaintext_binding
+     }, state}
   end
 
   def handle_call(:snapshot, _from, state) do
     {:reply,
      %{
+       endpoint: %{host: state.host, port: state.port},
        port: state.port,
        registrations: Map.values(state.registrations),
-       refused: state.refused
+       refused: state.refused,
+       refusals_per_minute: refusal_rates(state.refusal_buckets, now_second())
      }, state}
+  end
+
+  defp registration_status(state, mode, _registration) when mode != state.mode,
+    do: {:error, :mode_mismatch}
+
+  defp registration_status(
+         %{mode: :plaintext, plaintext_binding: binding},
+         :plaintext,
+         registration
+       ) do
+    if is_nil(binding) or binding == registration.delivery_binding_id,
+      do: :ok,
+      else: {:error, :wrong_binding}
+  end
+
+  defp registration_status(%{mode: :mtls}, :mtls, registration) do
+    case registration[:delivery_authorization] do
+      %Authorization{mode: :mtls, binding_id: id} = authorization
+      when id == registration.delivery_binding_id ->
+        Authorization.listener_ready(authorization)
+
+      _other ->
+        {:error, :invalid_delivery_authorization}
+    end
+  end
+
+  defp put_registration(state, %{adapter: adapter} = registration) do
+    ref =
+      case state.registrations[adapter] do
+        %{monitor: existing} -> existing
+        nil -> Process.monitor(adapter)
+      end
+
+    binding =
+      if state.mode == :plaintext, do: registration.delivery_binding_id, else: nil
+
+    %{
+      state
+      | registrations:
+          Map.put(state.registrations, adapter, Map.put(registration, :monitor, ref)),
+        plaintext_binding: binding,
+        linger_ref: nil
+    }
   end
 
   @impl true
   def handle_cast(:check_mode, state) do
-    if Enum.any?(Map.values(state.registrations), &mode_replaced?/1),
-      do: {:stop, :normal, state},
-      else: {:noreply, state}
+    {retired, current} = Enum.split_with(state.registrations, &mode_replaced?/1)
+
+    Enum.each(retired, fn {_adapter, registration} ->
+      Process.demonitor(registration.monitor, [:flush])
+    end)
+
+    case {retired, current} do
+      {[_ | _], []} -> {:stop, :normal, state}
+      _other -> {:noreply, %{state | registrations: Map.new(current)}}
+    end
   end
 
-  defp mode_replaced?(registration),
+  defp mode_replaced?({_adapter, registration}),
     do:
-      Authorization.listener_ready(Map.get(registration, :delivery_authorization)) ==
+      Authorization.listener_ready(registration[:delivery_authorization]) ==
         {:error, :mode_mismatch}
 
-  # A connection arrived: accept the next at once; its task identifies and hands this one over.
   @impl true
-  def handle_info({:accepted, ref}, %{accept_ref: ref, mode: :mtls} = state),
+  def handle_info({:accepted, ref}, %{accept_ref: ref} = state),
     do:
       {:noreply,
        schedule_accept(%{state | accept_ref: nil, active_routes: state.active_routes + 1})}
 
-  def handle_info({:accepted, ref}, %{accept_ref: ref} = state),
-    do: {:noreply, schedule_accept(%{state | accept_ref: nil})}
-
-  def handle_info(:route_finished, %{mode: :mtls} = state),
+  def handle_info(:route_finished, state),
     do: {:noreply, schedule_accept(%{state | active_routes: max(0, state.active_routes - 1)})}
 
   def handle_info({:accept_failed, ref, reason}, %{accept_ref: ref} = state) do
     if reason != :closed,
-      do: Logger.warning("profile acceptor #{state.profile_id} accept failed: #{inspect(reason)}")
+      do:
+        Logger.warning("shared listener on port #{state.port} accept failed: #{inspect(reason)}")
 
     {:noreply, schedule_accept(%{state | accept_ref: nil})}
   end
 
-  def handle_info({:refused, peer, reason}, state) do
+  def handle_info({:refused, peer, reason, kind}, state) do
     if rem(state.refused, 100) == 0,
       do:
-        Logger.warning("profile acceptor #{state.profile_id} refused #{peer}: #{inspect(reason)}")
+        Logger.warning(
+          "shared listener on port #{state.port} refused #{peer}: #{inspect(reason)}"
+        )
 
-    {:noreply, %{state | refused: state.refused + 1}}
+    next = %{state | refused: state.refused + 1}
+    {:noreply, count_endpoint_refusal(next, kind)}
   end
 
-  def handle_info({:DOWN, ref, :process, _pid, _reason}, state) do
-    {_gone, registrations} = Map.pop(state.registrations, ref)
-    {:noreply, maybe_linger(%{state | registrations: registrations})}
+  def handle_info({:DOWN, ref, :process, pid, _reason}, state) do
+    case state.registrations[pid] do
+      %{monitor: ^ref} ->
+        {:noreply, maybe_linger(%{state | registrations: Map.delete(state.registrations, pid)})}
+
+      _other ->
+        {:noreply, state}
+    end
   end
 
   def handle_info({:linger_expired, ref}, %{linger_ref: ref, registrations: regs} = state)
@@ -278,7 +350,7 @@ defmodule Cadence.Runtime.ProfileAcceptor do
 
   @impl true
   def terminate(_reason, state) do
-    _ = InboundSocket.close(state.listener)
+    InboundSocket.close(state.listener)
     :ok
   end
 
@@ -286,16 +358,12 @@ defmodule Cadence.Runtime.ProfileAcceptor do
   def format_status(status), do: Map.update!(status, :state, &Map.delete(&1, :listener))
 
   defp schedule_accept(%{accept_ref: ref} = state) when is_reference(ref), do: state
-
-  defp schedule_accept(%{mode: :mtls, active_routes: count} = state)
-       when count >= @max_tls_routes,
-       do: state
+  defp schedule_accept(%{active_routes: count} = state) when count >= @max_routes, do: state
 
   defp schedule_accept(state) do
     ref = make_ref()
     parent = self()
     listener = state.listener
-    profile_id = state.profile_id
 
     Task.start(fn ->
       case InboundSocket.transport_accept(listener) do
@@ -303,7 +371,7 @@ defmodule Cadence.Runtime.ProfileAcceptor do
           send(parent, {:accepted, ref})
 
           try do
-            route(socket, GenServer.call(parent, :routing), parent, profile_id)
+            Routing.route(socket, parent)
           after
             send(parent, :route_finished)
           end
@@ -316,120 +384,34 @@ defmodule Cadence.Runtime.ProfileAcceptor do
     %{state | accept_ref: ref}
   end
 
-  # In the accept task (it owns the socket): identify the peer within a bound, then hand it over
-  # with the bytes read to identify it, or refuse it.
-  defp route(socket, %{registrations: registrations, mode: mode}, parent, profile_id) do
-    with :ok <- require_registrations(registrations),
-         {:ok, connected} <- InboundSocket.authenticate(socket, &authorize(registrations, &1)),
-         %{registrations: current} <- GenServer.call(parent, :routing),
-         eligible = eligible_registrations(current, InboundSocket.identity(connected)),
-         {ip, peer} <- peer_address(connected) do
-      case admit(connected, ip, eligible, mode) do
-        {:ok, registration, prefix} ->
-          hand_over(connected, registration, prefix, peer, profile_id)
+  # One bounded slot per second, identified by its monotonic timestamp. Older samples expire
+  # even if there are no further refusals or the listener receives no requests for its snapshot.
+  defp count_endpoint_refusal(state, kind) when kind in @refusal_kinds do
+    second = now_second()
+    slot = Integer.mod(second, @rate_window_seconds)
 
-        {:refused, reason} ->
-          refuse(connected, peer, reason, current, parent)
-      end
-    else
-      {:error, reason} ->
-        {_ip, peer} = peer_address(socket)
-        refuse(socket, peer, reason, registrations, parent)
-    end
-  end
+    update_in(state.refusal_buckets, fn buckets ->
+      case Map.get(buckets, slot) do
+        {^second, counts} ->
+          Map.put(buckets, slot, {second, Map.update(counts, kind, 1, &(&1 + 1))})
 
-  defp require_registrations([]), do: {:error, :no_registered_contact}
-  defp require_registrations(_regs), do: :ok
-
-  defp authorize(registrations, fingerprint) do
-    Enum.reduce_while(registrations, {:error, :wrong_binding}, fn registration, previous ->
-      case Authorization.authorize(registration[:delivery_authorization], fingerprint) do
-        {:ok, _identity} = authorized -> {:halt, authorized}
-        {:error, :unknown_leaf} -> {:cont, previous}
-        {:error, _reason} = refusal -> {:cont, refusal}
+        _expired ->
+          Map.put(buckets, slot, {second, %{kind => 1}})
       end
     end)
   end
 
-  defp eligible_registrations(registrations, identity) do
-    Enum.filter(registrations, fn registration ->
-      Authorization.stream_allowed?(registration[:delivery_authorization], identity) == :ok
+  defp count_endpoint_refusal(state, _kind), do: state
+
+  defp refusal_rates(buckets, now) do
+    counts = for {_slot, {at, counts}} <- buckets, now - at < @rate_window_seconds, do: counts
+
+    Map.new(@refusal_kinds, fn kind ->
+      {kind, Enum.reduce(counts, 0, &(Map.get(&1, kind, 0) + &2))}
     end)
   end
 
-  defp admit(_socket, _ip, [], :mtls), do: {:refused, :wrong_binding}
-  defp admit(_socket, _ip, [], :plaintext), do: {:refused, :no_registered_contact}
-
-  defp admit(socket, ip, registrations, mode) do
-    if Enum.any?(registrations, &peer_allowed?(&1, ip, mode)) do
-      socket |> identify(registrations) |> own_list(ip, mode)
-    else
-      {:refused, :peer_not_allowed}
-    end
-  end
-
-  defp own_list({:ok, registration, _prefix} = identified, ip, mode) do
-    if peer_allowed?(registration, ip, mode),
-      do: identified,
-      else: {:refused, :peer_not_allowed}
-  end
-
-  defp own_list(refused, _ip, _mode), do: refused
-
-  defp peer_allowed?(registration, ip, mode) do
-    ranges = Map.get(registration, :allowed_peers, [])
-    (mode == :mtls and ranges == []) or PeerAddresses.allowed?(ranges, ip)
-  end
-
-  defp identify(socket, registrations) do
-    frame_size = registrations |> Enum.map(&Map.get(&1, :frame_size)) |> Enum.find(&is_integer/1)
-
-    case read_first_frame(socket, frame_size) do
-      {:ok, frame} -> match_scid(frame, registrations)
-      :unreadable -> {:refused, :unidentified}
-      {:error, reason} -> {:refused, {:read_failed, reason}}
-    end
-  end
-
-  defp read_first_frame(_socket, nil), do: :unreadable
-
-  # The frame's receipt time is when it was read, not when it's handed over (api-ops review).
-  defp read_first_frame(socket, frame_size) when frame_size >= 2 do
-    case InboundSocket.recv(socket, frame_size, @identify_timeout_ms) do
-      {:ok, frame} -> {:ok, {frame, DateTime.utc_now()}}
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  # TM transfer frame primary header: version (2 bits), spacecraft id (10 bits).
-  defp match_scid({<<_version::2, scid::10, _rest::bitstring>> = frame, read_at}, registrations) do
-    case Enum.filter(registrations, &(&1.scid == scid)) do
-      [registration] -> {:ok, registration, {frame, read_at}}
-      [] -> {:refused, {:unregistered_scid, scid}}
-      _several -> {:refused, {:ambiguous_scid, scid}}
-    end
-  end
-
-  defp hand_over(socket, %{adapter: adapter} = registration, {prefix, read_at}, peer, profile_id) do
-    case InboundSocket.transfer(socket, adapter) do
-      :ok ->
-        send(adapter, {:peer_accepted, socket, prefix, peer, read_at})
-
-      {:error, reason} ->
-        InboundSocket.close(socket)
-
-        Logger.warning(
-          "profile acceptor #{profile_id} could not hand #{peer} to " <>
-            "#{registration.realized_contact_id}: #{inspect(reason)}"
-        )
-    end
-  end
-
-  defp refuse(socket, peer, reason, registrations, parent) do
-    InboundSocket.close(socket)
-    Enum.each(registrations, &send(&1.adapter, {:peer_refused, peer, reason}))
-    send(parent, {:refused, peer, reason})
-  end
+  defp now_second, do: System.monotonic_time(:second)
 
   defp maybe_linger(%{registrations: regs} = state) when map_size(regs) == 0 do
     ref = make_ref()
@@ -438,22 +420,6 @@ defmodule Cadence.Runtime.ProfileAcceptor do
   end
 
   defp maybe_linger(state), do: state
-
-  defp cancel_linger(state), do: %{state | linger_ref: nil}
-
-  # The peer's address as a tuple (for the allowlist) and as text (for refusals); an IPv4-mapped
-  # IPv6 address (::ffff:a.b.c.d) reads as its IPv4 address (api-ops review).
-  defp peer_address(socket) do
-    case InboundSocket.peername(socket) do
-      {:ok, {address, _port}} -> {address, format_address(address)}
-      _unknown -> {nil, "unknown"}
-    end
-  end
-
-  defp format_address({0, 0, 0, 0, 0, 0xFFFF, high, low}),
-    do: format_address({high >>> 8, high &&& 0xFF, low >>> 8, low &&& 0xFF})
-
-  defp format_address(address), do: address |> :inet.ntoa() |> to_string()
 
   defp actual_port(listener, fallback) do
     case InboundSocket.port(listener) do

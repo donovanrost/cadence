@@ -98,6 +98,8 @@ defmodule Cadence.Reads.ActionQueue.SourceKeys do
       :own_quiet_since,
       :connected,
       :shared_with,
+      :listener_endpoint,
+      :refusals_per_minute,
       :second_connections_refused
     ],
     # DECISIONS #88 / ux U49: archive entries that couldn't be indexed (P2, no due time).

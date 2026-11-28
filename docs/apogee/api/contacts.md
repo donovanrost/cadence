@@ -444,6 +444,10 @@ no actions, so acknowledge, resolve and retry answer `404 attention_item_not_fou
   `last_refused_at`, `refused_count`, `last_refusal {reason, scid, peer, at}` (`peer` for
   Technical details only), `own_quiet_since` (or null), `connected`, `shared_with` (the other open
   passes' realized contact ids), `second_connections_refused`.
+- `listener_endpoint {host, port}` identifies the shared socket. Its `refusals_per_minute
+  {tls_handshake_failed, no_registered_contact}` counts all failed TLS handshakes and
+  connections with no registered pass, respectively, over the last 60 seconds.
+  Every live row for the same endpoint reports the same counts.
 - `last_refusal.reason`, read as known text:
   - `peer_not_allowed`: the peer isn't in the listener's allowed source addresses (#990), refused
     before Cadence read from it;

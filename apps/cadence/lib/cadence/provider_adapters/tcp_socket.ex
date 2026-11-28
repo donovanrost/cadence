@@ -127,6 +127,7 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
     realized_contact_id = Keyword.fetch!(opts, :realized_contact_id)
     path_id = Keyword.fetch!(opts, :path_id)
     provider_binding_id = Keyword.fetch!(opts, :provider_binding_id)
+    binding_metadata = Keyword.get(opts, :provider_binding_metadata, %{})
     source_endpoint_ref = Keyword.get(opts, :source_endpoint_ref)
     direction = Keyword.fetch!(opts, :direction)
     configuration = Configuration.normalize(Keyword.fetch!(opts, :configuration))
@@ -136,6 +137,8 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
       realized_contact_id: realized_contact_id,
       path_id: path_id,
       provider_binding_id: provider_binding_id,
+      delivery_binding_id:
+        binding_metadata["materialized_from_transport_id"] || provider_binding_id,
       source_endpoint_ref: source_endpoint_ref,
       source_endpoint_spacecraft_id: Keyword.get(opts, :source_endpoint_spacecraft_id),
       source_endpoint_spacecraft_scid: Keyword.get(opts, :source_endpoint_spacecraft_scid),
@@ -254,8 +257,7 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
     end
   end
 
-  # (#87) Downlink: register with the profile's acceptor instead of listening on its fixed port, so
-  # overlapping contacts on one profile coexist. Uplink keeps its own listener (stage 2).
+  # Shared downlink registers with the acceptor for the bind endpoint.
   defp start_socket_provider(
          %{mode: :listen, shared_listener?: true} = configuration,
          %{direction: :downlink} = base_state,
@@ -272,6 +274,7 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
       realized_contact_id: base_state.realized_contact_id,
       path_id: base_state.path_id,
       provider_binding_id: provider_binding_id,
+      delivery_binding_id: base_state.delivery_binding_id,
       delivery_authorization: base_state.delivery_authorization,
       scid: base_state.source_endpoint_spacecraft_scid,
       allowed_peers: configuration.allowed_peers,
@@ -314,18 +317,24 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
   defp start_socket_provider(%{mode: :listen} = configuration, base_state, provider_binding_id) do
     socket_options = [sndbuf: @tcp_socket_buffer, recbuf: @tcp_socket_buffer]
 
-    case InboundSocket.listen(
-           configuration.host,
-           configuration.port,
-           configuration.delivery_auth,
-           socket_options
-         ) do
-      {:ok, listener} ->
-        port = listener_port(listener, configuration.port)
-        state = %{base_state | listener: listener, port: port}
-        log_provider_started(state)
-        {:ok, schedule_accept(state)}
-
+    with :ok <-
+           ProfileAcceptor.release_idle(
+             acceptor_namespace(base_state),
+             base_state.mission_id,
+             configuration
+           ),
+         {:ok, listener} <-
+           InboundSocket.listen(
+             configuration.host,
+             configuration.port,
+             configuration.delivery_auth,
+             socket_options
+           ) do
+      port = listener_port(listener, configuration.port)
+      state = %{base_state | listener: listener, port: port}
+      log_provider_started(state)
+      {:ok, schedule_accept(state)}
+    else
       {:error, reason} ->
         {:stop, {:tcp_provider_listen_failed, provider_binding_id, reason}}
     end
@@ -910,13 +919,16 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
   defp close_replaced_listener(state) do
     close_socket(state.listener)
 
-    if state.acceptor?,
-      do:
-        ProfileAcceptor.close_replaced_listener(
-          acceptor_namespace(state),
-          state.mission_id,
-          state.provider_binding_id
-        )
+    if state.acceptor? do
+      {listen, _registration} = state.acceptor_registration
+
+      ProfileAcceptor.close_replaced_listener(
+        acceptor_namespace(state),
+        state.mission_id,
+        state.provider_binding_id,
+        listen
+      )
+    end
 
     state |> Map.merge(%{listener: nil, accept_ref: nil, tls_accepts: %{}}) |> recheck_peer()
   end
@@ -1189,7 +1201,7 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
         (state.ingress_metadata || %{})
         |> Map.delete(:transport_session_id)
         |> Map.put("transport_session_id", Cadence.Ids.new("tcp"))
-        |> put_peer_identity(peer_identity),
+        |> put_peer_identity(stream_provenance(state, peer_identity)),
       socket: nil,
       receive_buffer: <<>>,
       message_remainder_bytes: 0,
@@ -1197,6 +1209,13 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
       capacity_wait_ref: nil
     }
   end
+
+  defp stream_provenance(%{acceptor?: true} = state, identity) do
+    (identity || %{"provider_binding_id" => state.delivery_binding_id})
+    |> Map.put("provider_profile_id", state.provider_binding_id)
+  end
+
+  defp stream_provenance(_state, identity), do: identity
 
   defp put_peer_identity(metadata, identity) do
     metadata = Map.drop(metadata, [:delivery_authentication, "delivery_authentication"])

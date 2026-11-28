@@ -16,6 +16,7 @@ defmodule Cadence.Runtime.InboundDeliveryTLSTest do
   alias Cadence.ProviderAdapters.InboundSocket.Authorization
   alias Cadence.ProviderAdapters.TCPSocket
   alias Cadence.ProviderAdapters.TCPSocket.Configuration
+  alias Cadence.Runtime.Contacts
   alias Cadence.Runtime.{ProcessNamespace, ProfileAcceptor, ProviderIngressExecutor}
   alias Cadence.Secrets.DevelopmentDeliveryTLS
   alias Cadence.SharedListenerFixtures
@@ -130,7 +131,7 @@ defmodule Cadence.Runtime.InboundDeliveryTLSTest do
                %{adapter: self(), realized_contact_id: "other", path_id: "downlink", scid: 7}
              )
 
-    assert {:error, {:shared_listener_requires_mtls, %{port: ^port}}} =
+    assert {:error, {:listen_endpoint_listener_mismatch, %{port: ^port}}} =
              Transports.persist_transport(ctx.org, direct_transport(ctx.mission, port))
 
     {:ok, peer} = connect(port, material, ctx.client)
@@ -157,8 +158,12 @@ defmodule Cadence.Runtime.InboundDeliveryTLSTest do
     second = enable_tls!(b)
     assert second.configuration["port"] != port
 
-    for {ctx, transport} <- [{a, first}, {b, second}] do
-      {adapter, _journal, port} = start_listener!(ctx, transport)
+    for {ctx, other, transport} <- [{a, b, first}, {b, a, second}] do
+      {adapter, journal, port} = start_listener!(ctx, transport)
+      assert_rejected(connect(port, material, other.client))
+      assert eventually(fn -> reason(adapter) == "unknown_leaf" end)
+      assert :empty = Journal.next_entries(journal, :processing, 10, 16_384)
+
       {:ok, peer} = connect(port, material, ctx.client)
       :ok = :ssl.send(peer, SharedListenerFixtures.frame(7))
       assert eventually(fn -> received?(adapter) end)
@@ -166,7 +171,7 @@ defmodule Cadence.Runtime.InboundDeliveryTLSTest do
     end
   end
 
-  test "compatible claims on a mission's shared endpoint keep separate mTLS credentials", %{
+  test "a shared mTLS endpoint routes the same SCID independently within each binding", %{
     material: material
   } do
     a = issue_binding!(material, "shared")
@@ -195,6 +200,84 @@ defmodule Cadence.Runtime.InboundDeliveryTLSTest do
              } = profile.configuration
 
       assert ref == ctx.client.ref
+    end
+
+    {adapter_a, journal_a, ^port} = start_listener!(a, first)
+    {adapter_b, journal_b, ^port} = start_listener!(b, second)
+    assert_rejected(connect(port, material))
+
+    assert eventually(fn ->
+             rows = Contacts.listener_refusals(a.mission)
+
+             length(rows) == 2 and
+               Enum.all?(rows, &(&1.refusals_per_minute.tls_handshake_failed == 1))
+           end)
+
+    {:ok, peer_a} = connect(port, material, a.client)
+    {:ok, peer_b} = connect(port, material, b.client)
+    :ok = :ssl.send(peer_a, SharedListenerFixtures.frame(7))
+    assert eventually(fn -> received?(adapter_a) end)
+    refute received?(adapter_b)
+    assert :empty = Journal.next_entries(journal_b, :processing, 10, 16_384)
+
+    :ok = :ssl.send(peer_b, SharedListenerFixtures.frame(7))
+    assert eventually(fn -> received?(adapter_b) end)
+
+    for {ctx, transport, journal} <- [{a, first, journal_a}, {b, second, journal_b}] do
+      assert {:ok, [entry]} = Journal.next_entries(journal, :processing, 10, 16_384)
+
+      assert entry.metadata.ingress_metadata["delivery_authentication"] == %{
+               "provider_binding_id" => transport.transport_id,
+               "provider_profile_id" => transport.materialized_provider_profile_id,
+               "client_certificate_fingerprint" => ctx.client.fingerprint,
+               "client_certificate_generation" => 1
+             }
+    end
+
+    assert {:ok, _} =
+             ProviderDeliveryCredentials.revoke(
+               a.scope,
+               a.mission,
+               a.provider.provider_id,
+               first.transport_id,
+               %{"fingerprint" => a.client.fingerprint, "reason" => "suspected_compromise"}
+             )
+
+    send(adapter_a, {:provider_delivery_credentials_changed, a.org, a.mission})
+    assert {:error, :closed} = :ssl.recv(peer_a, 0, 2_000)
+    {:ok, before} = TCPSocket.snapshot(adapter_b)
+    :ok = :ssl.send(peer_b, SharedListenerFixtures.frame(7))
+
+    assert eventually(fn ->
+             {:ok, after_send} = TCPSocket.snapshot(adapter_b)
+             after_send.downlink_bytes_received > before.downlink_bytes_received
+           end)
+  end
+
+  test "an authenticated peer cannot use a SCID from another binding or an ambiguous SCID", %{
+    material: material
+  } do
+    a = issue_binding!(material, "shared")
+    b = issue_binding!(material, "shared", nil, {a.org, a.mission, a.scope})
+    first = enable_tls!(a)
+    port = first.configuration["port"]
+    assert {:ok, second} = enable_tls(b, port)
+    {adapter_a, journal_a, ^port} = start_listener!(a, first)
+    {_adapter_b, journal_b, ^port} = start_listener!(b, second, 8)
+
+    {:ok, wrong_peer} = connect(port, material, a.client)
+    :ok = :ssl.send(wrong_peer, SharedListenerFixtures.frame(8))
+    assert {:error, :closed} = :ssl.recv(wrong_peer, 0, 2_000)
+    assert eventually(fn -> reason(adapter_a) == "unregistered_scid" end)
+
+    {_duplicate, duplicate_journal, ^port} = start_listener!(a, first)
+    {:ok, ambiguous_peer} = connect(port, material, a.client)
+    :ok = :ssl.send(ambiguous_peer, SharedListenerFixtures.frame(7))
+    assert {:error, :closed} = :ssl.recv(ambiguous_peer, 0, 2_000)
+    assert eventually(fn -> reason(adapter_a) == "ambiguous_scid" end)
+
+    for journal <- [journal_a, journal_b, duplicate_journal] do
+      assert :empty = Journal.next_entries(journal, :processing, 10, 16_384)
     end
   end
 
@@ -509,22 +592,27 @@ defmodule Cadence.Runtime.InboundDeliveryTLSTest do
     })
   end
 
-  defp start_listener!(ctx, transport) do
+  defp start_listener!(ctx, transport, scid \\ 7) do
     id = transport.materialized_provider_profile_id
     {:ok, profile} = ProfileStore.fetch_provider_profile(ctx.org, ctx.mission, id)
+
+    contact_id = Cadence.Ids.new("contact")
 
     base = [
       organization_id: ctx.org,
       mission_id: ctx.mission,
-      realized_contact_id: Cadence.Ids.new("contact"),
+      realized_contact_id: contact_id,
       path_id: "tls-downlink",
       provider_binding_id: id
     ]
 
-    journal = start_supervised!({Journal, base})
+    journal = start_supervised!({Journal, base}, id: {:ingress_journal, contact_id})
 
     executor =
-      start_supervised!({ProviderIngressExecutor, [persistence_projector_name: :unused] ++ base})
+      start_supervised!(
+        {ProviderIngressExecutor, [persistence_projector_name: :unused] ++ base},
+        id: {:provider_ingress_executor, contact_id}
+      )
 
     adapter =
       start_supervised!(
@@ -532,11 +620,12 @@ defmodule Cadence.Runtime.InboundDeliveryTLSTest do
          [
            configuration: profile.configuration,
            provider_binding_metadata: profile.metadata,
-           source_endpoint_spacecraft_scid: 7,
+           source_endpoint_spacecraft_scid: scid,
            direction: :downlink,
            ingress_journal_name: journal,
            ingress_executor_name: executor
-         ] ++ base}
+         ] ++ base},
+        id: {:tcp_socket_provider, contact_id}
       )
 
     {:ok, snapshot} = TCPSocket.snapshot(adapter)

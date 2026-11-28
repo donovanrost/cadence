@@ -1,7 +1,7 @@
 defmodule Cadence.Comms.ListenerChoice do
   @moduledoc "The listener setting and its field errors for TCP transports."
 
-  alias Cadence.Comms.PeerAddresses
+  alias Cadence.Comms.{ListenEndpoint, PeerAddresses}
   alias Cadence.Platform.ConfigFields
 
   @path "configuration.listener"
@@ -39,10 +39,11 @@ defmodule Cadence.Comms.ListenerChoice do
   defp check_framing(
          %{"framing" => %{"mode" => "fixed_size", "fixed_message_bytes" => size}} = config
        )
-       when is_integer(size) and size >= 2 do
-    if config["ingress_protocol_family"] in [nil, "tm", "tm_transfer_frame"],
-      do: :ok,
-      else: {:error, :shared_listener_requires_tm_framing}
+       when is_integer(size) do
+    if ListenEndpoint.shared_frame_size?(size) and
+         config["ingress_protocol_family"] in [nil, "tm", "tm_transfer_frame"],
+       do: :ok,
+       else: {:error, :shared_listener_requires_tm_framing}
   end
 
   defp check_framing(_config), do: {:error, :shared_listener_requires_tm_framing}
@@ -68,7 +69,7 @@ defmodule Cadence.Comms.ListenerChoice do
     do:
       field_error(
         :shared_listener_requires_tm_framing,
-        "A shared listener needs fixed-size TM frames."
+        "A shared listener needs fixed-size TM frames of 2 to 2048 bytes."
       )
 
   def field_error(:shared_listener_requires_allowlist),
