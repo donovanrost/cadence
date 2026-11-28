@@ -450,7 +450,10 @@ confirm_unbooked: bool (default false)}`; `operate_mission`, a fresh human (GO/N
 ### `POST /command-groups/:id/decision`
 
 `{"kind": "go" | "go_excluding" | "send_back" | "no_go", "excluded": [spacecraft_id], "note": "…",
-"expected_review": "<review_token>"}`. Returns the group. A note is required except for `go`.
+"expected_review": "<review_token>"}`. Returns the decision summary (#1051): `{data: {id, state,
+decision, decided_by, decided_at, review_token}}`, the same fields and encodings as the group show
+(`state` the group's state after the decision, `decision` its decision document, `review_token` the
+new token); a screen re-reads the group for the rest. A note is required except for `go`.
 `go_excluding` rejects the named targets' members ("excluded at review").
 
 Errors: `403 command_group_self_approval_not_allowed` (#622, #280: the requester counts as people,
