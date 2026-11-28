@@ -9,8 +9,6 @@ export default createModuleFederationConfig({
   manifest: true,
   exposes: {
     "./Application": "./src/federated-application.ts",
-    "./Limits": "./src/limits.ts",
-    "./DerivedTelemetry": "./src/derived-telemetry.ts",
   },
   shared: {
     vue: {

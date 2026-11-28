@@ -44,9 +44,9 @@ function fakes(fails: ReadonlySet<string>) {
 
 const query = { queryId: "q", version: 1, context: session("s0").context };
 const action = {
-  applicationKey: "limits",
+  applicationKey: "telemetry_decom",
   applicationVersion: 1,
-  actionId: "save_limit_definition",
+  actionId: "save_packet_bindings",
   input: {},
   context: session("s0").context,
 };
@@ -95,6 +95,6 @@ describe("L9 re-pinning bridge (api: one scope per session)", () => {
       onLost: () => undefined,
     });
     await b.bridge.execute(action);
-    expect(seen).toEqual(["save_limit_definition"]);
+    expect(seen).toEqual(["save_packet_bindings"]);
   });
 });

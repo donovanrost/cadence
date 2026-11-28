@@ -19,13 +19,6 @@ export type State = {
   definition_href: string;
   evidence_href: string;
 };
-export function counts(v: unknown): v is Record<State["severity"], number> {
-  return (
-    record(v) &&
-    Object.keys(v).length === 4 &&
-    ["red", "yellow", "blue", "green"].every((k) => integer(v[k]))
-  );
-}
 export function state(x: unknown, definitionBase: string): x is State {
   const normalized = {
     red_low: "red",

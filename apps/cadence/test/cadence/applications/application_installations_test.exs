@@ -221,20 +221,7 @@ defmodule Cadence.Applications.ApplicationInstallationsTest do
            ]
   end
 
-  test "keeps mission installations independent from spacecraft installations", context do
-    mission_host = HostContext.mission(@mission_id)
-
-    assert {:ok, mission_installation} =
-             ApplicationInstallations.install(
-               context.scope,
-               mission_host,
-               "derived_telemetry"
-             )
-
-    assert mission_installation.scope_kind == :mission
-    assert mission_installation.scope_id == @mission_id
-    assert mission_installation.application_version == 1
-
+  test "keeps spacecraft installations off the mission host", context do
     assert {:ok, spacecraft_installation} =
              ApplicationInstallations.install(
                context.scope,
@@ -245,11 +232,8 @@ defmodule Cadence.Applications.ApplicationInstallationsTest do
     assert spacecraft_installation.scope_kind == :spacecraft
     assert spacecraft_installation.scope_id == @spacecraft_id
 
-    assert {:ok, [listed_mission_installation]} =
-             ApplicationInstallations.list(context.scope, mission_host)
-
-    assert listed_mission_installation.application_installation_id ==
-             mission_installation.application_installation_id
+    assert {:ok, []} =
+             ApplicationInstallations.list(context.scope, HostContext.mission(@mission_id))
 
     assert {:ok, [listed_spacecraft_installation]} =
              ApplicationInstallations.list(context.scope, context.host_context)
@@ -268,51 +252,48 @@ defmodule Cadence.Applications.ApplicationInstallationsTest do
     assert {:error, :forbidden} =
              ApplicationInstallations.install(
                unauthorized_scope,
-               HostContext.mission(@mission_id),
-               "derived_telemetry"
+               context.host_context,
+               "telemetry_decom"
              )
 
     assert {:ok, _installation} =
              ApplicationInstallations.install(
                context.scope,
-               HostContext.mission(@mission_id),
-               "derived_telemetry"
+               context.host_context,
+               "telemetry_decom"
              )
 
     assert {:error, :forbidden} =
              ApplicationInstallations.disable(
                unauthorized_scope,
-               HostContext.mission(@mission_id),
-               "derived_telemetry"
+               context.host_context,
+               "telemetry_decom"
              )
 
     assert {:error, :forbidden} =
              ApplicationInstallations.uninstall(
                unauthorized_scope,
-               HostContext.mission(@mission_id),
-               "derived_telemetry"
+               context.host_context,
+               "telemetry_decom"
              )
 
     assert {:error, :forbidden} =
              ApplicationInstallations.fetch(
                unauthorized_scope,
-               HostContext.mission(@mission_id),
-               "derived_telemetry"
+               context.host_context,
+               "telemetry_decom"
              )
 
     assert {:error, :forbidden} =
-             ApplicationInstallations.list(
-               unauthorized_scope,
-               HostContext.mission(@mission_id)
-             )
+             ApplicationInstallations.list(unauthorized_scope, context.host_context)
   end
 
   test "rejects applications on unsupported hosts and requires an installed record", context do
     assert {:error, :unsupported_application_host_context} =
              ApplicationInstallations.install(
                context.scope,
-               context.host_context,
-               "derived_telemetry"
+               HostContext.mission(@mission_id),
+               "telemetry_decom"
              )
 
     assert {:error, :application_not_installed} =

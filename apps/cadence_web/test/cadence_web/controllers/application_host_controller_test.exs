@@ -5,7 +5,6 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
   """
   use CadenceWeb.ConnCase, async: false
 
-  alias Cadence.Applications.{ApplicationInstallations, HostContext}
   alias Cadence.Auth.Scope
   alias Cadence.Missions.Mission
   alias Cadence.Repo
@@ -54,7 +53,7 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
              })
              |> json_response(400)
 
-    assert %{"host" => %{"surface_id" => "manage"}} =
+    assert %{"host" => %{"surface_id" => "workspace"}} =
              catalog
              |> post_bridge(catalog_conn, mission.mission_id, %{
                "scope" => scope_document(organization, mission),
@@ -64,11 +63,9 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
   end
 
   test "L19b: a session keeps every scope it loaded, so two surfaces stay open at once" do
-    {member_conn, organization, mission, scope} = signed_in_scope_and_mission()
+    {member_conn, organization, mission, _scope} = signed_in_scope_and_mission()
     second = TestFixtures.persist_mission!(organization, display_name: "Second Mission")
     never_loaded = TestFixtures.persist_mission!(organization, display_name: "Third Mission")
-
-    install_limits(scope, second)
 
     {first_conn, _first_catalog} = fetch_catalog(member_conn, mission)
     {second_conn, catalog} = fetch_catalog(recycle(first_conn), second)
@@ -80,8 +77,8 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
     end
 
     # The first mission's surface still answers after the second's catalog loaded.
-    assert %{"host" => %{"surface_id" => "manage"}} = json_response(query.(mission), 200)
-    assert %{"host" => %{"surface_id" => "manage"}} = json_response(query.(second), 200)
+    assert %{"host" => %{"surface_id" => "workspace"}} = json_response(query.(mission), 200)
+    assert %{"host" => %{"surface_id" => "workspace"}} = json_response(query.(second), 200)
     assert %{"code" => "invalid_scope"} = json_response(query.(never_loaded), 400)
   end
 
@@ -125,8 +122,8 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
     valid_scope = scope_document(organization, mission)
 
     for request <- [
-          %{"queryId" => "cadence.limits.unknown", "queryVersion" => 1},
-          %{"queryId" => "cadence.limits.manage", "queryVersion" => 2}
+          %{"queryId" => "cadence.ops.unknown", "queryVersion" => 1},
+          %{"queryId" => "cadence.ops.workspace", "queryVersion" => 2}
         ] do
       response =
         post_bridge(
@@ -222,15 +219,11 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
         organization_membership: membership
       })
 
-    install_limits(scope, mission)
     {TestFixtures.member_conn(user), organization, mission, scope}
   end
 
-  defp install_limits(scope, %Mission{} = mission),
-    do: ApplicationInstallations.install(scope, HostContext.mission(mission.mission_id), "limits")
-
   defp host_path(mission_id),
-    do: "/api/v1/missions/#{mission_id}/apps/limits/surfaces/manage/host"
+    do: "/api/v1/missions/#{mission_id}/apps/ops_console/surfaces/workspace/host"
 
   # The console's surface host mints the host session id, CSRF token and pinned scope.
   defp fetch_catalog(conn, %Mission{mission_id: mission_id}) do
@@ -267,19 +260,19 @@ defmodule CadenceWeb.ApplicationHostControllerTest do
 
   defp surface_request(:query),
     do: %{
-      "applicationKey" => "limits",
+      "applicationKey" => "ops_console",
       "applicationVersion" => 1,
-      "surfaceId" => "manage",
+      "surfaceId" => "workspace",
       "surfaceVersion" => 1,
-      "queryId" => "cadence.limits.manage",
+      "queryId" => "cadence.ops.workspace",
       "queryVersion" => 1
     }
 
   defp surface_request(:actions),
     do: %{
-      "applicationKey" => "limits",
+      "applicationKey" => "ops_console",
       "applicationVersion" => 1,
-      "surfaceId" => "manage",
+      "surfaceId" => "workspace",
       "surfaceVersion" => 1
     }
 

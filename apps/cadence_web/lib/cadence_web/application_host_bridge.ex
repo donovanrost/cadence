@@ -88,7 +88,7 @@ defmodule CadenceWeb.ApplicationHostBridge do
          {:ok, admission} <- admit_surface(current_scope, route_context, request, opts),
          {:ok, action} <- declared_action(admission, request),
          {:ok, dispatch_request} <-
-           dispatch_request(request, admission, action, Keyword.get(opts, :origin)),
+           dispatch_request(request, admission, action),
          :ok <-
            ActionDispatcher.authorize(
              current_scope,
@@ -136,8 +136,7 @@ defmodule CadenceWeb.ApplicationHostBridge do
     with {:ok, result} <-
            ActionDispatcher.dispatch(current_scope, route_context.host_context, dispatch_request),
          {:ok, action_result} <- action_result(request.application_key, result) do
-      action_output(
-        request.application_key,
+      safe_output(
         %{
           "receiptId" => receipt_id(idempotency_key_digest),
           "completedAt" => Keyword.fetch!(opts, :now),
@@ -251,8 +250,7 @@ defmodule CadenceWeb.ApplicationHostBridge do
            params: params
          },
          _admission,
-         %ActionDefinition{action_id: action_id},
-         origin
+         %ActionDefinition{action_id: action_id}
        ) do
     {:ok,
      %ActionRequest{
@@ -262,9 +260,7 @@ defmodule CadenceWeb.ApplicationHostBridge do
        surface_id: surface_id,
        surface_version: surface_version,
        params: params,
-       idempotency_key: nil,
-       # The host the call came through (the session plug's minting host), never the client's.
-       origin: origin
+       idempotency_key: nil
      }}
   end
 
@@ -516,7 +512,7 @@ defmodule CadenceWeb.ApplicationHostBridge do
     if is_nil(result) do
       {:error, :application_action_output_bounds_exceeded}
     else
-      action_output(application_key, result, :application_action_output_bounds_exceeded)
+      safe_output(result, :application_action_output_bounds_exceeded)
     end
   rescue
     _exception -> {:error, :application_action_output_bounds_exceeded}
@@ -524,29 +520,10 @@ defmodule CadenceWeb.ApplicationHostBridge do
     _kind, _value -> {:error, :application_action_output_bounds_exceeded}
   end
 
-  defp action_output("derived_telemetry", value, error), do: safe_workflow_output(value, error)
-  defp action_output(_application_key, value, error), do: safe_output(value, error)
-
-  defp safe_output(%{"host" => %{application_key: "derived_telemetry"}} = value, error),
-    do: safe_workflow_output(value, error)
-
-  defp safe_output(
-         %{"host" => %{application_key: "limits"}, "trusted_surface" => _} = value,
-         :application_host_query_output_bounds_exceeded = error
-       ),
-       do: safe_workflow_output(value, error)
-
   defp safe_output(value, error) do
     case JSONBoundary.safe_trusted_output(value) do
       {:ok, safe} -> {:ok, safe}
       {:error, _reason} -> {:error, error}
-    end
-  end
-
-  defp safe_workflow_output(value, error) do
-    case JSONBoundary.safe_workflow_output(value) do
-      {:ok, safe} -> {:ok, safe}
-      {:error, _} -> {:error, error}
     end
   end
 end

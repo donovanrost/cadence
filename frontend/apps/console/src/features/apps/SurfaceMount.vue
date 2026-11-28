@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch, type Component } from "vue";
+import { onBeforeUnmount, onMounted, ref, shallowRef, type Component } from "vue";
 import { onBeforeRouteLeave, useRoute, useRouter } from "vue-router";
 import {
   fullPageSurfaceProps,
@@ -10,7 +10,7 @@ import { createHttpHostBridge, loadFederatedApplication } from "@cadence/plugin-
 import { ApButton, ApCallout } from "@/ui";
 import type { SurfaceHost } from "./host.ts";
 import { lostText, repinningBridge, type RepinningBridge } from "./hostBridge.ts";
-import { surfaceLink, surfaceParams } from "./surfaces.ts";
+import { surfaceLink } from "./surfaces.ts";
 import { saveOutcome, type SaveOutcome } from "./saveOutcome.ts";
 
 /**
@@ -27,11 +27,6 @@ const props = defineProps<{
 const emit = defineEmits<{ outcome: [outcome: SaveOutcome] }>();
 const router = useRouter();
 const route = useRoute();
-/**
- * ux U42 deep links: the URL's query, limited to the keys this app's surface query accepts, goes to
- * the server as the host-captured params (plugin-sdk: a surface never sends its own).
- */
-const params = computed(() => (app ? surfaceParams(app.applicationKey, route.query) : {}));
 const app = props.host.catalog.applications[0];
 const surface = shallowRef<{ component: Component; props: FullPageSurfaceProps } | null>(null);
 const failure = ref<string | null>(null);
@@ -72,8 +67,7 @@ async function load() {
     const module = await loadFederatedApplication(app);
     bridge = repinningBridge({
       session: props.host.catalog.session,
-      create: (session) =>
-        createHttpHostBridge(session, app, { navigate, queryParams: params.value }),
+      create: (session) => createHttpHostBridge(session, app, { navigate }),
       repin: props.repin,
       navigate,
       onReceipt: (actionId) => {
@@ -93,11 +87,6 @@ async function load() {
     failure.value = cause instanceof Error ? cause.message : "it didn't answer.";
   }
 }
-// A new selection or page (a deep link, or the surface's own link) re-queries with the new params.
-watch(
-  () => JSON.stringify(params.value),
-  () => void load(),
-);
 // L19b (api eecfc73d5): the session keeps its 16 latest scopes, so a tab regaining focus needn't
 // re-pin; a mismatch (a scope pushed out) still re-pins and retries once in the bridge.
 onMounted(() => void load());
