@@ -12,11 +12,10 @@ defmodule Cadence.Applications.ActionContractLedger do
   """
 
   alias Cadence.Applications.{ActionRequest, ApplicationDefinition, Registry}
-  alias Cadence.Applications.TelemetryDecom
 
   @type binding :: {binary(), pos_integer(), binary(), pos_integer(), binary()}
 
-  @contributors [TelemetryDecom]
+  @contributors []
   @max_bindings 128
 
   @spec contributors() :: [module()]

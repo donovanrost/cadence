@@ -113,11 +113,13 @@ defmodule Cadence.Control.Commanding.GroupSubmission do
     result
   end
 
+  # The token is what commands resolve against (#1107), so a generation that doesn't change it
+  # (a monitoring apply) doesn't stale a create in flight. The group records the generation it
+  # was validated on (`basis.activation_id`) as evidence; nothing it writes needs that exact one.
   defp locked_insert(snapshot, org, mission, actor, draft, validated, opts) do
-    if snapshot.token == validated.snapshot.token and
-         snapshot.activation_id == validated.snapshot.activation_id,
-       do: insert(org, mission, actor, draft, validated, opts, snapshot.activation),
-       else: {:error, :preflight_stale}
+    if snapshot.token == validated.snapshot.token,
+      do: insert(org, mission, actor, draft, validated, opts, snapshot.activation),
+      else: {:error, :preflight_stale}
   end
 
   defp insert(org, mission, actor, draft, validated, opts, activation) do

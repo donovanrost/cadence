@@ -6,11 +6,6 @@ import { join, resolve } from "node:path";
 const DEFAULT_FRONTEND_ROOT = resolve(import.meta.dirname, "..");
 
 export const APPROVED_FIRST_PARTY_REMOTES = Object.freeze([
-  {
-    directoryName: "telemetry-decom",
-    bundle: "telemetry-decom",
-    remoteName: "cadence_telemetry_decom",
-  },
   { directoryName: "ops-console", bundle: "ops-console", remoteName: "cadence_ops_console" },
 ]);
 

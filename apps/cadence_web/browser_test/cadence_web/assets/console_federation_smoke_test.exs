@@ -3,8 +3,8 @@ Code.require_file(Path.expand("../../support/federation_browser_smoke_setup.exs"
 defmodule CadenceWeb.Assets.ConsoleFederationSmokeTest do
   @moduledoc """
   The federation contract on the console (it gates §11c(C)): the test-only surface_fixture
-  application's surfaces and a telemetry_decom canary, mounted by the console's app routes from
-  signed, activated releases. Driver for frontend/tools/phoenix/console_federation_smoke.mjs.
+  application's surfaces, mounted by the console's app routes from signed, activated releases.
+  Driver for frontend/tools/phoenix/console_federation_smoke.mjs.
   """
   use CadenceWeb.ConnCase, async: false
 
@@ -67,8 +67,6 @@ defmodule CadenceWeb.Assets.ConsoleFederationSmokeTest do
       context.mission.slug,
       "--mission-id",
       context.mission.mission_id,
-      "--spacecraft-id",
-      context.spacecraft.spacecraft_id,
       "--fixture-n-minus-1-release-id",
       Map.fetch!(release.release_ids.n_minus_1, "surface_fixture"),
       "--fixture-n-release-id",

@@ -62,7 +62,6 @@ defmodule Cadence.Reads.ActionQueue.SourceKeys do
       :activation_request_id,
       :summary,
       :kind,
-      :app,
       :spacecraft_ids,
       :spacecraft_count,
       :runtime_not_applied,

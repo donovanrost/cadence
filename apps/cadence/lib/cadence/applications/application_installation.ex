@@ -1,7 +1,6 @@
 defmodule Cadence.Applications.ApplicationInstallation do
   @moduledoc "Durable, version-pinned installation of one application at one host scope."
 
-  alias Cadence.Applications.ConfigurationReference
   alias Cadence.Ids
 
   @type lifecycle_state :: :installed | :disabled | :uninstalled
@@ -15,7 +14,6 @@ defmodule Cadence.Applications.ApplicationInstallation do
           scope_id: binary(),
           application_key: binary(),
           application_version: pos_integer(),
-          configuration_ref: ConfigurationReference.t() | nil,
           lifecycle_state: lifecycle_state(),
           inserted_at: DateTime.t() | nil,
           updated_at: DateTime.t() | nil,
@@ -41,7 +39,6 @@ defmodule Cadence.Applications.ApplicationInstallation do
     :scope_id,
     :application_key,
     :application_version,
-    :configuration_ref,
     :lifecycle_state,
     :inserted_at,
     :updated_at,
@@ -63,10 +60,6 @@ defmodule Cadence.Applications.ApplicationInstallation do
       scope_id: fetch_attr!(attrs, :scope_id),
       application_key: fetch_attr!(attrs, :application_key),
       application_version: fetch_attr!(attrs, :application_version),
-      configuration_ref:
-        attrs
-        |> Map.get(:configuration_ref, Map.get(attrs, "configuration_ref"))
-        |> normalize_configuration_ref(),
       lifecycle_state:
         attrs
         |> Map.get(:lifecycle_state, Map.get(attrs, "lifecycle_state", :installed))
@@ -76,12 +69,6 @@ defmodule Cadence.Applications.ApplicationInstallation do
       metadata: Map.get(attrs, :metadata, Map.get(attrs, "metadata", %{}))
     }
   end
-
-  defp normalize_configuration_ref(nil), do: nil
-  defp normalize_configuration_ref(%ConfigurationReference{} = ref), do: ref
-
-  defp normalize_configuration_ref(attrs) when is_map(attrs),
-    do: ConfigurationReference.new(attrs)
 
   defp normalize_scope_kind(:spacecraft), do: :spacecraft
   defp normalize_scope_kind("spacecraft"), do: :spacecraft

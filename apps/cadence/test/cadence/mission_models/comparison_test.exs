@@ -13,7 +13,7 @@ defmodule Cadence.MissionModels.ComparisonTest do
   alias Cadence.SemanticRuntime
   alias Cadence.SemanticRuntime.{PlanDecoder, State, Update}
 
-  test "high-risk promotion requires and executes an approved qualification corpus" do
+  test "a high-risk comparison requires and replays an approved qualification corpus" do
     organization_id = "org-mission-model-comparison"
     mission_id = "mission-model-comparison-#{System.unique_integer([:positive])}"
     persist_mission_scope(organization_id, mission_id)
@@ -67,17 +67,14 @@ defmodule Cadence.MissionModels.ComparisonTest do
 
     assert qualification_case.expected_result_sha256 == expected_hash
 
-    assert {:ok, request} =
-             MissionModels.request_promotion(
-               scope,
+    assert {:ok, %{"comparison_report_id" => comparison_id}} =
+             Comparison.run(
+               organization_id,
                mission_id,
                revision.revision_id,
                binding_set.binding_set_id,
                binding_set.version
              )
-
-    comparison_id =
-      request.metadata["mission_model_comparison"]["comparison_report_id"]
 
     assert {:ok, report} = Comparison.fetch(organization_id, mission_id, comparison_id)
     assert report["risk"] == "high"

@@ -23,8 +23,6 @@ defmodule Cadence.Applications.ApplicationInstallations.LifecycleEventRow do
     field(:current_lifecycle_state, :string)
     field(:previous_application_version, :integer)
     field(:current_application_version, :integer)
-    field(:previous_configuration_version, :integer)
-    field(:current_configuration_version, :integer)
     field(:actor_id, :string)
     field(:occurred_at, :utc_datetime_usec)
     field(:payload, :map, default: %{})
@@ -45,8 +43,6 @@ defmodule Cadence.Applications.ApplicationInstallations.LifecycleEventRow do
     :current_lifecycle_state,
     :previous_application_version,
     :current_application_version,
-    :previous_configuration_version,
-    :current_configuration_version,
     :actor_id,
     :occurred_at,
     :payload
@@ -55,12 +51,10 @@ defmodule Cadence.Applications.ApplicationInstallations.LifecycleEventRow do
   @required_fields @fields --
                      [
                        :previous_lifecycle_state,
-                       :previous_application_version,
-                       :previous_configuration_version,
-                       :current_configuration_version
+                       :previous_application_version
                      ]
 
-  @event_types ~w(installed reinstalled enabled disabled uninstalled application_upgraded configuration_updated)
+  @event_types ~w(installed reinstalled enabled disabled uninstalled application_upgraded)
   @lifecycle_states ~w(installed disabled uninstalled)
 
   @spec changeset(LifecycleEvent.t()) :: Ecto.Changeset.t()
@@ -92,8 +86,6 @@ defmodule Cadence.Applications.ApplicationInstallations.LifecycleEventRow do
       current_lifecycle_state: String.to_existing_atom(row.current_lifecycle_state),
       previous_application_version: row.previous_application_version,
       current_application_version: row.current_application_version,
-      previous_configuration_version: row.previous_configuration_version,
-      current_configuration_version: row.current_configuration_version,
       actor_id: row.actor_id,
       occurred_at: row.occurred_at,
       payload: JsonDocument.unwrap_value(row.payload)

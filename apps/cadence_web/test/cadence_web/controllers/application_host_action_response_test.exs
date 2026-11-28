@@ -10,51 +10,42 @@ defmodule CadenceWeb.ApplicationHostActionResponseTest do
 
   import Ecto.Query
 
-  alias Cadence.Applications.{ApplicationInstallations, HostContext}
-  alias Cadence.Auth.Scope
   alias Cadence.Repo
   alias CadenceWeb.TestFixtures
 
   @bridge_suffix "/api/cadence/application-host/v1/missions"
-  @action "save_configuration"
+  @surface "data_source_registration"
+  @action "register-source"
 
   setup do
     user = TestFixtures.persist_user!()
     organization = TestFixtures.persist_org!()
-    membership = TestFixtures.grant_membership!(user, organization)
+    _membership = TestFixtures.grant_membership!(user, organization)
     mission = TestFixtures.persist_mission!(organization)
-    spacecraft = TestFixtures.persist_spacecraft!(mission)
-
-    scope =
-      Scope.new(%{user: user, organization: organization, organization_membership: membership})
-
-    host = HostContext.spacecraft(mission.mission_id, spacecraft.spacecraft_id)
-    assert {:ok, _} = ApplicationInstallations.install(scope, host, "telemetry_decom")
     member_conn = TestFixtures.member_conn(user)
 
     # The console's surface host mints the bridge session (host session id, CSRF token, pinned scope).
     catalog_conn =
       get(
         member_conn,
-        "/api/v1/missions/#{mission.mission_id}/apps/telemetry_decom/surfaces/manage/host?spacecraft_id=#{spacecraft.spacecraft_id}"
+        "/api/v1/missions/#{mission.mission_id}/apps/ops_console/surfaces/#{@surface}/host"
       )
 
     %{
       mission: mission,
-      spacecraft: spacecraft,
       catalog_conn: catalog_conn,
       catalog: json_response(catalog_conn, 200)["data"]["catalog"],
       scope: %{
         "organizationId" => organization.organization_id,
         "missionId" => mission.mission_id,
-        "spacecraftId" => spacecraft.spacecraft_id
+        "spacecraftId" => nil
       }
     }
   end
 
-  test "a failed configuration save sends exactly one 422, stores it as failed, and replays it",
+  test "a failed data source registration sends exactly one 422, stores it as failed, and replays it",
        c do
-    key = "telemetry-decom-#{System.unique_integer([:positive])}"
+    key = "ops-console-#{System.unique_integer([:positive])}"
 
     conn = post_action(c, key)
 
@@ -81,12 +72,11 @@ defmodule CadenceWeb.ApplicationHostActionResponseTest do
     |> put_req_header("x-csrf-token", c.catalog["session"]["csrfToken"])
     |> put_req_header("idempotency-key", key)
     |> post(
-      @bridge_suffix <>
-        "/#{c.mission.mission_id}/spacecraft/#{c.spacecraft.spacecraft_id}/actions",
+      @bridge_suffix <> "/#{c.mission.mission_id}/actions",
       Jason.encode!(%{
-        "applicationKey" => "telemetry_decom",
+        "applicationKey" => "ops_console",
         "applicationVersion" => 1,
-        "surfaceId" => "manage",
+        "surfaceId" => @surface,
         "surfaceVersion" => 1,
         "actionId" => @action,
         "input" => %{},
@@ -112,7 +102,7 @@ defmodule CadenceWeb.ApplicationHostActionResponseTest do
     Repo.all(
       from(row in "federated_application_action_idempotencies",
         where:
-          row.mission_id == ^mission.mission_id and row.surface_id == "manage" and
+          row.mission_id == ^mission.mission_id and row.surface_id == @surface and
             row.operation == @action,
         select: %{state: row.state, response_status: row.response_status}
       )

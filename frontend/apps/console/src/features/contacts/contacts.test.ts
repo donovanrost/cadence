@@ -205,7 +205,6 @@ describe("attention block words (U32)", () => {
     error: undefined,
     summary: undefined,
     kind: undefined,
-    app: undefined,
     spacecraft_ids: undefined,
     spacecraft_count: undefined,
     retryable: undefined,

@@ -66,14 +66,6 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
     try do
       node = configured_node!()
 
-      telemetry_build =
-        build_release!(
-          node,
-          "@cadence/telemetry-decom-plugin",
-          Path.join(app_root, "priv/static/assets/application-host/telemetry-decom"),
-          Path.join(temp_root, "release-build-telemetry-decom")
-        )
-
       ops_console_build =
         build_release!(
           node,
@@ -92,13 +84,6 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
           [
             package!(
               node,
-              "telemetry-decom-n-minus-1",
-              telemetry_build,
-              telemetry_metadata(:n_minus_1),
-              temp_root
-            ),
-            package!(
-              node,
               "ops-console-n-minus-1",
               ops_console_build,
               ops_console_metadata(:n_minus_1, ops_surface),
@@ -107,13 +92,6 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
           ] ++ fixture_packages.n_minus_1,
         n:
           [
-            package!(
-              node,
-              "telemetry-decom-n",
-              telemetry_build,
-              telemetry_metadata(:n),
-              temp_root
-            ),
             package!(
               node,
               "ops-console-n",
@@ -550,19 +528,6 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
   defp normalize_timestamp(value) do
     {:ok, datetime, 0} = DateTime.from_iso8601(value)
     normalize_datetime(datetime)
-  end
-
-  defp telemetry_metadata(slot) do
-    metadata(
-      "telemetry_decom",
-      "cadence.telemetry-applications",
-      "packet_bindings",
-      "cadence.packet_bindings.manage",
-      ["save_packet_bindings"],
-      "cadence_telemetry_decom",
-      "federation-browser-telemetry-decom-#{slot_name(slot)}",
-      released_at(slot)
-    )
   end
 
   # The workspace surface is OpsConsole's required application workspace; it outlives the ops pages.

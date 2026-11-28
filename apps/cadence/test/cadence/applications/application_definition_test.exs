@@ -4,7 +4,6 @@ defmodule Cadence.Applications.ApplicationDefinitionTest do
   alias Cadence.Applications.{
     ActionDefinition,
     ApplicationDefinition,
-    ApplicationDependency,
     LifecycleContract,
     ResourceClaimDefinition,
     ResourceContract,
@@ -66,34 +65,75 @@ defmodule Cadence.Applications.ApplicationDefinitionTest do
              })
   end
 
-  test "requires every available installation scope to have a host workspace" do
-    application = valid_application()
+  test "refuses an optional app that declares domain or lifecycle actions (#669 b)" do
+    application = %ApplicationDefinition{valid_application() | installation_policy: :optional}
+
+    assert {:error, :invalid_application_definition} = ApplicationDefinition.validate(application)
+
+    [surface] = application.surfaces
+
+    lifecycle_only = %ApplicationDefinition{
+      application
+      | actions: [],
+        lifecycle_contract: %LifecycleContract{actions: ["disable"]},
+        surfaces: [%SurfaceDefinition{surface | actions: ["disable"]}]
+    }
 
     assert {:error, :invalid_application_definition} =
-             ApplicationDefinition.validate(%ApplicationDefinition{application | surfaces: []})
+             ApplicationDefinition.validate(lifecycle_only)
+
+    assert :ok =
+             ApplicationDefinition.validate(%ApplicationDefinition{
+               lifecycle_only
+               | installation_policy: :platform
+             })
+
+    assert :ok =
+             ApplicationDefinition.validate(%ApplicationDefinition{
+               application
+               | actions: [],
+                 surfaces: [%SurfaceDefinition{surface | actions: []}]
+             })
+  end
+
+  test "requires every installation scope of an app with surfaces to have a host workspace" do
+    application = valid_application()
+    [workspace] = application.surfaces
+    dock = %SurfaceDefinition{workspace | placement: :ops_dock, actions: []}
+
+    assert {:error, :invalid_application_definition} =
+             ApplicationDefinition.validate(%ApplicationDefinition{
+               application
+               | surfaces: [dock]
+             })
+
+    assert {:error, :invalid_application_definition} =
+             ApplicationDefinition.validate(%ApplicationDefinition{
+               application
+               | installable_scopes: [:mission, :spacecraft]
+             })
 
     assert :ok =
              ApplicationDefinition.validate(%ApplicationDefinition{
                application
                | availability: :roadmap,
-                 surfaces: []
+                 surfaces: [dock]
              })
   end
 
-  test "rejects self dependencies and duplicate resource claim identities" do
-    application = valid_application()
+  test "a headless app (no surfaces) is valid without a workspace (#669)" do
+    application = %ApplicationDefinition{valid_application() | surfaces: []}
 
-    self_dependency = %ApplicationDependency{
-      application_key: application.application_key,
-      scope: :same_host
-    }
+    assert ApplicationDefinition.headless?(application)
+    refute ApplicationDefinition.headless?(valid_application())
+    assert :ok = ApplicationDefinition.validate(application)
+    assert Cadence.Applications.Registry.workspace_surfaces(application, :mission) == []
 
-    assert {:error, :invalid_application_definition} =
-             ApplicationDefinition.validate(%ApplicationDefinition{
-               application
-               | dependencies: [self_dependency]
-             })
+    assert {:error, :unknown_surface} =
+             Cadence.Applications.Registry.fetch_default_surface(application, :mission)
+  end
 
+  test "rejects duplicate resource claim identities" do
     claim = %ResourceClaimDefinition{
       claim_type: :canonical_point,
       scope: :mission,
@@ -182,6 +222,7 @@ defmodule Cadence.Applications.ApplicationDefinitionTest do
       display_name: "Example",
       description: "A bounded application definition.",
       trust: :first_party,
+      installation_policy: :platform,
       availability: :available,
       installable_scopes: [:mission],
       configuration_contract: %{schema_id: "cadence.example.configuration", version: 1},

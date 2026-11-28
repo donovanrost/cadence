@@ -5,7 +5,7 @@ defmodule CadenceWeb.Console.DashboardShowRequestCostTest do
   limits, events and quality overlays, over a relative window (so no source result is served from
   cache) and the persisted registry a deployment runs. The registry is read once per resolve (it
   was four times per source request and stage: 175 queries here, 132 of them the registry), and a
-  re-observation of an unchanged source health writes nothing. The count is equal at 5 and at 50
+  re-observation of an unchanged source health writes nothing. The count is equal at 5, 50 and 500
   spacecraft and under a ceiling a few above today's 46.
   """
   use CadenceWeb.ConnCase, async: false
@@ -88,11 +88,13 @@ defmodule CadenceWeb.Console.DashboardShowRequestCostTest do
     conn.private.cadence_request_cost.queries
   end
 
-  test "a dashboard show costs the same at 5 and at 50 spacecraft, under a ceiling" do
+  test "a dashboard show costs the same at 5, 50 and 500 spacecraft, under a ceiling" do
     five = 5 |> setup_dashboard() |> warm() |> queries()
     fifty = 50 |> setup_dashboard() |> warm() |> queries()
+    five_hundred = 500 |> setup_dashboard() |> warm() |> queries()
 
     assert five == fifty
-    assert fifty <= @ceiling
+    assert fifty == five_hundred
+    assert five_hundred <= @ceiling
   end
 end
