@@ -6,7 +6,7 @@ defmodule Cadence.Configuration.ProfileRolloutPreviewTest do
   use Cadence.RuntimeCase, async: false
 
   alias Cadence.Activations.GenerationReceipts
-  alias Cadence.Applications.SpacecraftConfiguration.{Drafts, Review}
+  alias Cadence.Applications.SpacecraftConfiguration.{Active, Drafts, Review}
   alias Cadence.Applications.TelemetryDecom
   alias Cadence.Applications.TelemetryDecomFixtures, as: Fixtures
   alias Cadence.Catalog.CompositionPins
@@ -16,6 +16,8 @@ defmodule Cadence.Configuration.ProfileRolloutPreviewTest do
   alias Cadence.Control.Configuration
   alias Cadence.Governance.ActivationPolicy
   alias Cadence.Management.Activations
+  alias Cadence.MissionModels
+  alias Cadence.Missions
   alias Cadence.Repo
   alias Cadence.SpacecraftStore
 
@@ -138,10 +140,10 @@ defmodule Cadence.Configuration.ProfileRolloutPreviewTest do
   end
 
   defp parameter_id!(c) do
-    {:ok, mission} = Cadence.Missions.fetch_mission(c.org, c.mission.mission_id)
-    {:ok, %{entries: entries}} = Cadence.Applications.SpacecraftConfiguration.Active.load(mission)
+    {:ok, mission} = Missions.fetch_mission(c.org, c.mission.mission_id)
+    {:ok, %{entries: entries}} = Active.load(mission)
     revision = entries |> Map.values() |> hd() |> get_in(["mission_model", "revision_id"])
-    {:ok, model} = Cadence.MissionModels.fetch_revision(c.org, c.mission.mission_id, revision)
+    {:ok, model} = MissionModels.fetch_revision(c.org, c.mission.mission_id, revision)
 
     model.declarations
     |> Map.values()

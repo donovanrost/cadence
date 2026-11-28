@@ -17,18 +17,22 @@ defmodule Cadence.MissionModels.AuthoredScope do
   @doc "Whether `declaration` applies to `composition_id`."
   @spec applies?(Declaration.t(), binary()) :: boolean()
   def applies?(%Declaration{definition: definition}, composition_id) do
-    case scope(definition) do
+    case scope_of(definition) do
       [] -> true
       ids -> composition_id in ids
     end
   end
 
-  defp scope(%{} = definition) do
+  @doc "The compositions `declaration` is scoped to: [] when it applies to every one."
+  @spec scope(Declaration.t()) :: [binary()]
+  def scope(%Declaration{definition: definition}), do: scope_of(definition)
+
+  defp scope_of(%{} = definition) do
     case Map.get(definition, "compositions", Map.get(definition, :compositions)) do
       ids when is_list(ids) -> ids
       _all -> []
     end
   end
 
-  defp scope(_definition), do: []
+  defp scope_of(_definition), do: []
 end

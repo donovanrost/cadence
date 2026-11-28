@@ -8,6 +8,8 @@ defmodule Cadence.Activations.SpacecraftConfiguration do
   alias Cadence.Catalog.ConfigurationReviews
   alias Cadence.Catalog.FleetSnapshot
   alias Cadence.Catalog.SpacecraftConfigurationInput, as: ConfigurationInput
+  alias Cadence.MissionModels
+  alias Cadence.MissionModels.AuthoredHead
   alias Cadence.Missions
   alias Cadence.SourceEndpoints
   alias Cadence.SpacecraftStore
@@ -37,7 +39,9 @@ defmodule Cadence.Activations.SpacecraftConfiguration do
            {:ok, mission} <- Missions.fetch_mission(org, attrs.mission_id),
            {:ok, active} <- ConfigurationActive.load(mission),
            true <- Map.drop(entries, ids) == Map.drop(active.entries, ids),
-           true <- Enum.all?(ids, &model_only?(entries[&1], active.entries[&1])) do
+           true <- Enum.all?(ids, &model_only?(entries[&1], active.entries[&1])),
+           true <-
+             at_this_head?(org, attrs.mission_id, change_set_id, ids, entries, active.entries) do
         {:ok, :admitted}
       else
         {:error, reason} -> {:error, reason}
@@ -363,6 +367,33 @@ defmodule Cadence.Activations.SpacecraftConfiguration do
     |> Map.drop(@framing_fields)
     |> Map.update("document", %{}, &Map.delete(&1, "protocol"))
   end
+
+  @doc false
+  # Which model each moved craft moved to (commanding, #1106): the revision this set's recorded
+  # head compiles its own composition into. So the new revision is linked at this set's head and
+  # has the same approval base as the revision the craft ran, one read each, never per craft.
+  def at_this_head?(org, mission_id, change_set_id, ids, entries, active) do
+    new = Enum.map(ids, &revision(entries[&1]))
+    old = Enum.map(ids, &revision(active[&1]))
+
+    case AuthoredHead.for_change_set(org, mission_id, change_set_id) do
+      %{layer_id: head} -> moved_to?(org, mission_id, head, Enum.zip(new, old))
+      nil -> false
+    end
+  end
+
+  defp moved_to?(org, mission_id, head, moves) do
+    {new, old} = Enum.unzip(moves)
+    heads = MissionModels.authored_heads(org, mission_id, Enum.uniq(new))
+    bases = MissionModels.approval_bases(org, mission_id, Enum.uniq(new ++ old))
+
+    Enum.all?(moves, fn {to, from} ->
+      heads[to] == head and is_binary(bases[to]) and bases[to] == bases[from]
+    end)
+  end
+
+  defp revision(%{"mission_model" => %{"revision_id" => id}}) when is_binary(id), do: id
+  defp revision(_entry), do: nil
 
   # The mission model it runs, and the telemetry capability ids derived from that revision
   # (TelemetryBinding's ids embed the revision); nothing of the craft's own configuration.

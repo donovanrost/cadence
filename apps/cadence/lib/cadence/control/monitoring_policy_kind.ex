@@ -133,10 +133,12 @@ defmodule Cadence.Control.MonitoringPolicyKind do
   @doc """
   NO-GOs before anything applies: the candidate authored layer compiled with every composition in
   use, in memory. One hold per (composition, cause), naming the composition and the definitions.
+  A preview therefore costs one full compile per composition in use (a handful), never one per
+  spacecraft.
   """
   @impl true
   def holds(organization_id, mission_id, entries) do
-    monitoring = Enum.filter(entries, &(&1.kind in ["monitoring_policy", "derived_parameter"]))
+    monitoring = Enum.filter(entries, &(&1.kind == "monitoring_policy"))
 
     if monitoring == [],
       do: [],
@@ -200,6 +202,9 @@ defmodule Cadence.Control.MonitoringPolicyKind do
 
   defp sentence({:monitoring_catalog_policy_differs, _}),
     do: "the catalogs in use differ on this policy."
+
+  defp sentence({:monitoring_scope_not_in_use, ids}),
+    do: "a limit is scoped to a composition the fleet doesn't run (#{Enum.join(ids, ", ")})."
 
   defp sentence({:monitoring_layer_too_large, max}),
     do: "a mission can't have more than #{max} monitoring definitions."

@@ -5,6 +5,7 @@ defmodule Cadence.MissionModels.AuthoredLayerTest do
   """
   use Cadence.DataCase, async: false
 
+  alias Cadence.Activations.SpacecraftConfiguration
   alias Cadence.Catalog.MissionModel.{Canonical, Declaration, Layer}
   alias Cadence.Configuration.{ChangeSetStore, Ledger}
   alias Cadence.MissionModels
@@ -118,6 +119,144 @@ defmodule Cadence.MissionModels.AuthoredLayerTest do
              ])
   end
 
+  test "a scope naming a composition the fleet doesn't run is refused", c do
+    scoped =
+      mission_policy("Nowhere", 20, %{"compositions" => ["mission_model_composition:none"]})
+
+    assert {:error, {:monitoring_scope_not_in_use, ["mission_model_composition:none"]}} =
+             next(c, [entry(:create, AuthoredLayer.entity_id("Nowhere"), scoped)])
+  end
+
+  test "editing 1 or 12 catalog policies reads the catalog the same number of times", c do
+    many = composition_with_policies!(c.mission, 12)
+    ids = for n <- 1..12, do: Canonical.semantic_id(:monitoring_policy, "/monitoring/p#{n}")
+
+    reads = fn edited ->
+      entries = for id <- edited, do: entry(:update, id, mission_policy("x", 30))
+
+      {_result, queries} =
+        count_queries(fn -> AuthoredLayer.build(@org, c.mission, entries, [many], "cs") end)
+
+      queries
+    end
+
+    assert reads.(Enum.take(ids, 1)) == reads.(ids)
+  end
+
+  defp composition_with_policies!(mission, count) do
+    policies =
+      for n <- 1..count do
+        %{
+          kind: :monitoring_policy,
+          qualified_name: "/monitoring/p#{n}",
+          references: [%{expected_kind: :parameter, source_ref: @temperature, role: :parameter}],
+          definition: rules(40 + n)
+        }
+      end
+
+    {:ok, layer} =
+      MissionModels.persist_layer(
+        Layer.new(%{
+          organization_id: @org,
+          mission_id: mission,
+          name: "many",
+          declarations:
+            [
+              %{kind: :space_system, qualified_name: "/"},
+              %{kind: :parameter, qualified_name: @temperature}
+            ] ++
+              policies
+        })
+      )
+
+    {:ok, composition} =
+      Compositions.insert_or_get(@org, mission, [{layer.layer_id, "/"}], @actor)
+
+    composition.composition_id
+  end
+
+  defp count_queries(fun) do
+    ref = make_ref()
+    parent = self()
+    handler = fn _event, _measurements, _metadata, _config -> send(parent, {ref, :query}) end
+    :telemetry.attach(inspect(ref), [:cadence, :repo, :query], handler, nil)
+
+    try do
+      result = fun.()
+      {result, drain(ref, 0)}
+    after
+      :telemetry.detach(inspect(ref))
+    end
+  end
+
+  defp drain(ref, n) do
+    receive do
+      {^ref, :query} -> drain(ref, n + 1)
+    after
+      0 -> n
+    end
+  end
+
+  test "a non-monitoring kind in the entries is refused, never dropped", c do
+    assert {:error, {:not_a_monitoring_kind, "spacecraft"}} =
+             next(c, [
+               %{kind: "spacecraft", op: :update, entity_id: "sc-1", previous: nil, proposed: %{}}
+             ])
+  end
+
+  test "admission moves a craft only to its own composition at this set's head", c do
+    other = composition!(c.mission, "payload", 50)
+    doc = mission_policy("Admitted", 20)
+
+    {:ok, layer} =
+      AuthoredLayer.next(
+        @org,
+        c.mission,
+        [entry(:create, AuthoredLayer.entity_id("Admitted"), doc)],
+        [c.composition, other],
+        "change_set:admit"
+      )
+
+    set_id = record!(c, layer)
+    {:ok, base} = Compositions.effective_revision(@org, c.mission, c.composition, nil)
+
+    {:ok, own_head} =
+      Compositions.effective_revision(@org, c.mission, c.composition, layer.layer_id)
+
+    {:ok, other_head} = Compositions.effective_revision(@org, c.mission, other, layer.layer_id)
+
+    running = %{"sc" => %{"mission_model" => %{"revision_id" => base}}}
+    to = fn revision -> %{"sc" => %{"mission_model" => %{"revision_id" => revision}}} end
+
+    assert SpacecraftConfiguration.at_this_head?(
+             @org,
+             c.mission,
+             set_id,
+             ["sc"],
+             to.(own_head),
+             running
+           )
+
+    # Another composition's head, or a base, is never this craft's model at this head.
+    refute SpacecraftConfiguration.at_this_head?(
+             @org,
+             c.mission,
+             set_id,
+             ["sc"],
+             to.(other_head),
+             running
+           )
+
+    refute SpacecraftConfiguration.at_this_head?(
+             @org,
+             c.mission,
+             set_id,
+             ["sc"],
+             to.(base),
+             running
+           )
+  end
+
   test "a set that changes nothing is refused", c do
     assert {:error, :monitoring_set_changes_nothing} = next(c, [])
   end
@@ -171,18 +310,21 @@ defmodule Cadence.MissionModels.AuthoredLayerTest do
 
   # A version for the layer as an applied set would record it (the record rule is AuthoredHeadTest's).
   defp record!(c, layer) do
+    set = change_set!(c)
+
     Repo.insert!(%AuthoredVersionRow{
       organization_id: @org,
       mission_id: c.mission,
       version: layer.version,
       layer_id: layer.layer_id,
-      change_set_id: change_set!(c).change_set_id,
+      change_set_id: set.change_set_id,
       revision_number: 1,
       approval: "direct",
       decided_at: DateTime.utc_now()
     })
 
     Repo.query!("SET CONSTRAINTS ALL DEFERRED")
+    set.change_set_id
   end
 
   defp change_set!(c) do

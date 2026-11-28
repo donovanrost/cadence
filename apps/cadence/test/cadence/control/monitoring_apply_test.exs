@@ -10,12 +10,15 @@ defmodule Cadence.Control.MonitoringApplyTest do
   alias Cadence.Applications.SpacecraftConfiguration.{Active, Drafts, Review}
   alias Cadence.Applications.TelemetryDecomFixtures, as: Fixtures
   alias Cadence.Catalog.SpacecraftConfigurationInput
+  alias Cadence.Configuration.Status
   alias Cadence.Control.Activations, as: ControlActivations
   alias Cadence.Control.Configuration
   alias Cadence.Governance.ActivationPolicy
   alias Cadence.Management.Activations
   alias Cadence.MissionModels
-  alias Cadence.MissionModels.AuthoredHead
+  alias Cadence.MissionModels.{AuthoredHead, AuthoredLayer}
+  alias Cadence.Missions
+  alias Cadence.SourceEndpoints
 
   setup do
     org = "org-monitoring-apply-#{System.unique_integer([:positive])}"
@@ -96,6 +99,84 @@ defmodule Cadence.Control.MonitoringApplyTest do
     assert entry!(c) == c.before
   end
 
+  test "two monitoring sets in review on one policy can't both apply", c do
+    {:ok, _applied} = apply!(c, [create_op(c, "Shared limit", 35)])
+    independent!(c)
+    reviewer = Fixtures.user_scope(c.org, "reviewer")
+
+    {:ok, first} = stage_and_submit!(c, update_op("Shared limit", 30))
+    {:ok, second} = stage_and_submit!(c, update_op("Shared limit", 25))
+
+    assert {:ok, %{state: :applied}} = approve(reviewer, c, first)
+    # The policy changed since the second set's base: it must restage, never overwrite.
+    assert {:error, {:checks_failed, preview}} = approve(reviewer, c, second)
+    conflicts = Enum.find(preview.checks, &(&1.key == "conflicts"))
+    assert Enum.any?(conflicts.items, &(&1.reason == :value_changed))
+    assert %{version: 2} = AuthoredHead.head(c.org, c.mid)
+  end
+
+  test "a definition that won't compile is a NO-GO before anything applies", c do
+    op =
+      update_in(create_op(c, "Dangling override", 20).document, fn document ->
+        Map.merge(document, %{"overrides" => "/monitoring/none", "spacecraft_ids" => ["sc-1"]})
+      end)
+
+    assert {:error, {:holds_blocking, preview}} = apply!(c, [op])
+    holds = Enum.flat_map(preview.checks, &Map.get(&1, :items, []))
+
+    assert Enum.any?(
+             holds,
+             &(&1[:reason] == :monitoring_compile_no_go and is_binary(&1.details.composition_id))
+           )
+
+    assert AuthoredHead.head(c.org, c.mid) == nil
+  end
+
+  defp independent!(c) do
+    policy = ActivationPolicy.load(c.org, c.mid)
+
+    {:ok, _} =
+      ActivationPolicy.save(c.scope, c.mid, policy.token, %{
+        "value" => %{"approval_requirement" => "independent"}
+      })
+  end
+
+  defp update_op(name, upper) do
+    %{
+      kind: "monitoring_policy",
+      action: "update",
+      entity_id: AuthoredLayer.entity_id(name),
+      changes: [
+        %{
+          path: "default_rules",
+          value: [%{"kind" => "range", "upper" => upper, "severity" => "warning"}]
+        }
+      ]
+    }
+  end
+
+  defp stage_and_submit!(c, op) do
+    with {:ok, staged} <- Configuration.stage(c.scope, c.mid, %{summary: "Edit"}, [op]),
+         {:ok, %{change_set: %{version: version}}} <-
+           Configuration.current(c.scope, c.mid, "monitoring"),
+         {:ok, %{state: :in_review}} <-
+           Configuration.submit(c.scope, c.mid, staged.change_set_id, %{
+             reason: "Tighten the shared limit",
+             expected_version: version
+           }) do
+      {:ok, staged.change_set_id}
+    end
+  end
+
+  defp approve(reviewer, c, change_set_id) do
+    {:ok, set} = Status.change_set(c.mid, change_set_id)
+
+    Configuration.review(reviewer, c.mid, change_set_id, :approve, %{
+      comment: "Agreed",
+      expected_version: set.version
+    })
+  end
+
   defp create_op(c, name, upper) do
     %{
       kind: "monitoring_policy",
@@ -131,14 +212,14 @@ defmodule Cadence.Control.MonitoringApplyTest do
   end
 
   defp entry!(c) do
-    {:ok, mission} = Cadence.Missions.fetch_mission(c.org, c.mid)
+    {:ok, mission} = Missions.fetch_mission(c.org, c.mid)
     {:ok, %{entries: entries}} = Active.load(mission)
     Map.fetch!(entries, c.craft.spacecraft_id)
   end
 
   # The active binding set's content for the craft, with the ids that embed the revision dropped.
   defp bindings!(c) do
-    {:ok, mission} = Cadence.Missions.fetch_mission(c.org, c.mid)
+    {:ok, mission} = Missions.fetch_mission(c.org, c.mid)
     {:ok, %{binding_set: set}} = Active.load(mission)
 
     {Enum.map(set.capability_instances, &without_ids/1), Enum.map(set.rules, &without_ids/1)}
@@ -165,11 +246,11 @@ defmodule Cadence.Control.MonitoringApplyTest do
 
   # An active generation for the fixture's craft on its catalog (as #678's test does).
   defp configure!(c) do
-    {:ok, mission} = Cadence.Missions.fetch_mission(c.org, c.mid)
+    {:ok, mission} = Missions.fetch_mission(c.org, c.mid)
     current = Drafts.snapshot(mission, c.craft)
 
     endpoint =
-      Cadence.SourceEndpoints.list_source_endpoints(c.org, c.mid)
+      SourceEndpoints.list_source_endpoints(c.org, c.mid)
       |> Enum.find(&(&1.spacecraft_id == c.craft.spacecraft_id))
 
     document =

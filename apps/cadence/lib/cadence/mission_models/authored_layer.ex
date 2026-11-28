@@ -32,10 +32,11 @@ defmodule Cadence.MissionModels.AuthoredLayer do
 
   alias Cadence.Catalog.MissionModel.{Canonical, Declaration, Layer, Mount}
   alias Cadence.MissionModels
-  alias Cadence.MissionModels.{AuthoredHead, Compositions}
+  alias Cadence.MissionModels.{AuthoredHead, AuthoredScope, Compositions}
 
   @namespace "/mission/monitoring"
-  @kinds ["monitoring_policy", "derived_parameter"]
+  # derived_parameter joins with M2b.
+  @kinds ["monitoring_policy"]
   @max_declarations 5_000
 
   @type entry :: %{
@@ -82,11 +83,12 @@ defmodule Cadence.MissionModels.AuthoredLayer do
   @spec build(binary(), binary(), [entry()], [binary()], binary()) ::
           {:ok, Layer.t()} | {:error, term()}
   def build(organization_id, mission_id, entries, compositions, change_set_id) do
-    entries = Enum.filter(entries, &(&1.kind in @kinds))
     current = current(organization_id, mission_id)
+    catalog = catalog_index(organization_id, mission_id, entries, current, compositions)
 
-    with {:ok, declarations} <-
-           apply_entries(organization_id, mission_id, current, entries, compositions),
+    with :ok <- monitoring_only(entries),
+         {:ok, declarations} <- apply_entries(current, entries, catalog),
+         :ok <- scoped_in_use(declarations, compositions),
          :ok <- changed(declarations, current),
          :ok <- bounded(declarations) do
       {:ok,
@@ -123,9 +125,9 @@ defmodule Cadence.MissionModels.AuthoredLayer do
     end
   end
 
-  defp apply_entries(organization_id, mission_id, declarations, entries, compositions) do
+  defp apply_entries(declarations, entries, catalog) do
     Enum.reduce_while(entries, {:ok, declarations}, fn entry, {:ok, acc} ->
-      case apply_entry(organization_id, mission_id, acc, entry, compositions) do
+      case apply_entry(acc, entry, catalog) do
         {:ok, acc} -> {:cont, {:ok, acc}}
         {:error, reason} -> {:halt, {:error, reason}}
       end
@@ -134,17 +136,18 @@ defmodule Cadence.MissionModels.AuthoredLayer do
 
   # A mission declaration retires by leaving the next version; a catalog one can't be deleted
   # here (it changes by import, or is turned off by a replace with `disabled: true`).
-  defp apply_entry(_org, _mission, declarations, %{op: :delete, entity_id: id}, _compositions)
+  defp apply_entry(declarations, %{op: :delete, entity_id: id}, _catalog)
        when is_map_key(declarations, id),
        do: {:ok, Map.delete(declarations, id)}
 
-  defp apply_entry(_org, _mission, _declarations, %{op: :delete, entity_id: id}, _compositions),
+  defp apply_entry(_declarations, %{op: :delete, entity_id: id}, _catalog),
     do: {:error, {:monitoring_catalog_policy_delete, id}}
 
-  defp apply_entry(org, mission, declarations, %{entity_id: id, proposed: proposed}, compositions) do
-    if Map.has_key?(declarations, id) or not catalog?(org, mission, id, compositions),
-      do: {:ok, Map.put(declarations, id, mission_declaration(proposed))},
-      else: replace(org, mission, declarations, id, proposed, compositions)
+  defp apply_entry(declarations, %{entity_id: id, proposed: proposed}, catalog) do
+    case {Map.has_key?(declarations, id), Map.get(catalog, id, [])} do
+      {false, [_ | _] = composed} -> replace(declarations, id, proposed, composed)
+      _mission -> {:ok, Map.put(declarations, id, mission_declaration(proposed))}
+    end
   end
 
   # A mission-owned declaration: added (or, on update, replaced in this layer, which owns it).
@@ -157,47 +160,75 @@ defmodule Cadence.MissionModels.AuthoredLayer do
     })
   end
 
-  defp replace(org, mission, declarations, id, proposed, compositions) do
-    case catalog_declarations(org, mission, id, compositions) do
-      [] ->
-        {:error, {:monitoring_policy_not_found, id}}
+  defp replace(declarations, id, proposed, [catalog | others]) do
+    fingerprint = Declaration.fingerprint(catalog)
 
-      [catalog | others] ->
-        fingerprint = Declaration.fingerprint(catalog)
-
-        if Enum.all?(others, &(Declaration.fingerprint(&1) == fingerprint)),
-          do:
-            {:ok,
-             Map.put(
-               declarations,
-               id,
-               Declaration.new(%{
-                 kind: :monitoring_policy,
-                 qualified_name: catalog.qualified_name,
-                 operation: :replace,
-                 expected_fingerprint: fingerprint,
-                 references: catalog.references,
-                 definition: definition(proposed)
-               })
-             )},
-          else: {:error, {:monitoring_catalog_policy_differs, id}}
-    end
+    if Enum.all?(others, &(Declaration.fingerprint(&1) == fingerprint)),
+      do:
+        {:ok,
+         Map.put(
+           declarations,
+           id,
+           Declaration.new(%{
+             kind: :monitoring_policy,
+             qualified_name: catalog.qualified_name,
+             operation: :replace,
+             expected_fingerprint: fingerprint,
+             references: catalog.references,
+             definition: definition(proposed)
+           })
+         )},
+      else: {:error, {:monitoring_catalog_policy_differs, id}}
   end
 
-  defp catalog?(org, mission, id, compositions),
-    do: catalog_declarations(org, mission, id, compositions) != []
+  # The catalog's monitoring policies as each composition in use composes them (its imported
+  # layers at their mounts, what the compiler checks a replace's fingerprint against), by semantic
+  # id: read once per build, and only when an entry edits a policy the head doesn't own
+  # (mm-engineer, #1106: never per edited policy).
+  defp catalog_index(organization_id, mission_id, entries, current, compositions) do
+    if Enum.any?(entries, &(not Map.has_key?(current, &1.entity_id))),
+      do: build_index(organization_id, mission_id, compositions),
+      else: %{}
+  end
 
-  # The declaration `id` as each composition in use composes it: its imported layers at their
-  # mounts (what the compiler checks a replace's fingerprint against).
-  defp catalog_declarations(org, mission, id, compositions) do
+  defp build_index(org, mission, compositions) do
     for composition_id <- compositions,
         {:ok, composition} <- [Compositions.fetch(org, mission, composition_id)],
         {:ok, layers} <- [layers(org, mission, composition)],
         mounts = Map.new(composition.imported_layers, &{&1.layer_id, &1.mount}),
         {:ok, mounted, _mount} <- [Mount.prepare(layers, mounts)],
         layer <- mounted,
-        %Declaration{semantic_id: ^id} = declaration <- layer.declarations,
-        do: declaration
+        %Declaration{kind: :monitoring_policy} = declaration <- layer.declarations,
+        reduce: %{} do
+      acc -> Map.update(acc, declaration.semantic_id, [declaration], &(&1 ++ [declaration]))
+    end
+  end
+
+  # A monitoring set holds only monitoring kinds (one lane); anything else is refused, never
+  # dropped (commanding, #1106).
+  defp monitoring_only(entries) do
+    case Enum.find(entries, &(&1.kind not in @kinds)) do
+      nil -> :ok
+      %{kind: kind} -> {:error, {:not_a_monitoring_kind, kind}}
+    end
+  end
+
+  # Every composition a declaration is scoped to must be one in use: a scope naming none would
+  # apply to nothing, silently (mm-engineer, #1106).
+  defp scoped_in_use(declarations, compositions) do
+    in_use = MapSet.new(compositions)
+
+    unknown =
+      for {_id, declaration} <- declarations,
+          id <- AuthoredScope.scope(declaration),
+          not MapSet.member?(in_use, id),
+          uniq: true,
+          do: id
+
+    case unknown do
+      [] -> :ok
+      ids -> {:error, {:monitoring_scope_not_in_use, Enum.sort(ids)}}
+    end
   end
 
   defp layers(org, mission, composition) do

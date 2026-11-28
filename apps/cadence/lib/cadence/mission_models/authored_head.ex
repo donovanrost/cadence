@@ -123,6 +123,16 @@ defmodule Cadence.MissionModels.AuthoredHead do
     end
   end
 
+  @doc "The version `change_set_id` recorded, or nil (visible inside the apply's own transaction)."
+  @spec for_change_set(binary(), binary(), binary()) :: version() | nil
+  def for_change_set(organization_id, mission_id, change_set_id) do
+    organization_id
+    |> scoped(mission_id)
+    |> where([row], row.change_set_id == ^change_set_id)
+    |> Repo.one()
+    |> view()
+  end
+
   @doc "Which of `layer_ids` are recorded versions of the mission (approved authored heads)."
   @spec recorded(binary(), binary(), [binary()]) :: MapSet.t(binary())
   def recorded(_organization_id, _mission_id, []), do: MapSet.new()

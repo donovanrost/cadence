@@ -234,6 +234,11 @@ defmodule Cadence.MissionModels do
   defdelegate approval_bases(organization_id, mission_id, revision_ids),
     to: Cadence.MissionModels.EffectiveStatuses
 
+  @doc "The authored head each of `revision_ids` is linked at, nil for a base (P3 M2, #451)."
+  @spec authored_heads(binary(), binary(), [binary()]) :: %{binary() => binary() | nil}
+  defdelegate authored_heads(organization_id, mission_id, revision_ids),
+    to: Cadence.MissionModels.EffectiveStatuses
+
   @spec fetch_plan(binary() | nil, binary(), binary(), atom()) ::
           {:ok, RuntimePlan.t()} | {:error, term()}
   def fetch_plan(organization_id, mission_id, revision_id, target)

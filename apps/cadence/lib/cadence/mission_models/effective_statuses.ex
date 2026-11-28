@@ -41,6 +41,19 @@ defmodule Cadence.MissionModels.EffectiveStatuses do
     Map.new(revision_ids, &{&1, Map.get(by_head, &1, &1)})
   end
 
+  @doc "The authored head each of `revision_ids` is linked at (nil for a base, or no link)."
+  @spec authored_heads(binary(), binary(), [binary()]) :: %{binary() => binary() | nil}
+  def authored_heads(_organization_id, _mission_id, []), do: %{}
+
+  def authored_heads(organization_id, mission_id, revision_ids) do
+    linked =
+      organization_id
+      |> head_links(mission_id, revision_ids)
+      |> Map.new(&{&1.revision_id, &1.head})
+
+    Map.new(revision_ids, &{&1, Map.get(linked, &1)})
+  end
+
   @spec statuses(binary(), binary(), [binary()]) :: %{binary() => atom()}
   def statuses(_organization_id, _mission_id, []), do: %{}
 
