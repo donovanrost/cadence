@@ -57,6 +57,23 @@ defmodule CadenceWeb.Console.CommandGroupJSON do
   @spec push(map()) :: map()
   def push(view), do: view |> Page.first() |> Map.drop([:targets, :events]) |> render()
 
+  @doc """
+  The answer to a decision (#1051): the group as it now stands in the six fields a decider acts on
+  (`id`, `state`, `decision`, `decided_by`, `decided_at`, `review_token`), each as on the show.
+  The screen re-reads the group for the rest.
+  """
+  @spec decision_summary(map()) :: map()
+  def decision_summary(group) do
+    encode(%{
+      id: group.command_group_id,
+      state: group.state,
+      decision: group.decision,
+      decided_by: group.decided_by,
+      decided_at: group.decided_at,
+      review_token: GroupDecision.review_token(group)
+    })
+  end
+
   @spec targets([map()]) :: [map()]
   def targets(targets), do: encode(targets)
 

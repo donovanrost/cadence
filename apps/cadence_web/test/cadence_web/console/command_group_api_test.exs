@@ -52,6 +52,10 @@ defmodule CadenceWeb.Console.CommandGroupAPITest do
     Map.merge(%{"kind" => "go", "expected_review" => data["data"]["review_token"]}, extra)
   end
 
+  # The group as the console re-reads it after a decision.
+  defp group(c, id),
+    do: c.approver |> as() |> get(base(c) <> "/command-groups/#{id}") |> json_response(200)
+
   defp as(user), do: TestFixtures.member_conn(user)
 
   defp body(c, command, args, extra \\ %{}) do
@@ -97,6 +101,29 @@ defmodule CadenceWeb.Console.CommandGroupAPITest do
       base(c) <> "/command-groups",
       Map.merge(body, %{"preflight_digest" => pre["digest"], "acknowledged_holds" => acks})
     )
+  end
+
+  describe "the answer to a decision (#1051)" do
+    test "is the group's six decision fields, and the show agrees", c do
+      %{"data" => %{"id" => id}} =
+        c
+        |> create(body(c, "SET_COUNTER", %{"amount" => 1}, %{"log_entry" => "x"}))
+        |> json_response(201)
+
+      assert %{"data" => answer} =
+               as(c.approver)
+               |> post(base(c) <> "/command-groups/#{id}/decision", go(c, id))
+               |> json_response(200)
+
+      assert answer |> Map.keys() |> Enum.sort() ==
+               ~w(decided_at decided_by decision id review_token state)
+
+      assert %{"kind" => "go"} = answer["decision"]
+      assert answer["decided_by"]["user_id"] == c.approver.user_id
+
+      assert %{"data" => shown} = group(c, id)
+      assert Map.take(shown, Map.keys(answer)) == answer
+    end
   end
 
   describe "HOLDs hold (DECISIONS #60)" do
@@ -193,10 +220,12 @@ defmodule CadenceWeb.Console.CommandGroupAPITest do
       pending = body(c, "SET_COUNTER", %{"amount" => 1}, %{"log_entry" => "x"})
       %{"data" => %{"id" => id}} = c |> create(pending) |> json_response(201)
 
-      assert %{"data" => %{"state" => "queued", "events" => events}} =
+      assert %{"data" => %{"id" => ^id, "state" => "queued"}} =
                as(c.approver)
                |> post(base(c) <> "/command-groups/#{id}/decision", go(c, id))
                |> json_response(200)
+
+      assert %{"data" => %{"events" => events}} = group(c, id)
 
       # Only the submitter's acknowledgement; the approver needed none.
       assert [%{"actor" => %{"user_id" => requester_id}}] =
@@ -223,13 +252,15 @@ defmodule CadenceWeb.Console.CommandGroupAPITest do
         %{"key" => "conflicts", "hold_basis" => basis, "note" => "The load shed goes first."}
       ]
 
-      assert %{"data" => %{"state" => "queued", "events" => events}} =
+      assert %{"data" => %{"id" => ^id, "state" => "queued"}} =
                as(c.approver)
                |> post(
                  base(c) <> "/command-groups/#{id}/decision",
                  go(c, id, %{"acknowledged_holds" => ack})
                )
                |> json_response(200)
+
+      assert %{"data" => %{"events" => events}} = group(c, id)
 
       assert %{
                "actor" => %{"user_id" => approver_id},

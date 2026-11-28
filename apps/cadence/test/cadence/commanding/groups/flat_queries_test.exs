@@ -39,8 +39,12 @@ defmodule Cadence.Commanding.Groups.FlatQueriesTest do
   defp create(c, draft) do
     {:ok, preflight} = preflight(c, draft)
 
+    # As the console's create does: the submit reuses what the preflight validated (#1051).
     {:ok, group} =
-      GroupSubmission.submit(c.scope, c.mission, draft, preflight_digest: preflight.digest)
+      GroupSubmission.submit(c.scope, c.mission, draft,
+        preflight_digest: preflight.digest,
+        request_validation: preflight.request_validation
+      )
 
     group
   end
@@ -58,7 +62,7 @@ defmodule Cadence.Commanding.Groups.FlatQueriesTest do
 
   # The fixed part (#1051): what one request reads whatever the group (the activation, the basis,
   # the lanes' open work, the response), with headroom of a few over today's count.
-  @budget %{"preflight" => 24, "create" => 48, "create armed" => 50, "go" => 48}
+  @budget %{"preflight" => 24, "create" => 38, "create armed" => 42, "go" => 46}
 
   defp flat!(label, {few_label, run_few}, {many_label, run_many}) do
     {few, _} = count_queries(run_few)
