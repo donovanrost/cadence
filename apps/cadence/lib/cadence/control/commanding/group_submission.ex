@@ -23,6 +23,7 @@ defmodule Cadence.Control.Commanding.GroupSubmission do
 
   alias Cadence.Commanding.Groups.{Admission, CommandGroup, GroupStore, Validation}
   alias Cadence.Comms.UplinkResolution
+  alias Cadence.Control.Commanding.WithdrawnAtGo
   alias Cadence.Management.Commanding, as: ManagementCommanding
   alias Cadence.Management.Commanding.ApprovedCommand
   alias Cadence.Platform.ScopedReadUpdates
@@ -115,11 +116,18 @@ defmodule Cadence.Control.Commanding.GroupSubmission do
         if(second_go?, do: :approval_pending, else: :queued)
       )
 
-    with {:ok, group} <- GroupStore.insert_group(group),
+    with {:ok, seen} <- withdrawn_seen(org, mission, validated, second_go?, opts),
+         {:ok, group} <- GroupStore.insert_group(group),
          :ok <- GroupStore.insert_members(members),
          :ok <-
            Drafts.consume({org, mission, actor["user_id"]}, Keyword.get(opts, :draft_revision)),
-         :ok <- record_not_required(members, actor, second_go?, opts) do
+         :ok <-
+           record_not_required(
+             members,
+             actor,
+             second_go?,
+             Keyword.merge(opts, seen: seen, craft: craft_by_index(validated))
+           ) do
       queued =
         if second_go?, do: [], else: Admission.enqueue(members, actor, &auto_approved_hash/1)
 
@@ -138,6 +146,22 @@ defmodule Cadence.Control.Commanding.GroupSubmission do
       {:ok, %{group: group, lanes: queued |> Enum.map(& &1.queue_lane_key) |> Enum.uniq()}}
     end
   end
+
+  # E2 (#546): a group armed by its submit (no second GO) records which withdrawn model approvals
+  # it was armed knowing, and checks its acknowledgement covers exactly them; a withdrawal since
+  # the preflight is a stale preflight. A group waiting for a second GO records at the GO.
+  defp withdrawn_seen(_org, _mission, _validated, true, _opts), do: {:ok, %{}}
+
+  defp withdrawn_seen(org, mission, validated, false, opts) do
+    ids = Enum.map(validated.targets, & &1.spacecraft_id)
+
+    case WithdrawnAtGo.seen(org, mission, ids, Keyword.get(opts, :hold_acks, [])) do
+      {:ok, seen} -> {:ok, seen}
+      {:error, :withdrawal_not_acknowledged} -> {:error, :preflight_stale}
+    end
+  end
+
+  defp craft_by_index(validated), do: Map.new(validated.targets, &{&1.index, &1.spacecraft_id})
 
   # DECISIONS #60: each acknowledged preflight HOLD, with who acknowledged it, the note and the
   # HOLD's basis, so the audit shows what was known when the group was armed.
@@ -227,7 +251,14 @@ defmodule Cadence.Control.Commanding.GroupSubmission do
         decision: :not_required,
         decided_by: actor,
         decided_at: now,
-        metadata: %{"command_group_id" => member.command_group_id},
+        metadata:
+          Map.merge(
+            %{"command_group_id" => member.command_group_id},
+            WithdrawnAtGo.metadata(
+              Keyword.fetch!(opts, :seen),
+              Keyword.fetch!(opts, :craft)[member.group_slot.target_index]
+            )
+          ),
         subject_digest: RequestDigest.digest(member),
         separated_from: [],
         admin_mode: admin_mode
