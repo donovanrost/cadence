@@ -47,7 +47,7 @@ defmodule QaRestPlanning do
 
     client =
       Enum.reduce(spacecraft, client, fn craft, client ->
-        seed_template(client, path, craft["id"], listed["templates"])
+        seed_template(client, path, craft["id"], craft["name"], listed["templates"])
       end)
 
     if spacecraft == [],
@@ -57,7 +57,7 @@ defmodule QaRestPlanning do
     client
   end
 
-  defp seed_template(client, path, spacecraft_id, templates) do
+  defp seed_template(client, path, spacecraft_id, spacecraft_name, templates) do
     existing =
       Enum.find(templates, fn template ->
         template["target"] == %{
@@ -67,11 +67,11 @@ defmodule QaRestPlanning do
       end)
 
     if existing do
-      update_template(client, path, existing["id"])
+      update_template(client, path, existing["id"], spacecraft_name)
     else
       {client, _} =
         request!(client, :post, path <> "/templates", %{
-          name: "Earendil downlink #{spacecraft_id}",
+          name: "Earendil downlink #{spacecraft_name}",
           target: %{kind: "spacecraft_ids", spacecraft_ids: [spacecraft_id]},
           document: template_document(),
           operation_id: "earendil-downlink-#{spacecraft_id}"
@@ -81,15 +81,19 @@ defmodule QaRestPlanning do
     end
   end
 
-  defp update_template(client, path, template_id) do
+  defp update_template(client, path, template_id, spacecraft_name) do
     {client, detail} = request!(client, :get, path <> "/templates/#{template_id}")
 
-    if get_in(detail, ["document", "requirement", "minimum_duration_seconds"]) ==
-         @minimum_duration do
+    name = "Earendil downlink #{spacecraft_name}"
+
+    if detail["name"] == name and
+         get_in(detail, ["document", "requirement", "minimum_duration_seconds"]) ==
+           @minimum_duration do
       client
     else
       {client, _} =
         request!(client, :post, path <> "/templates/#{template_id}", %{
+          name: name,
           document: template_document(),
           expected_version: detail["version"]
         })

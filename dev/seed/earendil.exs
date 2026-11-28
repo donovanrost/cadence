@@ -181,7 +181,7 @@ defmodule EarendilSeed do
         {_, approved} = request!(approver, :get, path <> "?status=approved")
 
         unless Enum.any?(approved["revisions"], &catalog_revision?(&1, catalog_revision_id)),
-               do: fail!("catalog approval", "revision is neither candidate nor approved")
+          do: fail!("catalog approval", "revision is neither candidate nor approved")
 
       revision ->
         revision_path = path <> "/#{revision["id"]}"
@@ -428,7 +428,7 @@ defmodule EarendilSeed do
       RouteChanges.extra_route_ids(
         client,
         mission_id,
-        "spacecraft_type_earendil_demo"
+        "profile-earendil-block-1"
       )
 
     routes =
@@ -514,8 +514,10 @@ defmodule EarendilSeed do
       end)
 
     IO.puts("  #{count} spacecraft sources, Telemetry Decom installations and saved drafts")
+
     if approve_configuration? and reviews != [],
       do: review_configurations(client, approver, mission_id, reviews)
+
     if switches != [], do: enable_switches(client, approver, mission_id, switches)
     client
   end
@@ -526,7 +528,9 @@ defmodule EarendilSeed do
     base = "/missions/#{mission_id}/spacecraft/#{id}"
     {client, source_id} = ensure_source(client, base, name)
     client = ensure_decom(client, base)
-    {_client, snapshot, document} = ensure_configuration(client, base, revision_id, source_id, apids)
+
+    {_client, snapshot, document} =
+      ensure_configuration(client, base, revision_id, source_id, apids)
 
     review? = is_nil(snapshot["active"]) or snapshot["active"]["document"] != document
 
@@ -745,7 +749,7 @@ defmodule EarendilSeed do
     %{
       kind: "spacecraft_profile",
       action: "create",
-      entity_id: "spacecraft_type_earendil_demo",
+      entity_id: "profile-earendil-block-1",
       document: %{
         display_name: "Earendil Block 1 — Demo",
         downlink_protocol: "tm",
@@ -821,10 +825,17 @@ defmodule EarendilSeed do
         {client, created["organization"]["id"]}
       end
 
+    client = accept_first_admin_invitation(client, org_id)
+
     {client, session} =
       request!(client, :put, "/session/organization", %{organization_id: org_id})
 
     client = %{client | csrf: session["csrf_token"]}
+    {client, directory} = request!(client, :get, "/organizations/#{org_id}/people")
+
+    unless Enum.any?(directory["members"], &(&1["email"] == email)),
+      do: fail!("first administrator", "environment admin has no Reflect Orbital membership")
+
     organization = Enum.find(session["organizations"], &(&1["id"] == org_id))
     mission = Enum.find(organization["missions"], &(&1["slug"] == "earendil"))
 
@@ -844,6 +855,23 @@ defmodule EarendilSeed do
     {client, org_id, mission_id}
   end
 
+  defp accept_first_admin_invitation(client, organization_id) do
+    {client, listing} = request!(client, :get, "/account/invitations")
+
+    case Enum.find(listing["invitations"], fn invitation ->
+           get_in(invitation, ["organization", "id"]) == organization_id
+         end) do
+      nil ->
+        client
+
+      invitation ->
+        {client, _accepted} =
+          request!(client, :post, "/account/invitations/#{invitation["id"]}/accept", %{})
+
+        client
+    end
+  end
+
   defp spacecraft_op(index) do
     name = "EARENDIL-#{String.pad_leading(Integer.to_string(index), 3, "0")}"
 
@@ -854,7 +882,7 @@ defmodule EarendilSeed do
       document: %{
         display_name: name,
         scid: index,
-        spacecraft_type_id: "spacecraft_type_earendil_demo",
+        spacecraft_type_id: "profile-earendil-block-1",
         spacecraft_type_version: 1,
         telemetry_enabled: true,
         commanding_enabled: true,
