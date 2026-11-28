@@ -65,9 +65,23 @@ defmodule Cadence.Auth.Policy do
   def authorize(%Scope{}, action, _params) when action in @delivery_credential_actions,
     do: {:error, :authenticated_user_required}
 
-  # Settings and activation review use named policy actions. The initial policy
-  # admits active human members; customer approval requirements never assign a
-  # built-in role. These action boundaries are the future Cedar integration.
+  # Settings use named policy actions. Reading is any active member's (an organization's settings
+  # through `:operate_organization`, a mission's through `:operate_mission`). Writing a mission's
+  # settings stays a mission operator's; writing an **organization's** settings needs an
+  # organization admin (#1159): they apply to every mission of the organization. These action
+  # boundaries are the future Cedar integration.
+  def authorize(%Scope{actor_kind: :user} = scope, :manage_settings, %{
+        organization_id: organization_id,
+        mission_id: nil
+      }) do
+    authorize_organization_capability(
+      scope,
+      organization_id,
+      :organization_admin,
+      :manage_settings
+    )
+  end
+
   def authorize(%Scope{actor_kind: :user} = scope, action, %{
         organization_id: organization_id,
         mission_id: mission_id
