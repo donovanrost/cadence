@@ -22,10 +22,10 @@ defmodule Cadence.Commanding.MonitoringApplyCommandingTest do
   alias Cadence.Governance.ActivationPolicy
   alias Cadence.Management.Activations
   alias Cadence.MissionModels
+  alias Cadence.Missions
   alias Cadence.Reads.CommandCatalog
   alias Cadence.Reads.CommandPreflight
   alias Cadence.Reads.MissionModels.ActiveBasis
-  alias Cadence.Missions
   alias Cadence.SourceEndpoints
   alias Cadence.SourceEndpoints.SourceEndpointRow
 
