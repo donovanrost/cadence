@@ -24,6 +24,58 @@ defmodule Cadence.Telemetry.CurrentValueStoreETSTest do
     assert latest_sample.sample_id == "sample-new"
   end
 
+  test "one spacecraft's values are its own, found by its keys, across records, replacements and resets (#143)" do
+    t = DateTime.from_unix!(1_700_000_000)
+
+    ETS.record_samples([
+      sample("a1", "mission-ets", "HK.a", 1, t, spacecraft_id: "sc-1"),
+      sample("a2", "mission-ets", "HK.b", 2, t, spacecraft_id: "sc-1"),
+      sample("b1", "mission-ets", "HK.a", 3, t, spacecraft_id: "sc-2"),
+      sample("c1", "other-mission", "HK.a", 4, t, spacecraft_id: "sc-1")
+    ])
+
+    ids = fn craft, opts ->
+      "mission-ets"
+      |> ETS.latest_values_for_mission([spacecraft_id: craft] ++ opts)
+      |> Enum.map(& &1.sample_id)
+      |> Enum.sort()
+    end
+
+    assert ids.("sc-1", []) == ["a1", "a2"]
+    assert ids.("sc-2", []) == ["b1"]
+    assert ids.("sc-3", []) == []
+    assert ids.("sc-1", point_ids: ["HK.b"]) == ["a2"]
+
+    # A newer sample of a known key is one value, not two.
+    ETS.record_samples([
+      sample("a1b", "mission-ets", "HK.a", 5, DateTime.add(t, 10), spacecraft_id: "sc-1")
+    ])
+
+    assert ids.("sc-1", []) == ["a1b", "a2"]
+
+    # A point replaced away and a whole scope replaced: what is gone is not listed, what came is.
+    ETS.replace_value("mission-ets", "HK.b", nil, spacecraft_id: "sc-1")
+    assert ids.("sc-1", []) == ["a1b"]
+
+    ETS.replace_values_for_scope(
+      "mission-ets",
+      [sample("n1", "mission-ets", "HK.n", 6, t, spacecraft_id: "sc-2")],
+      spacecraft_id: "sc-2"
+    )
+
+    assert ids.("sc-2", []) == ["n1"]
+
+    # It agrees with the mission-wide read.
+    assert "mission-ets"
+           |> ETS.latest_values_for_mission([])
+           |> Enum.map(& &1.sample_id)
+           |> Enum.sort() ==
+             Enum.sort(ids.("sc-1", []) ++ ids.("sc-2", []))
+
+    ETS.reset("mission-ets")
+    assert ids.("sc-1", []) == []
+  end
+
   test "does not replace current state with a late-arriving older source-time sample" do
     current_sample =
       sample("sample-current", "mission-ets", "HK.counter", 20, ~U[2026-06-21 12:10:05Z],

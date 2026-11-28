@@ -5,7 +5,7 @@ defmodule Cadence.Reads.FleetReceiptsTest do
   """
   use Cadence.DataCase, async: false
 
-  alias Cadence.Reads.FleetStatus
+  alias Cadence.Reads.{DurableReceiptCache, FleetStatus}
   alias Cadence.Telemetry.{CurrentValueStore, Sample}
   alias Cadence.Telemetry.CurrentValueStore.{ETS, Postgres}
 
@@ -133,18 +133,35 @@ defmodule Cadence.Reads.FleetReceiptsTest do
       org = "org-fleet-receipts-cache-#{suffix}"
       mission = "mission-fleet-receipts-cache-#{suffix}"
       persist_mission_scope(org, mission)
-      saved = Application.get_env(:cadence, :fleet_durable_receipts_ttl_ms)
+      saved = Application.get_env(:cadence, :durable_receipts_ttl_ms)
       key = {FleetStatus, :durable, org, mission}
 
       on_exit(fn ->
-        :persistent_term.erase(key)
+        # A background refresh still asking the store would outlive the test's connection.
+        await_refreshes()
+        DurableReceiptCache.forget(key)
 
         if saved,
-          do: Application.put_env(:cadence, :fleet_durable_receipts_ttl_ms, saved),
-          else: Application.delete_env(:cadence, :fleet_durable_receipts_ttl_ms)
+          do: Application.put_env(:cadence, :durable_receipts_ttl_ms, saved),
+          else: Application.delete_env(:cadence, :durable_receipts_ttl_ms)
       end)
 
       %{org: org, mission: mission}
+    end
+
+    # Waits for each in-flight refresh to end (monitoring it, no polling).
+    defp await_refreshes do
+      for pid <- Task.Supervisor.children(DurableReceiptCache.Tasks) do
+        ref = Process.monitor(pid)
+
+        receive do
+          {:DOWN, ^ref, :process, ^pid, _reason} -> :ok
+        after
+          2_000 -> :ok
+        end
+      end
+
+      :ok
     end
 
     defp queries(fun) do
@@ -173,7 +190,7 @@ defmodule Cadence.Reads.FleetReceiptsTest do
     end
 
     test "with a TTL, the history store is asked once and then served from the cache", c do
-      Application.put_env(:cadence, :fleet_durable_receipts_ttl_ms, 60_000)
+      Application.put_env(:cadence, :durable_receipts_ttl_ms, 60_000)
       load = fn -> FleetStatus.last_received_with_status(c.org, c.mission) end
 
       first = queries(load)
@@ -186,13 +203,13 @@ defmodule Cadence.Reads.FleetReceiptsTest do
     end
 
     test "with no TTL, every read asks the history store", c do
-      Application.put_env(:cadence, :fleet_durable_receipts_ttl_ms, 0)
+      Application.put_env(:cadence, :durable_receipts_ttl_ms, 0)
       load = fn -> FleetStatus.last_received_with_status(c.org, c.mission) end
       assert queries(load) == queries(load)
     end
 
     test "an expired entry is served at once and refreshed in the background", c do
-      Application.put_env(:cadence, :fleet_durable_receipts_ttl_ms, 1)
+      Application.put_env(:cadence, :durable_receipts_ttl_ms, 1)
       load = fn -> FleetStatus.last_received_with_status(c.org, c.mission) end
       load.()
       Process.sleep(10)

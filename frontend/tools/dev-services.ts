@@ -2,9 +2,7 @@ export const developmentPorts = Object.freeze({
   host: 5173,
   "telemetry-decom": 4174,
   "comms-overview": 4176,
-  "mission-catalog": 4177,
   "organization-admin": 4178,
-  spacecraft: 4179,
   "ops-console": 4180,
   console: 5181,
 });

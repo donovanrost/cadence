@@ -141,23 +141,6 @@ defmodule Cadence.Contacts.PathTemplateStore do
     |> Map.new(&{{&1.path_template_id, &1.version}, PathTemplateRow.to_domain(&1)})
   end
 
-  @spec list(binary()) :: [PathTemplate.t()]
-  def list(mission_id) when is_binary(mission_id) do
-    PathTemplateRow
-    |> latest_versioned_rows(mission_id)
-    |> Enum.reject(&(&1.lifecycle_state == "deleted"))
-    |> Enum.map(&PathTemplateRow.to_domain/1)
-  end
-
-  @spec list(binary(), binary()) :: [PathTemplate.t()]
-  def list(organization_id, mission_id)
-      when is_binary(organization_id) and is_binary(mission_id) do
-    PathTemplateRow
-    |> latest_versioned_rows(organization_id, mission_id)
-    |> Enum.reject(&(&1.lifecycle_state == "deleted"))
-    |> Enum.map(&PathTemplateRow.to_domain/1)
-  end
-
   @doc "Returns one bounded page of active latest path-template versions."
   @spec list_page(binary(), binary(), keyword()) :: Listing.Page.t()
   def list_page(organization_id, mission_id, opts \\ [])
@@ -726,31 +709,6 @@ defmodule Cadence.Contacts.PathTemplateStore do
     |> order_by([row], desc: row.version)
     |> limit(1)
     |> Repo.one()
-  end
-
-  defp latest_versioned_rows(schema, mission_id) do
-    schema
-    |> where([row], row.mission_id == ^mission_id)
-    |> order_by([row], asc: row.path_template_id, desc: row.version)
-    |> Repo.all()
-    |> Enum.reduce(%{}, fn row, acc ->
-      Map.put_new(acc, row.path_template_id, row)
-    end)
-    |> Map.values()
-  end
-
-  defp latest_versioned_rows(schema, organization_id, mission_id) do
-    schema
-    |> where(
-      [row],
-      row.organization_id == ^organization_id and row.mission_id == ^mission_id
-    )
-    |> order_by([row], asc: row.path_template_id, desc: row.version)
-    |> Repo.all()
-    |> Enum.reduce(%{}, fn row, acc ->
-      Map.put_new(acc, row.path_template_id, row)
-    end)
-    |> Map.values()
   end
 
   defp apply_search(query, nil), do: query

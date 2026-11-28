@@ -84,15 +84,6 @@ defmodule Cadence.SpacecraftTypeStoreTest do
 
       assert listed.spacecraft_type_id == persisted_v1.spacecraft_type_id
       assert listed.version == 2
-
-      versions =
-        Cadence.SpacecraftTypeStore.list_spacecraft_type_versions(
-          organization_id,
-          mission_id,
-          persisted_v1.spacecraft_type_id
-        )
-
-      assert Enum.map(versions, & &1.version) == [2, 1]
     end
 
     test "keeps custom application keys as strings", %{

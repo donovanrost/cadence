@@ -108,18 +108,13 @@ defmodule Cadence.Architecture.ContextBoundary do
     "lib/cadence/control/model_approval_gate.ex" => :catalog,
     "lib/cadence/extensions/registry.ex" => :composition,
     "lib/cadence/applications/registry.ex" => :composition,
-    "lib/cadence/applications/organization_admin.ex" => :composition,
     "lib/cadence/applications/legacy_comms_overview.ex" => :composition,
-    "lib/cadence/applications/spacecraft.ex" => :composition,
     "lib/cadence/applications/ops_console.ex" => :composition,
-    "lib/cadence/applications/mission_catalog.ex" => :composition,
     "lib/cadence/applications/limits.ex" => :composition,
     "lib/cadence/applications/derived_telemetry.ex" => :composition,
     "lib/cadence/applications/comms.ex" => :composition,
     "lib/cadence/applications/ops_dock.ex" => :read_models,
     "lib/cadence/runtime/process_namespace.ex" => :composition,
-    "lib/cadence/notifications/actions.ex" => :identity,
-    "lib/cadence/notifications/recipient.ex" => :identity,
     "lib/cadence/runtime/supervisor.ex" => :composition,
     "lib/cadence/platform/root_composition.ex" => :composition,
     "lib/cadence/applications/json_boundary.ex" => :platform,
@@ -431,7 +426,14 @@ defmodule Cadence.Architecture.ContextBoundary do
                                 {"lib/cadence/control/providers.ex",
                                  "lib/cadence/control/contacts/provider_grants.ex"},
                                 {"lib/cadence/governance.ex",
-                                 "lib/cadence/management/comms/source_endpoint_references.ex"}
+                                 "lib/cadence/management/comms/source_endpoint_references.ex"},
+                                # E2 (#546): a GO records, and an unattended release compares,
+                                # which withdrawn model approvals its craft ran on, through the
+                                # composition context's one read of them.
+                                {"lib/cadence/commanding.ex",
+                                 "lib/cadence/control/withdrawn_pins.ex"},
+                                {"lib/cadence/control/commanding/withdrawn_at_go.ex",
+                                 "lib/cadence/control/withdrawn_pins.ex"}
                               ])
 
   @type context ::

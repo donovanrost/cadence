@@ -13,7 +13,6 @@ defmodule Cadence.Applications.ProviderRegistryTest do
     SurfaceQueryContribution
   }
 
-  alias Cadence.Applications.Spacecraft
   alias Cadence.Auth.Scope
   alias Cadence.Reads.ApplicationSurfaces.ProviderRegistry, as: SurfaceProviderRegistry
 
@@ -188,17 +187,14 @@ defmodule Cadence.Applications.ProviderRegistryTest do
 
     expected_contribution_counts = %{
       "comms" => 9,
-      "spacecraft" => 8,
-      "mission_catalog" => 8,
       "telemetry_decom" => 2,
       "derived_telemetry" => 1,
       "limits" => 2,
-      "ops_console" => 15,
-      "organization_admin" => 1
+      "ops_console" => 15
     }
 
-    assert length(SurfaceProviderRegistry.contributions()) == 46
-    assert map_size(providers) == 46
+    assert length(SurfaceProviderRegistry.contributions()) == 29
+    assert map_size(providers) == 29
 
     assert providers
            |> Map.keys()
@@ -343,13 +339,5 @@ defmodule Cadence.Applications.ProviderRegistryTest do
     assert ActionProviderRegistry.providers(
              Enum.map(1..17, fn _index -> Cadence.TestActionContributors.Alpha end)
            ) == %{}
-  end
-
-  test "registers Spacecraft through its stable application identity" do
-    assert Spacecraft.application_key() == "spacecraft"
-
-    assert ActionProviderRegistry.providers([Spacecraft]) == %{
-             "spacecraft" => Cadence.Applications.Spacecraft.ActionProvider
-           }
   end
 end

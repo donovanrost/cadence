@@ -9,18 +9,15 @@ defmodule Cadence.Applications.ActionContractLedgerTest do
     ledgers = ActionContractLedger.ledgers()
 
     assert map_size(ledgers) == 3
-    assert length(ledgers.declared) == 24
+    assert length(ledgers.declared) == 6
     assert ledgers.declared == ledgers.provider
     assert ledgers.declared == ledgers.registry
-    assert length(Enum.uniq(ledgers.declared)) == 24
+    assert length(Enum.uniq(ledgers.declared)) == 6
 
     assert ledgers.declared
            |> Enum.frequencies_by(&elem(&1, 0)) == %{
-             "mission_catalog" => 11,
-             "spacecraft" => 6,
              "telemetry_decom" => 4,
-             "comms" => 2,
-             "organization_admin" => 1
+             "comms" => 2
            }
   end
 
@@ -36,7 +33,7 @@ defmodule Cadence.Applications.ActionContractLedgerTest do
     assert :ok = ActionContractLedger.admit(valid, Cadence.Applications.Comms.ActionProvider)
 
     for request <- [
-          %{valid | application_key: "spacecraft"},
+          %{valid | application_key: "telemetry_decom"},
           %{valid | application_version: 2},
           %{valid | surface_id: "transport", surface_version: 2},
           %{valid | action_id: "archive_provider", surface_id: "routing_new"},

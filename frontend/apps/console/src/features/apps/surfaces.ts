@@ -1,4 +1,3 @@
-import type { RouteLocationRaw } from "vue-router";
 import { isError, isKeyOf, type ApiError } from "@/api";
 import type { SurfaceRow } from "./host.ts";
 
@@ -64,25 +63,4 @@ export function surfaceLink(
     surface: decodeURIComponent(surface),
     query: Object.fromEntries(url.searchParams),
   };
-}
-
-/**
- * Surfaces an app no longer has, with their console home (ux, sweep row 2): a bookmark or old link
- * lands there instead of on an unknown-surface notice. Spacecraft's create/edit forms saved directly;
- * Setup's reviewed pages own them now.
- */
-export function retiredSurfaceHome(
-  appKey: string,
-  surface: string,
-  spacecraftId: string | null,
-): RouteLocationRaw | null {
-  if (appKey !== "spacecraft") return null;
-  if (surface === "new") return { name: "setup.spacecraft.new" };
-  if (surface === "profile_new") return { name: "setup.profile.new" };
-  if (surface === "edit") {
-    return spacecraftId
-      ? { name: "setup.spacecraft.one", params: { spacecraftId } }
-      : { name: "setup.spacecraft" };
-  }
-  return null;
 }

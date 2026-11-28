@@ -24,7 +24,12 @@ export const snapshotWire = (o: Record<string, unknown> = {}) => ({
   saved_version: 4,
   document: documentWire(),
   external_changes: false,
-  active: { version: 3, generation: 9, document: documentWire({ handled_apids: [42] }) },
+  active: {
+    version: 3,
+    generation: 9,
+    document: documentWire({ handled_apids: [42] }),
+    approval_withdrawn: null,
+  },
   review: null,
   approval: {
     requirement: "independent",

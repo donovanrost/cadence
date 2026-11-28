@@ -2,10 +2,11 @@
 import { computed, ref } from "vue";
 import { describeApiError } from "@/api";
 import { signOut } from "@/api/session.ts";
-import { ApButton, ApCallout, ApMenuButton, ApMenuItem, initials, useNow } from "@/ui";
+import { ApButton, ApCallout, ApMenuButton, ApMenuItem, initials, plural, useNow } from "@/ui";
 import AdminModeSheet from "./AdminModeSheet.vue";
 import { leaveAdminMode, useAdminMode } from "./admin-mode.ts";
 import { hasCapability, useSession } from "./session.ts";
+import { unreadNotices } from "./unread-notices.ts";
 
 const session = useSession();
 
@@ -18,6 +19,14 @@ const eligible = computed(
   () => session.platform_admin_eligible || hasCapability(session, "platform_admin"),
 );
 const invitations = computed(() => session.pending_invitations_count ?? 0);
+/** #709: the server's count of my unread notices (refreshed after Mark read). */
+const notices = computed(() =>
+  unreadNotices.value > 0 ? plural(unreadNotices.value, "unread notice") : null,
+);
+const triggerLabel = computed(
+  () =>
+    `${initials(name.value)}, account menu for ${name.value}${notices.value ? `, ${notices.value}` : ""}`,
+);
 const now = useNow();
 const admin = useAdminMode(() => now.value);
 const adminSheet = ref<InstanceType<typeof AdminModeSheet> | null>(null);
@@ -58,12 +67,15 @@ function dismiss() {
   <div ref="root" class="relative ml-auto flex border-l border-hairline">
     <ApMenuButton
       class="flex"
-      :label="`${initials(name)}, account menu for ${name}`"
+      :label="triggerLabel"
       :menu-label="`Account menu for ${name}`"
       trigger-class="w-[52px] cursor-pointer border-0 bg-transparent font-display text-base font-semibold tracking-[.1em] text-readout hover:bg-raised"
       menu-class="min-w-[260px]"
     >
-      <template #trigger>{{ initials(name) }}</template>
+      <template #trigger
+        >{{ initials(name)
+        }}<span v-if="notices" aria-hidden="true" class="text-caution-text">•</span></template
+      >
       <div role="none" class="px-3.5 pt-1.5 pb-2.5">
         <p class="m-0 text-base font-semibold">{{ name }}</p>
         <p class="m-0 font-mono text-xs text-text-3">{{ session.user.email }}</p>
@@ -82,6 +94,13 @@ function dismiss() {
       <ApMenuItem v-if="invitations > 0" :to="{ name: 'account' }" class="text-caution-text">{{
         invitations === 1 ? "1 invitation" : `${invitations} invitations`
       }}</ApMenuItem>
+      <!-- #709: unread notices (added to an organization) open Account, where they're read. -->
+      <ApMenuItem
+        v-if="notices"
+        :to="{ name: 'account', hash: '#notices' }"
+        class="text-caution-text"
+        >{{ notices }}</ApMenuItem
+      >
       <template v-if="eligible">
         <template v-if="admin.active.value">
           <ApMenuItem :to="{ name: 'admin' }">Admin area</ApMenuItem>

@@ -5,6 +5,7 @@ import { catalogIndexReader, startedLine } from "./api.ts";
 const row = (requested_by?: unknown) => ({
   id: "run-1",
   file_name: "fsw.xml",
+  format_label: "XTCE 1.3",
   status: "succeeded",
   diagnostic_counts: { error: 0, warning: 0, info: 0 },
   revision_number: 14,

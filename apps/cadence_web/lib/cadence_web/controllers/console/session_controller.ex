@@ -125,8 +125,17 @@ defmodule CadenceWeb.Console.SessionController do
         admin_mode_expires_at: admin_mode_expires_at(conn)
       })
 
-    # L21: the org switcher footer and /no-organization show it on every page.
-    json(conn, %{data: Map.put(session, :pending_invitations_count, pending_invitations(scope))})
+    # L21: the org switcher footer and /no-organization show it on every page. #709: the account
+    # menu's unread notices, counted over the same rows GET /account/notices lists.
+    json(conn, %{
+      data:
+        session
+        |> Map.put(:pending_invitations_count, pending_invitations(scope))
+        |> Map.put(
+          :unread_notices_count,
+          Cadence.Notifications.listed_unread_count(scope.user.user_id)
+        )
+    })
   end
 
   defp pending_invitations(%Scope{user: user}),

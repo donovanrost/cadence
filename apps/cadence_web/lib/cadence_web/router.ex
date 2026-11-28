@@ -231,6 +231,9 @@ defmodule CadenceWeb.Router do
     get("/account/invitations", AccountInvitationController, :index)
     post("/account/invitations/:invitation_id/accept", AccountInvitationController, :accept)
     post("/account/invitations/:invitation_id/decline", AccountInvitationController, :decline)
+    # #709: my notices (the legacy bell's), and Mark read.
+    get("/account/notices", AccountNoticeController, :index)
+    post("/account/notices/:notice_id/read", AccountNoticeController, :read)
 
     scope "/missions/:mission_id" do
       pipe_through(:console_mission)
@@ -431,6 +434,8 @@ defmodule CadenceWeb.Router do
       # Investigate History (owner: api). Contract: docs/apogee/api/alarms-console.md §History
       get("/alarm-episodes/:episode_id/history", AlarmHistoryController, :episode)
       get("/spacecraft/:spacecraft_id/alarm-episodes", AlarmHistoryController, :spacecraft)
+      # #143: every point of one spacecraft, from both stores (owner: telemetry).
+      get("/spacecraft/:spacecraft_id/point-conditions", PointConditionController, :index)
       get("/spacecraft/:spacecraft_id/passes", SpacecraftPassesController, :show)
       # L14 provider-change decisions (owner: api), ahead of the generic attention verbs.
       post("/attention/provider_change/:id/approve", ProviderChangeController, :approve)

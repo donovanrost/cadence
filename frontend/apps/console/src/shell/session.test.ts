@@ -19,6 +19,7 @@ const session = (current: readonly string[]): Session => ({
   platform_admin_eligible: false,
   admin_mode_expires_at: null,
   pending_invitations_count: null,
+  unread_notices_count: 0,
   capabilities: current,
   organizations: [],
   csrf_token: "t",

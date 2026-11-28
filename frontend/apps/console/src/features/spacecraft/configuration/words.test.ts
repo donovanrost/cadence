@@ -42,7 +42,7 @@ describe("U94 status, steps and fields", () => {
     expect(versionsLine(read({ active: null }))).toBe("v4 saved");
     const v0 = read({
       saved_version: null,
-      active: { version: 0, generation: 1, document: documentWire() },
+      active: { version: 0, generation: 1, document: documentWire(), approval_withdrawn: null },
     });
     expect(versionsLine(v0)).toBeNull();
   });

@@ -12,20 +12,16 @@ defmodule Cadence.Applications.ActionContractLedger do
   """
 
   alias Cadence.Applications.{ActionRequest, ApplicationDefinition, Registry}
-  alias Cadence.Applications.{Comms, MissionCatalog, Spacecraft, TelemetryDecom}
+  alias Cadence.Applications.{Comms, TelemetryDecom}
 
   @type binding :: {binary(), pos_integer(), binary(), pos_integer(), binary()}
 
-  @contributors [MissionCatalog, Spacecraft, TelemetryDecom, Comms]
-  @additional_contributors [Cadence.Applications.OrganizationAdmin]
+  @contributors [TelemetryDecom, Comms]
   @max_bindings 128
-
-  @compile {:no_warn_undefined, {Cadence.Applications.OrganizationAdmin, :definition, 0}}
-  @compile {:no_warn_undefined, {Cadence.Applications.OrganizationAdmin, :action_provider, 0}}
 
   @spec contributors() :: [module()]
   def contributors do
-    @contributors ++ @additional_contributors
+    @contributors
   end
 
   @doc "Returns the rows declared by the authoritative application modules."

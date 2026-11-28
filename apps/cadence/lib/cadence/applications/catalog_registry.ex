@@ -11,9 +11,7 @@ defmodule Cadence.Applications.CatalogRegistry do
     JSONBoundary,
     LegacyCommsOverview,
     Limits,
-    MissionCatalog,
     OpsConsole,
-    Spacecraft,
     TelemetryDecomCatalogContribution
   }
 
@@ -22,13 +20,10 @@ defmodule Cadence.Applications.CatalogRegistry do
     Comms,
     LegacyCommsOverview,
     Limits,
-    MissionCatalog,
-    Spacecraft,
     TelemetryDecomCatalogContribution,
     OpsConsole,
     DerivedTelemetry
   ]
-  @additional_contributors [Cadence.Applications.OrganizationAdmin]
 
   @spec validate() :: :ok | {:error, :invalid_application_catalog_registry}
   def validate do
@@ -67,22 +62,9 @@ defmodule Cadence.Applications.CatalogRegistry do
 
   def fetch(_application_key), do: {:error, :unknown_catalog_contribution}
 
-  @spec fetch_default(ApplicationDefinition.scope()) ::
-          {:ok, CatalogContribution.t()} | {:error, :unknown_catalog_contribution}
-  def fetch_default(scope) when is_atom(scope) do
-    case Enum.find(all(), fn %CatalogContribution{definition: definition} ->
-           scope in definition.installable_scopes
-         end) do
-      %CatalogContribution{} = contribution -> {:ok, contribution}
-      nil -> {:error, :unknown_catalog_contribution}
-    end
-  end
-
-  def fetch_default(_scope), do: {:error, :unknown_catalog_contribution}
-
   defp contributors do
     @contributors ++
-      @additional_contributors ++ FixtureContributors.exporting(:catalog_contributions, 0)
+      FixtureContributors.exporting(:catalog_contributions, 0)
   end
 
   defp collect(contributors), do: collect_contributors(contributors)

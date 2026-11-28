@@ -41,10 +41,14 @@ const columns: readonly ApColumn[] = [
       <span v-else class="text-caution-text">none</span>
     </template>
     <template #cell-setup="{ row }">
-      <span v-if="row.ready" class="inline-flex items-center gap-2 text-text-3"
-        ><ApStatusMark state="nominal" />Ready</span
-      >
-      <ApTag v-else state="caution" label="Incomplete" />
+      <span class="inline-flex flex-wrap items-center gap-2">
+        <span v-if="row.ready" class="inline-flex items-center gap-2 text-text-3"
+          ><ApStatusMark state="nominal" />Ready</span
+        >
+        <ApTag v-else state="caution" label="Incomplete" />
+        <!-- E2b (#546; U109): it runs a revision whose approval was withdrawn or rejected. -->
+        <ApTag v-if="row.approvalWithdrawn" state="caution" label="No longer approved" />
+      </span>
     </template>
     <template #cell-profile="{ row }">
       <span v-if="row.profile" class="text-text-2"

@@ -35,10 +35,10 @@ test("records above the page are left out; the spacecraft is named by context", 
   ).toEqual(["Flight Operations", "Kestrel", "Comms", "Ground Stations", "Page"]);
   expect(
     labels(
-      "/missions/:mission_id/spacecraft/:spacecraft_id/routing",
-      "/missions/m1/spacecraft/s1/routing",
+      "/missions/:mission_id/spacecraft/:spacecraft_id/applications/:application_key/:surface_id",
+      "/missions/m1/spacecraft/s1/applications/telemetry_decom/manage",
     ),
-  ).toEqual(["Flight Operations", "Kestrel", "Spacecraft", "KST-1", "Page"]);
+  ).toEqual(["Flight Operations", "Kestrel", "KST-1", "Page"]);
 });
 
 test("the mission page ends at the mission", () => {

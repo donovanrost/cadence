@@ -5,17 +5,12 @@ defmodule Cadence.Applications.ActionProviderRegistry do
   alias Cadence.Applications.JSONBoundary
 
   @max_providers 16
-  @additional_contributors [Cadence.Applications.OrganizationAdmin]
 
-  @compile {:no_warn_undefined, {Cadence.Applications.OrganizationAdmin, :application_key, 0}}
-  @compile {:no_warn_undefined, {Cadence.Applications.OrganizationAdmin, :action_provider, 0}}
   @contributors [
     Cadence.Applications.Comms,
-    Cadence.Applications.Spacecraft,
     Cadence.Applications.TelemetryDecom,
     Cadence.Applications.DerivedTelemetry,
     Cadence.Applications.Limits,
-    Cadence.Applications.MissionCatalog,
     Cadence.Applications.OpsConsole
   ]
 
@@ -126,7 +121,7 @@ defmodule Cadence.Applications.ActionProviderRegistry do
     do: {:error, :invalid_application_action_provider_registry}
 
   defp additional_contributors do
-    @additional_contributors ++ FixtureContributors.exporting(:action_provider, 0)
+    FixtureContributors.exporting(:action_provider, 0)
   end
 
   defp valid_provider?(provider) when is_atom(provider) do

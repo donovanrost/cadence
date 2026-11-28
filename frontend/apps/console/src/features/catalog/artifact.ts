@@ -14,6 +14,9 @@ import { formatShort } from "@/ui";
 import { importRunRow } from "./api.ts";
 import { formatBytes } from "./importRun.ts";
 
+/** The artifact page lists the newest 50 import runs of its file (paging: #217). */
+export const artifactRunCap = 50;
+
 /**
  * L18 (api setup.md "Source files", 05aa7e399): one source file, the revisions made from it, its
  * import runs, Import again (K2) and Download (K3).
@@ -27,7 +30,8 @@ const artifactReader = d.object({
   artifact: d.object({
     id: d.token,
     file_name: d.string,
-    format_label: d.string,
+    // Null when the file's format has no registered importer any more.
+    format_label: d.nullable(d.string),
     format_version: d.nullable(d.string),
     // free-text: an IANA media type, shown as is.
     media_type: d.nullable(d.string),
@@ -48,7 +52,7 @@ const artifactReader = d.object({
     }),
     200,
   ),
-  import_runs: d.array(importRunRow, 50),
+  import_runs: d.array(importRunRow, artifactRunCap),
   permissions: d.array(d.known(["catalog.import"] as const), 10),
 });
 export type ArtifactPage = Decoded<typeof artifactReader>;
@@ -78,7 +82,10 @@ export function reimportArtifact(k: ArtifactKey) {
 
 /** "XTCE 1.2 · 2.4 MB · uploaded 11-12 14:03Z by Mira K." */
 export function artifactLine(a: ArtifactPage["artifact"]): string {
-  const format = a.format_version ? `${a.format_label} ${a.format_version}` : a.format_label;
+  const format =
+    a.format_label !== null && a.format_version
+      ? `${a.format_label} ${a.format_version}`
+      : a.format_label;
   const size = a.size_bytes === null ? null : formatBytes(a.size_bytes);
   const by = a.uploaded_by?.name ? ` by ${a.uploaded_by.name}` : "";
   return [format, size, `uploaded ${formatShort(new Date(a.uploaded_at))}${by}`]

@@ -71,7 +71,7 @@ freshness to the second; at 1 Hz feeds, throttle that to about 10 s client-side)
 ### Semantics
 
 - `telemetry`: `ok`, or `degraded` when the durable history store (QuestDB) didn't answer within
-  3 s (`config :cadence, :fleet_durable_receipts_timeout_ms`). The read still answers, with
+  3 s (`config :cadence, :durable_receipts_timeout_ms`). The read still answers, with
   freshness taken from live values and limit states only, so a spacecraft not heard since the last
   restart can read `never_heard`. Say "Telemetry history unavailable: freshness may be incomplete".
   The same timeout protects `GET /spacecraft` and the spacecraft detail, which read the same
@@ -202,6 +202,51 @@ are the same query's first page.
   always `null` for now: catalog import doesn't carry parameter descriptions through to the binding
   set yet (api-ops backlog, with M23).
 - **Not yet:** the D6 alarm lifecycle (ack/assign/hand-off).
+
+## `GET /api/v1/missions/:mission_id/spacecraft/:spacecraft_id/point-conditions` (#143)
+
+The current condition of every point of one spacecraft, from both stores. Mission-scoped like
+`/alarms`; an unknown spacecraft is `404 spacecraft_not_found`.
+
+Query: `state=all|attention` (default `all`; `attention` is critical, caution, stale and unknown
+points), `q` (a point id or name, case-insensitive), `limit` (1 to 200, default 100), `cursor`.
+
+Each row is one point from one source, so a point in both stores has two adjacent rows:
+
+```json
+{
+  "data": [{
+    "point_id": "HK.bus_voltage", "point_name": "Bus voltage", "unit": "V",
+    "source": "ground_limit | catalog_monitoring", "policy_id": null,
+    "condition": "critical | caution | nominal", "raw_limit_state": "red_high",
+    "evaluated": true, "evaluated_at": "…Z", "entered_at": "…Z", "entered_at_is_lower_bound": false,
+    "value": 4.2, "last_sample_at": "…Z", "freshness": "fresh | stale | unknown"
+  }],
+  "meta": {
+    "observed_at": "…Z", "next_cursor": null, "stale_after_s": 900, "telemetry": "ok | degraded",
+    "counts": {"total": 0, "critical": 0, "caution": 0, "stale": 0, "unknown": 0, "not_evaluated": 0}
+  }
+}
+```
+
+- **`source`** labels the facts (DECISIONS #17). `ground_limit` rows come from batch limit
+  evaluations: `evaluated_at` is when the job ran, `entered_at` when the point entered the state (the
+  newest 200 evaluations are searched; if none is found `entered_at` is null and
+  `entered_at_is_lower_bound` is true), `raw_limit_state` the `d.known` vocabulary and `value` what
+  was evaluated. `catalog_monitoring` rows are live: `policy_id` names the rule, `entered_at` is
+  when the parameter entered the state (a state is written on a transition), `evaluated_at`,
+  `raw_limit_state` and `value` are null.
+- **`evaluated: false`** is a point with an active ground limit and a sample on this spacecraft that
+  no job has evaluated yet: `nominal`, with no `evaluated_at` or `entered_at`. Monitoring rules that
+  have never changed state are not listed (the rule inventory waits for #451).
+- **Freshness.** `last_sample_at` is the newer of this node's current-value store (node-local: it
+  holds the spacecraft only on the node that owns its partition) and the durable history's
+  per-point receipt (cached up to `durable_receipts_ttl_ms`, 60 s). `stale` means older than
+  `meta.stale_after_s` (the setting Fleet uses) or never sampled; `unknown` means no sample is known
+  and `meta.telemetry` is `degraded` (the history did not answer).
+- **Order:** by the point's worst row: critical, caution, stale or unknown, the rest; then point id,
+  source, policy. `next_cursor` is the last row's key; a row that changes between pages does not
+  repeat or skip another.
 
 ## `GET /api/v1/missions/:mission_id/counts`
 

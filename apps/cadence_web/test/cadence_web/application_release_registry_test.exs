@@ -139,7 +139,7 @@ defmodule CadenceWeb.ApplicationReleaseRegistryTest do
              ApplicationReleaseRegistry.snapshot(now: @now)
   end
 
-  # The fixture builds and validates six production remotes before packaging both generations.
+  # The fixture builds and validates three production remotes before packaging both generations.
   # It needs the federation publication output (pnpm run build:publication), so CI runs it in a
   # job that builds that output (`--only frontend_publication`) and excludes it elsewhere.
   @tag timeout: 120_000
@@ -171,7 +171,9 @@ defmodule CadenceWeb.ApplicationReleaseRegistryTest do
 
     accepted = ApplicationReleaseRegistry.snapshot(now: fixture.now)
     assert {:ok, %{source: :database, entries: entries}} = accepted
-    assert length(entries) == 6
+    # comms, telemetry_decom and ops_console: #709 removed organization_admin (its only surface
+    # was the notifications bell) and #671 mission_catalog and spacecraft.
+    assert length(entries) == 3
 
     accepted_control =
       Repo.query!("""

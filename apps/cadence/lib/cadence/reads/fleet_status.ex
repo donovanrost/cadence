@@ -15,7 +15,7 @@ defmodule Cadence.Reads.FleetStatus do
   one row each in a summary the limit-state writers keep (`Cadence.Limits.Store.FleetSummary`, #849), each spacecraft's newest
   telemetry receipt comes from the current-value store, which keeps it as values are recorded
   (`CurrentValueStore.last_receipts/2`), and the durable history receipts come from a cache
-  (`fleet_durable_receipts_ttl_ms`, 60 s) refreshed off the read's path. The number of queries is
+  (`durable_receipts_ttl_ms`, 60 s) refreshed off the read's path. The number of queries is
   fixed (pinned in `fleet_status_database_test.exs`) however large the fleet is. `build/1` and
   `build_posture/1` stay the pure builders over raw events (tests), reduced to the same
   per-spacecraft facts.
@@ -27,6 +27,7 @@ defmodule Cadence.Reads.FleetStatus do
   alias Cadence.Control.Contacts
   alias Cadence.Limits.Event
   alias Cadence.Limits.Store.FleetSummary
+  alias Cadence.Reads.DurableReceiptCache
   alias Cadence.Reads.SpacecraftMetadata
   alias Cadence.Reads.Telemetry, as: TelemetryReads
   alias Cadence.SemanticObservations.FleetAlarms
@@ -35,9 +36,6 @@ defmodule Cadence.Reads.FleetStatus do
   alias Cadence.Telemetry.{Sample, SpacecraftReceipts}
 
   @default_stale_after_s 900
-  @durable_timeout_ms 3_000
-  @durable_ttl_ms 60_000
-  @degraded_ttl_ms 5_000
   @limit_rank %{critical: 2, caution: 1, nominal: 0}
 
   @type state :: :critical | :caution | :stale | :nominal | :never_heard
@@ -223,71 +221,13 @@ defmodule Cadence.Reads.FleetStatus do
 
   # The durable history store (QuestDB in production) can hang. Its receipts only fill in
   # spacecraft not heard since the last restart, so a slow or failed store degrades to the live
-  # values and limit states instead of holding the whole read (fe-ops, Compose targets).
-  #
-  # It is also a query against a time-series store, so it is not made on every fleet read (#798):
-  # the first read of a mission waits for it (so a restart never reports a heard spacecraft as never
-  # heard), and later reads use the last answer, refreshed in the background once it is
-  # `fleet_durable_receipts_ttl_ms` old (60 s; 0 reads it every time). A degraded answer is kept
-  # for 5 s only, so a recovered store is picked up soon.
+  # values and limit states instead of holding the whole read (fe-ops, Compose targets). It is not
+  # asked on every fleet read (#798): `DurableReceiptCache` keeps its last answer.
   defp durable(organization_id, mission_id) do
-    key = {__MODULE__, :durable, organization_id, mission_id}
-    now = System.monotonic_time(:millisecond)
-
-    case {durable_ttl_ms(), :persistent_term.get(key, nil)} do
-      {0, _cached} ->
-        fetch_durable(organization_id, mission_id)
-
-      {_ttl, nil} ->
-        organization_id |> fetch_durable(mission_id) |> remember(key, now)
-
-      {ttl, %{value: value} = cached} ->
-        if expired?(cached, ttl, now),
-          do: refresh_durable(organization_id, mission_id, key, cached, now)
-
-        value
-    end
+    DurableReceiptCache.get({__MODULE__, :durable, organization_id, mission_id}, fn ->
+      SpacecraftReceipts.latest_by_spacecraft(organization_id, mission_id)
+    end)
   end
-
-  # A good answer lives the TTL; a degraded one (the store did not answer) only a few seconds.
-  defp expired?(%{at: at, value: %{telemetry: :ok}}, ttl, now), do: now - at >= ttl
-  defp expired?(%{at: at}, ttl, now), do: now - at >= min(ttl, @degraded_ttl_ms)
-
-  defp remember(value, key, now) do
-    :persistent_term.put(key, %{at: now, value: value, refreshing_since: nil})
-    value
-  end
-
-  # One refresh at a time per mission, off the read's path.
-  defp refresh_durable(organization_id, mission_id, key, cached, now) do
-    unless is_integer(cached.refreshing_since) and now - cached.refreshing_since < 10_000 do
-      :persistent_term.put(key, %{cached | refreshing_since: now})
-
-      Task.start(fn ->
-        organization_id
-        |> fetch_durable(mission_id)
-        |> remember(key, System.monotonic_time(:millisecond))
-      end)
-    end
-
-    :ok
-  end
-
-  defp fetch_durable(organization_id, mission_id) do
-    task =
-      Task.async(fn -> SpacecraftReceipts.latest_by_spacecraft(organization_id, mission_id) end)
-
-    case Task.yield(task, durable_timeout_ms()) || Task.shutdown(task, :brutal_kill) do
-      {:ok, {:ok, receipts}} -> %{receipts: receipts, telemetry: :ok}
-      _unavailable_or_slow -> %{receipts: %{}, telemetry: :degraded}
-    end
-  end
-
-  defp durable_ttl_ms,
-    do: Application.get_env(:cadence, :fleet_durable_receipts_ttl_ms, @durable_ttl_ms)
-
-  defp durable_timeout_ms,
-    do: Application.get_env(:cadence, :fleet_durable_receipts_timeout_ms, @durable_timeout_ms)
 
   @doc "Configured staleness threshold in seconds (`config :cadence, :fleet_stale_after_s`)."
   @spec stale_after_s() :: pos_integer()

@@ -49,7 +49,6 @@ defmodule CadenceWeb.HostTransportTestSupport do
           {"kind", "kind"},
           {"contribution", "contribution"},
           {"mission_page", "missionPage"},
-          {"spacecraft_page", "spacecraftPage"},
           {"host_scope", "scope"}
         ],
         Map.has_key?(expected, key) do

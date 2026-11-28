@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { retiredSurfaceHome, surfaceLink, surfaceParams } from "./surfaces.ts";
+import { surfaceLink, surfaceParams } from "./surfaces.ts";
 
 describe("app surface deep links (ux U42)", () => {
   it("passes only the keys the app's surface query accepts, single values only", () => {
@@ -26,21 +26,5 @@ describe("app surface deep links (ux U42)", () => {
     ).toBeNull();
     expect(surfaceLink("/missions/mission-1/ops/fleet", "mission-1")).toBeNull();
     expect(surfaceLink("https://example.com/elsewhere", "mission-1")).toBeNull();
-  });
-});
-
-describe("retired surfaces (sweep row 2, ux)", () => {
-  it("send spacecraft's removed create/edit forms to their console homes", () => {
-    expect(retiredSurfaceHome("spacecraft", "new", null)).toEqual({ name: "setup.spacecraft.new" });
-    expect(retiredSurfaceHome("spacecraft", "profile_new", null)).toEqual({
-      name: "setup.profile.new",
-    });
-    expect(retiredSurfaceHome("spacecraft", "edit", "sc-1")).toEqual({
-      name: "setup.spacecraft.one",
-      params: { spacecraftId: "sc-1" },
-    });
-    expect(retiredSurfaceHome("spacecraft", "edit", null)).toEqual({ name: "setup.spacecraft" });
-    expect(retiredSurfaceHome("spacecraft", "show", "sc-1")).toBeNull();
-    expect(retiredSurfaceHome("comms", "transport_new", null)).toBeNull();
   });
 });

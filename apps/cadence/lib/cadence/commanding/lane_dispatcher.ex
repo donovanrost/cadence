@@ -249,7 +249,12 @@ defmodule Cadence.Commanding.LaneDispatcher do
 
       # The head was failed closed (stop-on-failure, or a basis that can't release): its entry
       # is closed, so the lane moves on instead of waiting for the safety poll.
-      {:error, reason} when reason in [:earlier_command_failed, :release_basis_changed] ->
+      {:error, reason}
+      when reason in [
+             :earlier_command_failed,
+             :release_basis_changed,
+             :model_approval_withdrawn_after_go
+           ] ->
         emit(:dispatch_result, state, %{count: 1}, %{result: reason})
         drain_available(state, :continuation, released_count)
 

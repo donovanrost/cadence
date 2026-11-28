@@ -21,10 +21,7 @@ defmodule Cadence.Applications.Registry do
 
   alias Cadence.Applications.{
     LegacyCommsOverview,
-    MissionCatalog,
     OpsConsole,
-    OrganizationAdmin,
-    Spacecraft,
     TelemetryDecom
   }
 
@@ -45,11 +42,8 @@ defmodule Cadence.Applications.Registry do
         limits(),
         CommsApplication.definition(),
         LegacyCommsOverview.definition(),
-        MissionCatalog.definition(),
-        Spacecraft.definition(),
         OpsConsole.definition(),
-        cfdp(),
-        OrganizationAdmin.definition()
+        cfdp()
       ] ++ Enum.map(FixtureContributors.exporting(:definition, 0), & &1.definition())
 
   @spec available() :: [ApplicationDefinition.t()]
