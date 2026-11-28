@@ -295,29 +295,50 @@ defmodule Cadence.Auth.Policy do
     end
   end
 
+  # #1158: administering a mission is checked against the mission itself, like `:operate_mission`:
+  # it must exist and belong to the organization being authorized, for every principal (a platform
+  # admin included), so the answer never depends on a caller having fetched the mission first.
   def authorize(
         %Scope{} = current_scope,
         :manage_mission,
         %{organization_id: organization_id, mission_id: mission_id}
       ) do
+    with :ok <- valid_mission_id(mission_id),
+         :ok <- mission_in_organization(organization_id, mission_id) do
+      manage_capability(current_scope, organization_id, mission_id)
+    end
+  end
+
+  # A platform admin administers any organization's mission; otherwise the scope must be the
+  # organization's. An organization admin administers every mission of it, except that a service
+  # pinned to one mission administers only that one, whatever capability it holds (#1158); a
+  # mission admin administers its own mission.
+  defp manage_capability(%Scope{} = scope, organization_id, mission_id) do
     cond do
-      MapSet.member?(current_scope.capabilities, :platform_admin) ->
+      MapSet.member?(scope.capabilities, :platform_admin) ->
         :ok
 
-      current_scope.organization_id != organization_id ->
+      scope.organization_id != organization_id ->
         {:error, :scope_mismatch}
 
-      MapSet.member?(current_scope.capabilities, :organization_admin) ->
+      not pinned_to?(scope, mission_id) ->
+        {:error, :forbidden}
+
+      MapSet.member?(scope.capabilities, :organization_admin) ->
         :ok
 
-      MapSet.member?(current_scope.capabilities, :mission_admin) and
-          current_scope.mission_id == mission_id ->
+      MapSet.member?(scope.capabilities, :mission_admin) and scope.mission_id == mission_id ->
         :ok
 
       true ->
         {:error, :forbidden}
     end
   end
+
+  # A scope with no mission pin (a person, an organization-wide service) isn't restricted to one.
+  defp pinned_to?(%Scope{mission_id: nil}, _mission_id), do: true
+  defp pinned_to?(%Scope{mission_id: mission_id}, mission_id), do: true
+  defp pinned_to?(%Scope{}, _mission_id), do: false
 
   @doc """
   The actor holds every capability it would hand a service identity, by issuing it or rotating
