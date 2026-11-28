@@ -107,6 +107,84 @@ defmodule Cadence.SemanticObservations do
     end)
   end
 
+  @doc """
+  A generation's rules no longer include some policies (`live_policy_ids` are the ones it keeps;
+  #451 T3b): their open episodes clear with cause `rule_retired`, their latest alarm states go, and
+  the fleet summaries of the spacecraft they were on are recomputed, in one transaction. One call
+  per generation and mission, however many spacecraft are affected; idempotent, so a second node
+  or a repeat writes nothing more. `ref` names the generation (it keys the episode events), `at`
+  is when it was applied, and `generation` is its number.
+
+  The same transaction records the generation's policies (`semantic_live_policies`), so a batch
+  persisted later but evaluated under an OLDER generation cannot bring a retired policy's state
+  back (`drop_retired/2`). A run for a generation older than the recorded one does nothing.
+  """
+  @spec retire_rules(binary(), binary(), [binary()], binary(), DateTime.t(), pos_integer()) ::
+          {:ok, %{episodes: non_neg_integer(), states: non_neg_integer()}} | {:error, term()}
+  def retire_rules(organization_id, mission_id, live_policy_ids, ref, at, generation) do
+    Repo.transaction(fn ->
+      if record_live_policies(Repo, organization_id, mission_id, live_policy_ids, generation) do
+        {:ok, episodes} = Episodes.retire_rules(Repo, mission_id, live_policy_ids, ref, at)
+        states = retire_states(Repo, organization_id, mission_id, live_policy_ids)
+
+        :ok =
+          FleetAlarms.refresh(Repo, organization_id, mission_id, Enum.uniq(episodes ++ states))
+
+        %{episodes: length(episodes), states: length(states)}
+      else
+        %{episodes: 0, states: 0}
+      end
+    end)
+    |> tap(fn
+      {:ok, %{episodes: count}} when count > 0 -> Notify.missions_changed([mission_id])
+      _other -> :ok
+    end)
+  end
+
+  # True when this generation is the newest recorded (or the same one again): the row only moves
+  # forward.
+  defp record_live_policies(repo, organization_id, mission_id, policy_ids, generation) do
+    now = DateTime.utc_now()
+
+    {count, _rows} =
+      repo.insert_all(
+        "semantic_live_policies",
+        [
+          %{
+            organization_id: organization_id,
+            mission_id: mission_id,
+            generation: generation,
+            policy_ids: policy_ids,
+            inserted_at: now,
+            updated_at: now
+          }
+        ],
+        on_conflict:
+          from(live in "semantic_live_policies",
+            where: live.generation <= ^generation,
+            update: [set: [generation: ^generation, policy_ids: ^policy_ids, updated_at: ^now]]
+          ),
+        conflict_target: [:organization_id, :mission_id]
+      )
+
+    count == 1
+  end
+
+  # The spacecraft of the latest states of the mission's policies no generation keeps.
+  defp retire_states(repo, organization_id, mission_id, live_policy_ids) do
+    {_count, spacecraft} =
+      repo.delete_all(
+        from(row in LatestAlarmStateRow,
+          where:
+            row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+              row.policy_id not in ^live_policy_ids,
+          select: row.spacecraft_id
+        )
+      )
+
+    spacecraft
+  end
+
   defp notify_alarm_changes(changes) do
     changes
     |> Enum.flat_map(fn
@@ -194,10 +272,50 @@ defmodule Cadence.SemanticObservations do
 
   defp add_result(%{semantic_result: %Result{} = result} = prepared, accumulator) do
     transitions = Enum.reject(result.monitoring_results, &is_nil(&1.transition))
-    add_transitions(prepared, transitions, accumulator)
+    add_transitions(prepared, drop_retired(prepared, transitions), accumulator)
   end
 
   defp add_result(_prepared, accumulator), do: accumulator
+
+  # A batch evaluated under an OLDER generation can reach the projector after a newer generation
+  # retired one of its policies (`retire_rules/6` already ran): its transition would bring the
+  # policy's latest state back (a phantom alarm on Fleet) or touch a cleared episode's story
+  # (#451 T3b). Such a transition is not persisted: the mission's recorded generation is newer than
+  # the batch's and does not keep the policy. Nothing is asked for a batch with no transition, and
+  # nothing is dropped for a batch of the recorded generation or a newer one (a generation's own
+  # new policies arrive before its retirement has recorded it).
+  defp drop_retired(_prepared, []), do: []
+
+  defp drop_retired(prepared, transitions) do
+    case semantic_context(prepared) do
+      %{organization_id: organization_id, mission_id: mission_id, generation: generation}
+      when is_binary(organization_id) and is_integer(generation) ->
+        policies = transitions |> Enum.map(& &1.policy_id) |> Enum.uniq()
+        kept = kept_policies(organization_id, mission_id, generation, policies)
+        if kept, do: Enum.filter(transitions, &(&1.policy_id in kept)), else: transitions
+
+      _no_generation ->
+        transitions
+    end
+  end
+
+  # Of `policies`, the ones the mission's recorded generation keeps, when that generation is newer
+  # than `generation`; nil when it is not (nothing to drop).
+  defp kept_policies(organization_id, mission_id, generation, policies) do
+    Repo.one(
+      from(live in "semantic_live_policies",
+        where:
+          live.organization_id == ^organization_id and live.mission_id == ^mission_id and
+            live.generation > ^generation,
+        select:
+          fragment(
+            "ARRAY(SELECT p FROM unnest(?::text[]) p WHERE p = ANY(?))",
+            ^policies,
+            live.policy_ids
+          )
+      )
+    )
+  end
 
   defp add_transitions(_prepared, [], accumulator), do: accumulator
 
