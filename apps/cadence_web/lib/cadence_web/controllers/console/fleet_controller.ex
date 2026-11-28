@@ -3,7 +3,7 @@ defmodule CadenceWeb.Console.FleetController do
 
   use CadenceWeb, :controller
 
-  alias Cadence.Reads.{CommandCounts, FleetStatus}
+  alias Cadence.Reads.{CommandCounts, FleetStatus, MonitoredParameters}
   alias CadenceWeb.Console.FleetJSON
 
   def show(conn, _params) do
@@ -12,7 +12,9 @@ defmodule CadenceWeb.Console.FleetController do
 
     fleet = FleetStatus.load(scope.organization_id, mission.mission_id)
     commands = CommandCounts.load(scope.organization_id, mission.mission_id, scope.user.user_id)
-    limits_configured? = Cadence.Limits.list_limit_definitions(mission.mission_id) != []
+
+    limits_configured? =
+      MonitoredParameters.configured?(scope.organization_id, mission.mission_id)
 
     json(conn, %{data: FleetJSON.fleet(fleet, commands, limits_configured?)})
   end
