@@ -58,7 +58,10 @@ defmodule CadenceWeb.Console.OneAPITelemetryTest do
   defp packet_hex,
     do:
       42
-      |> MissionReadModelFixtures.build_space_packet(3, <<12.5::float-32, 1::size(1), 0::size(7)>>)
+      |> MissionReadModelFixtures.build_space_packet(
+        3,
+        <<12.5::float-32, 1::size(1), 0::size(7)>>
+      )
       |> Base.encode16(case: :lower)
 
   defp frame_hex,
