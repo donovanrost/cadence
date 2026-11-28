@@ -18,6 +18,7 @@ import HistorySheet from "./HistorySheet.vue";
 import { abortable, pipeline } from "./uplink.ts";
 import { useVerifierSeries } from "./useVerifierSeries.ts";
 import { expirySummary } from "../groups/expiry.ts";
+import { withdrawnAfterGoLine } from "../groups/withdrawn.ts";
 
 /**
  * C3 · Uplink & verify v1: pipeline tiles, each target's trail, the request log, and Abort
@@ -122,6 +123,10 @@ const windowText = computed(() => {
       :can-release="canAbort"
       @changed="$emit('changed')"
     />
+    <!-- E2 (#546): an unattended release refuses these; a person naming the contact isn't refused. -->
+    <ApCallout v-if="group.state === 'queued' && group.withdrawn_after_go" tone="caution">{{
+      withdrawnAfterGoLine(group.withdrawn_after_go)
+    }}</ApCallout>
     <!-- CommandFlow C3: Abort sits up top (header area), never below a long target list. -->
     <div v-if="showAbort" ref="abortEl"><AbortPanel :group="group" @done="onAborted" /></div>
     <p

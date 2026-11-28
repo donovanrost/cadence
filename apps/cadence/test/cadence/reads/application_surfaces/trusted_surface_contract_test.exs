@@ -1,10 +1,8 @@
 defmodule Cadence.Reads.ApplicationSurfaces.TrustedSurfaceContractTest do
   use Cadence.DataCase, async: false
 
-  alias Cadence.Applications.{ActionRequest, HostContext, SurfaceQueryRequest}
-  alias Cadence.Applications.OpsConsole.ActionProvider, as: OpsActionProvider
+  alias Cadence.Applications.{HostContext, SurfaceQueryRequest}
   alias Cadence.Auth.Scope
-  alias Cadence.ContactPlanning.FleetPlanningRuns
   alias Cadence.Reads.ApplicationSurfaces.OpsConsole
 
   @organization_id "org-trusted-surface-contract"
@@ -147,138 +145,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.TrustedSurfaceContractTest do
 
     commands = surface_props(context, "commands", "OpsCommands")
     assert commands == %{"mission_id" => @mission_id, "query" => %{}}
-
-    planning = surface_props(context, "fleet_planning", "OpsFleetPlanning")
-    assert planning["directory"]["contract_version"] == 1
-    assert planning["directory"]["active_policy"] == nil
-
-    assert planning["directory"]["runs"] == %{
-             "page" => 1,
-             "more" => false,
-             "entries" => []
-           }
-
-    %{"schedule" => contacts} = surface_props(context, "contact_schedule", "OpsContactSchedule")
-    assert contacts["contract_version"] == 1
-    assert contacts["context"]["mission_id"] == @mission_id
-    assert contacts["selected_spacecraft"] == nil
-    assert contacts["routes"] == %{"page" => 1, "more" => false, "entries" => []}
-
-    for ledger <- ~w(scheduled realized reservations),
-        do: assert(contacts[ledger] == %{"page" => 1, "more" => false, "entries" => []})
-
-    assert is_boolean(contacts["permissions"]["operate"])
-    assert is_boolean(contacts["permissions"]["cancel"])
-  end
-
-  test "planning ownership entries render the current authorized surface producers", context do
-    models =
-      for {surface, component} <- [
-            {"fleet_planning", "OpsFleetPlanning"},
-            {"fleet_planning_new", "OpsFleetPlanningNew"},
-            {"contact_schedule", "OpsContactSchedule"}
-          ] do
-        %{component: component, props: surface_props(context, surface, component)}
-      end
-
-    checker =
-      Path.expand(
-        "../../../../../../frontend/modules/planning-and-contacts/src/test-support/producer-render-check.mjs",
-        __DIR__
-      )
-
-    {output, status} =
-      System.cmd(
-        System.find_executable("node"),
-        ["--no-warnings", checker, Jason.encode!(models)],
-        stderr_to_stdout: true
-      )
-
-    assert status == 0, output
-    assert output =~ "Planning ownership producer/consumer render checks passed"
-  end
-
-  test "native fleet creation carries the public producer review through the public action provider" do
-    c = Cadence.FleetStartFixtures.setup_start()
-    host = HostContext.mission(c.mission_id)
-    query = request("fleet_planning_new")
-
-    assert {:ok, %{"data" => %{"presentation" => %{"props" => %{"start" => model}}}}} =
-             OpsConsole.load(c.scope, host, query)
-
-    window = %{
-      "horizon_start" => "2030-07-17T04:00:00.000Z",
-      "horizon_end" => "2030-07-17T08:00:00.000Z",
-      "include_recurring" => false
-    }
-
-    supplied = %{model: model, window: window}
-    preview = native_fleet_payload(supplied)
-    assert preview == %{"fleet_run" => window, "requirements_page" => 1, "templates_page" => 1}
-
-    assert {:ok, %{"review" => review}} =
-             fleet_action(c.scope, host, "validate-fleet-run", preview)
-
-    assert review["window"] == window
-    assert FleetPlanningRuns.list(c.organization_id, c.mission_id) == []
-    creation = native_fleet_payload(Map.put(supplied, :review, review))
-    assert creation == %{"fleet_run" => window, "evidence" => review["evidence"]}
-    assert {:ok, receipt} = fleet_action(c.scope, host, "create-fleet-run", creation)
-    assert receipt["evidence"] == review["evidence"]
-    assert receipt["requirementCount"] == 1
-    assert receipt["lifecycleState"] == "queued"
-
-    assert native_fleet_payload(Map.merge(supplied, %{review: review, receipt: receipt})) ==
-             creation
-
-    assert byte_size(Jason.encode!(review)) < 60_000
-
-    revoked = %{c.scope | organization_membership: nil}
-
-    assert {:error, :unsupported_application_surface_query} =
-             OpsConsole.load(revoked, host, query)
-
-    assert {:error, :forbidden} = fleet_action(revoked, host, "create-fleet-run", creation)
-
-    assert {:error, :scope_mismatch} =
-             fleet_action(
-               c.scope,
-               host,
-               "create-fleet-run",
-               Map.put(creation, "mission_id", "foreign")
-             )
-
-    assert [_] = FleetPlanningRuns.list(c.organization_id, c.mission_id)
-  end
-
-  defp fleet_action(scope, host, action, params) do
-    OpsActionProvider.execute(
-      scope,
-      host,
-      %ActionRequest{
-        application_key: "ops_console",
-        application_version: 1,
-        surface_id: "fleet_planning_new",
-        surface_version: 1,
-        action_id: action,
-        params: params
-      }
-    )
-  end
-
-  defp native_fleet_payload(supplied) do
-    checker =
-      Path.expand(
-        "../../../../../../frontend/modules/planning-and-contacts/src/features/fleet-planning/start-producer-check.mjs",
-        __DIR__
-      )
-
-    {output, status} =
-      System.cmd("node", [checker, Jason.encode!(supplied)], stderr_to_stdout: true)
-
-    assert status == 0, output
-    assert [_, payload] = Regex.run(~r/FLEET_START_PAYLOAD=([^\n]+)/, output)
-    Jason.decode!(payload)
   end
 
   test "deep trusted configuration forms stay inside the output boundary", context do

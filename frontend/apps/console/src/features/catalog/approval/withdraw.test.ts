@@ -1,9 +1,11 @@
-import { flushPromises, mount } from "@vue/test-utils";
+import { flushPromises, mount, RouterLinkStub } from "@vue/test-utils";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { decode, missionId, type ApiError } from "@/api/index.ts";
 import { modelRevisionReader, type ModelRevision } from "./api.ts";
 import { rolloutGate } from "./rollout-gate.ts";
 import WithdrawControl from "./WithdrawControl.vue";
+import AffectedGroupsPanel from "./AffectedGroupsPanel.vue";
+import { affectedMeta, craftLine, goLine } from "./affected-words.ts";
 import { withdrawFailure } from "./withdraw-words.ts";
 import { approvalTag, decidedLine, decisionFailure } from "./words.ts";
 
@@ -36,6 +38,8 @@ const read = (o: Record<string, unknown> = {}): ModelRevision => {
       reason: null,
     },
     viewer_can_decide: false,
+    affected_groups: null,
+    affected_groups_count: null,
     viewer_is_importer: false,
     cannot_decide_because: null,
     plans_ready: true,
@@ -172,5 +176,69 @@ describe("Withdraw approval…", () => {
     );
     expect(w.emitted("changed")).toHaveLength(1);
     w.unmount();
+  });
+});
+
+describe("E2c (#546, #1054): the requests still waiting to go out", () => {
+  /** Synthetic groups in setup.md's affected_groups shape, not captured from a server. */
+  const group = (n: number, o: Record<string, unknown> = {}) => ({
+    group_id: `grp-${n}`,
+    name: `Safe mode ${n}`,
+    state: "queued",
+    go_at: "2026-11-27T10:02:00Z",
+    spacecraft: [1, 2, 3, 4, 5].map((i) => ({ id: `sc-${i}`, name: `EARENDIL-00${i}`, scid: i })),
+    spacecraft_count: 8,
+    ...o,
+  });
+  const withdrawn = (groups: unknown[] | null, count: number | null) =>
+    read({ status: "withdrawn", affected_groups: groups, affected_groups_count: count });
+  const panel = (r: ModelRevision) =>
+    mount(AffectedGroupsPanel, {
+      props: { revision: r },
+      global: { stubs: { RouterLink: RouterLinkStub } },
+    });
+
+  it("words each group's craft, its GO time and the count", () => {
+    const [g] = withdrawn([group(1)], 1).affected_groups ?? [];
+    if (!g) throw new Error("fixture");
+    expect(craftLine(g)).toBe(
+      "On EARENDIL-001, EARENDIL-002, EARENDIL-003, EARENDIL-004, EARENDIL-005 and 3 more",
+    );
+    expect(
+      craftLine({ ...g, spacecraft: [{ id: "x", name: null, scid: null }], spacecraft_count: 1 }),
+    ).toBe("On Unknown spacecraft");
+    expect(goLine(g)).toBe("GO at 11-27 10:02Z");
+    expect([affectedMeta(1, 1), affectedMeta(3, 3), affectedMeta(50, 64)]).toEqual([
+      "1 request",
+      "3 requests",
+      "50 of 64 shown",
+    ]);
+    // An unknown group state decodes, never failing the read.
+    expect(withdrawn([group(1, { state: "paused" })], 1).affected_groups?.[0]?.state).toBe(
+      "unrecognized",
+    );
+  });
+
+  it("lists each request linked to its page, and opens Commands filtered past 50", () => {
+    const many = Array.from({ length: 50 }, (_, i) => group(i + 1));
+    const w = panel(withdrawn(many, 64));
+    expect(w.findAll("li")).toHaveLength(50);
+    const links = w.findAllComponents(RouterLinkStub);
+    expect(links[0]?.props("to")).toEqual({
+      name: "ops.commands.request",
+      params: { requestId: "grp-1" },
+    });
+    expect(links.at(-1)?.text()).toBe("See all 64 in Commands");
+    expect(links.at(-1)?.props("to")).toEqual({
+      name: "ops.commands",
+      query: { withdrawn_revision: "mm-4", stage: "queued_for_contact" },
+    });
+  });
+
+  it("says when none is waiting, and shows nothing for a revision that isn't withdrawn", () => {
+    expect(panel(withdrawn([], 0)).text()).toContain(
+      "No request with a GO is waiting to go out on craft that run it.",
+    );
+    expect(panel(read()).text()).toBe("");
   });
 });

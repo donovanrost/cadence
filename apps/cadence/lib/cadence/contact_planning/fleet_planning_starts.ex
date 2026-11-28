@@ -112,13 +112,6 @@ defmodule Cadence.ContactPlanning.FleetPlanningStarts do
         operation_id
       )
 
-  def validate_input(params, mode) do
-    case admit(params, mode) do
-      {:ok, _, _, _} -> :ok
-      {:error, _} = error -> error
-    end
-  end
-
   def admit(params, mode) when is_map(params) and mode in [:preview, :create] do
     params = Map.delete(params, "mission_id")
 

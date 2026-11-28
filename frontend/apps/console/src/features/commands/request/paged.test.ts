@@ -89,6 +89,21 @@ describe("U1 Targets for a group of 1,500 (#795)", () => {
     await flushPromises();
     expect(asked).toHaveLength(2);
   });
+
+  it("tags a paged target whose model approval was withdrawn after GO (E2c, #546)", async () => {
+    const flag = {
+      revision_id: "mm-4",
+      decision: { kind: "withdrawn", by: null, at: "2026-11-27T10:02:00Z", reason: null },
+    };
+    server((url) =>
+      pageOf(url, (i) => ({ ...target(i), withdrawn_after_go: i === 1 ? flag : null }), TOTAL),
+    );
+    const w = mount(TargetsPanel, { props: { group: group(), missionId: missionId("m-1") } });
+    await flushPromises();
+    const tagged = w.findAll("li").map((li) => li.text().includes("Approval withdrawn after GO"));
+    expect(tagged.slice(0, 3)).toEqual([false, true, false]);
+    expect(tagged.filter(Boolean)).toHaveLength(1);
+  });
 });
 
 describe("N Needs you for a group of 1,500 (#795)", () => {

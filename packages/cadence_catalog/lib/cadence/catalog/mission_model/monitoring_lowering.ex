@@ -14,9 +14,6 @@ defmodule Cadence.Catalog.MissionModel.MonitoringLowering do
       persistence counters and says `rule_changed` when it changes.
     * `origin`: `"catalog"` (an imported layer wrote it last) or `"mission_layer"` (an authored
       layer did), and `declaration_id`, the declaration that produced the entry.
-    * `space_system_id`, `space_system_path` and `runtime_name`: the `SpaceSystem` that owns the
-      policy and its qualified runtime name (ADR-020 P5). Where a policy lives is not what it
-      evaluates, so the digest ignores them.
     * `scope` and `spacecraft_id`: `"mission"` with `nil` applies to every craft on the revision;
       `"spacecraft"` with an id applies to that craft only. A policy scoped to several craft (its
       definition's `spacecraft_ids`) becomes one entry per craft.
@@ -33,6 +30,10 @@ defmodule Cadence.Catalog.MissionModel.MonitoringLowering do
 
   The plan is compiled once per revision and holds every craft's entries, so a partition never
   reads per craft (the per-request rule, #1049).
+
+  Each entry also carries the `SpaceSystem` that owns its policy: `space_system_id`,
+  `space_system_path` and `runtime_name` (ADR-020 P5). Where a policy lives is not what it
+  evaluates, so `rule_digest` (a whitelist) leaves them out.
   """
 
   alias Cadence.Catalog.MissionModel.{Canonical, Declaration, Diagnostic, SystemOwner}

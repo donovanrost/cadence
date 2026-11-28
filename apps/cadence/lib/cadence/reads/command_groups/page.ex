@@ -5,7 +5,9 @@ defmodule Cadence.Reads.CommandGroups.Page do
   with are read from the same moment.
 
   - **Targets** are in target order (`index`), filterable by `stage` (a comma list of member
-    stages, the target's own) and `q` (case-insensitive substring of the name or spacecraft id).
+    stages, the target's own), `q` (case-insensitive substring of the name or spacecraft id) and
+    `unnamed=true` (the targets with no name, which the console's GO check counts).
+    `targets_page.unnamed` is that count over the whole group, not the page.
   - **Events** are chronological. The view carries the latest page, and a cursor walks back to
     older ones.
 
@@ -38,6 +40,7 @@ defmodule Cadence.Reads.CommandGroups.Page do
     |> Map.put(:targets, targets.targets)
     |> Map.put(:targets_page, %{
       total: targets.total,
+      unnamed: Enum.count(view.targets, &unnamed?/1),
       revision: revision(view.targets),
       next_cursor: targets.next_cursor
     })
@@ -59,11 +62,13 @@ defmodule Cadence.Reads.CommandGroups.Page do
          {:ok, stages} <- stages(params["stage"]),
          {:ok, q} <- query(params["q"]),
          {:ok, needs_you} <- flag(params["needs_you"], "needs_you"),
+         {:ok, unnamed} <- flag(params["unnamed"], "unnamed"),
          {:ok, after_index} <- cursor(view, params["cursor"], "targets") do
       matching =
         Enum.filter(
           view.targets,
-          &(stage?(&1, stages) and named?(&1, q) and needs_you?(&1, needs_you))
+          &(stage?(&1, stages) and named?(&1, q) and needs_you?(&1, needs_you) and
+              unnamed?(&1, unnamed))
         )
 
       remaining = Enum.filter(matching, &(after_index == nil or &1.index > after_index))
@@ -162,6 +167,12 @@ defmodule Cadence.Reads.CommandGroups.Page do
 
   defp needs_you?(target, true),
     do: target.stage in @needs_you_stages or not is_nil(target.blocked)
+
+  # A target with no name to show: what the console's GO check counts (nil or empty).
+  defp unnamed?(_target, false), do: true
+  defp unnamed?(target, true), do: unnamed?(target)
+
+  defp unnamed?(%{name: name}), do: is_nil(name) or name == ""
 
   defp query(nil), do: {:ok, nil}
 

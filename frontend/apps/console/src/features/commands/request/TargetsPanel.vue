@@ -8,6 +8,7 @@ import { memberStageWord, STAGE_STATE } from "../groups/words.ts";
 import { refusalLine } from "../groups/release.ts";
 import { targetVerifyTime } from "../groups/verifyTimes.ts";
 import { targetStageWord } from "../groups/expiry.ts";
+import { WITHDRAWN_AFTER_GO_TAG } from "../groups/withdrawn.ts";
 import { ownValuesText } from "./ownValues.ts";
 import { useCatalogArgs } from "./useCatalogArgs.ts";
 import { useGroupTargets } from "./useGroupPages.ts";
@@ -86,7 +87,11 @@ const ownOf = (t: GroupTarget) =>
                 }}&ensp;</template
               >
             </span>
-            <ApTag :state="STAGE_STATE[t.stage]" :label="targetStageWord(t, group)" />
+            <span class="flex flex-wrap items-center justify-end gap-1.5">
+              <!-- E2 (#546): an unattended release refuses this target's waiting uplinks. -->
+              <ApTag v-if="t.withdrawn_after_go" state="caution" :label="WITHDRAWN_AFTER_GO_TAG" />
+              <ApTag :state="STAGE_STATE[t.stage]" :label="targetStageWord(t, group)" />
+            </span>
             <ApButton
               size="compact"
               variant="ghost"

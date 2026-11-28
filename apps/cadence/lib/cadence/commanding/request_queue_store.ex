@@ -56,6 +56,9 @@ defmodule Cadence.Commanding.RequestQueueStore do
     |> maybe_filter_equals(:source_endpoint_ref, Keyword.get(opts, :source_endpoint_ref))
     |> maybe_filter_equals(:queue_lane_key, Keyword.get(opts, :queue_lane_key))
     |> maybe_filter_equals(:lifecycle_state, normalized_filter(opts, :lifecycle_state))
+    |> maybe_filter_in(:command_request_id, Keyword.get(opts, :command_request_ids))
+    |> maybe_filter_in(:queue_lane_key, Keyword.get(opts, :queue_lane_keys))
+    |> maybe_filter_in(:lifecycle_state, Keyword.get(opts, :lifecycle_states))
     |> order_by([row],
       asc: row.queue_lane_key,
       asc: row.priority,
@@ -360,6 +363,14 @@ defmodule Cadence.Commanding.RequestQueueStore do
       value when is_atom(value) -> Atom.to_string(value)
       value when is_binary(value) -> value
     end
+  end
+
+  # `field IN (...)` for a list filter (one parameter, whatever its length); nil is no filter.
+  defp maybe_filter_in(query, _field, nil), do: query
+
+  defp maybe_filter_in(query, field, values) when is_list(values) do
+    values = Enum.map(values, &if(is_atom(&1), do: Atom.to_string(&1), else: &1))
+    where(query, [row], field(row, ^field) in ^values)
   end
 
   defp maybe_filter_equals(query, _field, nil), do: query

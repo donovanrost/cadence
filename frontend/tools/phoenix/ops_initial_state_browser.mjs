@@ -49,9 +49,6 @@ const routes = [
   "/ops/explore",
   "/ops/alarms",
   "/ops/timeline",
-  "/ops/planning",
-  "/ops/planning/new",
-  "/ops/contacts",
 ];
 try {
   await signInThroughConsole(page, {

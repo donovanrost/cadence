@@ -8,6 +8,7 @@ defmodule Cadence.Contacts.ContactRuntimeConfig do
   alias Cadence.Contacts.Path
   alias Cadence.Contacts.PathTemplate
   alias Cadence.Contacts.PathTemplateStore
+  alias Cadence.Contacts.PathTemplateStore.VersionedReferences
   alias Cadence.Contacts.ScheduledContact
   alias Cadence.Contacts.Validation
 
@@ -65,22 +66,111 @@ defmodule Cadence.Contacts.ContactRuntimeConfig do
 
   @spec resolve_paths(ScheduledContact.t()) :: {:ok, [Path.t()]} | {:error, term()}
   def resolve_paths(%ScheduledContact{} = scheduled_contact) do
-    with {:ok, assignment_paths} <-
-           resolve_link_assignment_paths(
-             scheduled_contact.organization_id,
-             scheduled_contact.mission_id,
-             scheduled_contact.link_assignment_refs
-           ),
-         {:ok, template_paths} <-
-           resolve_path_templates(
-             scheduled_contact.organization_id,
-             scheduled_contact.mission_id,
-             scheduled_contact.path_template_ids,
-             scheduled_contact.path_template_refs
-           ) do
-      {:ok,
-       assignment_paths ++ booked(scheduled_contact, template_paths) ++ scheduled_contact.paths}
+    [scheduled_contact]
+    |> resolve_paths_many()
+    |> Map.fetch!(scheduled_contact)
+  end
+
+  @doc "Resolve each scheduled contact with one batch of runtime references per mission scope."
+  @spec resolve_paths_many([ScheduledContact.t()]) :: %{
+          ScheduledContact.t() => {:ok, [Path.t()]} | {:error, term()}
+        }
+  def resolve_paths_many(contacts) do
+    contacts
+    |> Enum.group_by(&{&1.organization_id, &1.mission_id})
+    |> Enum.flat_map(fn {{org, mission}, contacts} ->
+      resolve_mission_paths(org, mission, contacts)
+    end)
+    |> Map.new()
+  end
+
+  defp resolve_mission_paths(org, mission, contacts) do
+    assignment_ids =
+      for contact <- contacts,
+          ref <- contact.link_assignment_refs,
+          id = Map.get(ref, "link_assignment_id"),
+          is_binary(id) and id != "",
+          uniq: true,
+          do: id
+
+    assignments =
+      if is_binary(org) and org != "",
+        do: LinkAssignmentStore.fetch_many(org, mission, assignment_ids),
+        else: LinkAssignmentStore.fetch_many(mission, assignment_ids)
+
+    template_refs =
+      Enum.flat_map(contacts, &template_refs/1) ++
+        Enum.map(Map.values(assignments), &assignment_template_ref/1)
+
+    templates = PathTemplateStore.load_refs(org, mission, template_refs)
+
+    by_contact =
+      Enum.map(contacts, fn contact ->
+        assigned =
+          Enum.map(contact.link_assignment_refs, &assignment_template(&1, assignments, templates))
+
+        direct =
+          Enum.map(template_refs(contact), &PathTemplateStore.fetch_loaded_ref(templates, &1))
+
+        {contact, assigned, direct}
+      end)
+
+    # Keep each missing reference in its original position so the first failing path still
+    # determines the contact's error, including failures while resolving a template's bindings.
+    resolvable =
+      for {_contact, assigned, direct} <- by_contact,
+          {:ok, template} <- assigned ++ direct,
+          do: template
+
+    resolved = PathTemplateStore.resolve_many(resolvable)
+
+    Enum.map(by_contact, fn {contact, assigned, direct} ->
+      {contact, assemble_paths(contact, assigned, direct, resolved)}
+    end)
+  end
+
+  defp template_refs(contact) do
+    VersionedReferences.refs(
+      contact.path_template_ids,
+      contact.path_template_refs,
+      "path_template_id"
+    )
+  end
+
+  defp assignment_template_ref(assignment) do
+    %{
+      "path_template_id" => assignment.path_template_id,
+      "version" => assignment.path_template_version
+    }
+  end
+
+  defp assignment_template(ref, assignments, templates) do
+    with {:ok, assignment} <- fetch_link_assignment_ref(ref, &Map.fetch(assignments, &1)),
+         {:ok, template} <-
+           PathTemplateStore.fetch_loaded_ref(templates, assignment_template_ref(assignment)) do
+      {:ok, assignment_path_template(assignment, template)}
+    else
+      :error -> {:error, :contact_link_assignment_not_found}
+      {:error, _reason} = error -> error
     end
+  end
+
+  defp assemble_paths(contact, assigned, direct, resolved) do
+    with {:ok, assignment_paths} <- resolved_templates(assigned, resolved),
+         {:ok, template_paths} <- resolved_templates(direct, resolved) do
+      {:ok, assignment_paths ++ booked(contact, template_paths) ++ contact.paths}
+    end
+  end
+
+  defp resolved_templates(templates, resolved) do
+    Enum.reduce_while(templates, {:ok, []}, fn ref, {:ok, acc} ->
+      with {:ok, template} <- ref,
+           {:ok, path} <- Map.fetch!(resolved, template) do
+        {:cont, {:ok, acc ++ [path]}}
+      else
+        {:error, _reason} = error -> {:halt, error}
+      end
+    end)
   end
 
   # A provider booking names the paths of the route it was booked on. On that contact those
@@ -116,28 +206,6 @@ defmodule Cadence.Contacts.ContactRuntimeConfig do
       end)
 
     %{path | provider_bindings: bindings}
-  end
-
-  defp resolve_link_assignment_paths(_organization_id, _mission_id, []), do: {:ok, []}
-
-  defp resolve_link_assignment_paths(organization_id, mission_id, link_assignment_refs)
-       when is_binary(mission_id) and is_list(link_assignment_refs) do
-    Enum.reduce_while(link_assignment_refs, {:ok, []}, fn ref, {:ok, acc} ->
-      with {:ok, %LinkAssignment{} = assignment} <-
-             fetch_link_assignment_ref(organization_id, mission_id, ref),
-           {:ok, %PathTemplate{} = path_template} <-
-             PathTemplateStore.fetch_ref(organization_id, mission_id, %{
-               "path_template_id" => assignment.path_template_id,
-               "version" => assignment.path_template_version
-             }),
-           {:ok, %Path{} = resolved_path} <-
-             assignment_path_template(assignment, path_template)
-             |> PathTemplateStore.resolve() do
-        {:cont, {:ok, acc ++ [resolved_path]}}
-      else
-        {:error, reason} -> {:halt, {:error, reason}}
-      end
-    end)
   end
 
   defp assignment_path_template(%LinkAssignment{} = assignment, %PathTemplate{} = path_template) do
@@ -176,40 +244,20 @@ defmodule Cadence.Contacts.ContactRuntimeConfig do
     }
   end
 
-  defp resolve_path_templates(_organization_id, _mission_id, [], []), do: {:ok, []}
-
-  defp resolve_path_templates(organization_id, mission_id, path_template_ids, path_template_refs)
-       when is_binary(mission_id) and is_list(path_template_ids) and is_list(path_template_refs) do
-    refs =
-      if path_template_refs == [],
-        do: refs_from_ids(path_template_ids, "path_template_id"),
-        else: path_template_refs
-
-    Enum.reduce_while(refs, {:ok, []}, fn ref, {:ok, acc} ->
-      with {:ok, %PathTemplate{} = path_template} <-
-             PathTemplateStore.fetch_ref(organization_id, mission_id, ref),
-           {:ok, %Path{} = resolved_path} <- PathTemplateStore.resolve(path_template) do
-        {:cont, {:ok, acc ++ [resolved_path]}}
-      else
-        {:error, reason} -> {:halt, {:error, reason}}
-      end
-    end)
-  end
-
   defp resolve_link_assignment_refs(organization_id, mission_id, link_assignment_refs)
        when is_list(link_assignment_refs) do
     Enum.reduce_while(link_assignment_refs, {:ok, []}, fn ref, {:ok, acc} ->
-      case fetch_link_assignment_ref(organization_id, mission_id, ref) do
+      case fetch_link_assignment_ref(ref, &fetch_link_assignment(organization_id, mission_id, &1)) do
         {:ok, %LinkAssignment{} = assignment} -> {:cont, {:ok, acc ++ [assignment]}}
         {:error, reason} -> {:halt, {:error, reason}}
       end
     end)
   end
 
-  defp fetch_link_assignment_ref(organization_id, mission_id, ref) do
+  defp fetch_link_assignment_ref(ref, fetch) do
     case Map.get(ref, "link_assignment_id") do
       link_assignment_id when is_binary(link_assignment_id) and link_assignment_id != "" ->
-        fetch_link_assignment(organization_id, mission_id, link_assignment_id)
+        fetch.(link_assignment_id)
 
       _other ->
         {:error, :invalid_contact_runtime_config_reference}

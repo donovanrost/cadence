@@ -133,34 +133,6 @@ defmodule CadenceWeb.Router do
     live_session :application,
       on_mount: [{CadenceWeb.UserAuth, :require_user_scope}],
       layout: {CadenceWeb.Layouts, :host} do
-      live("/missions/:mission_id/ops/planning", HostPageLive, :index,
-        metadata: %{host_policy: :ops}
-      )
-
-      live("/missions/:mission_id/ops/planning/new", HostPageLive, :new,
-        metadata: %{host_policy: :ops}
-      )
-
-      live("/missions/:mission_id/ops/planning/runs/:fleet_planning_run_id", HostPageLive, :show,
-        metadata: %{host_policy: :ops}
-      )
-
-      live("/missions/:mission_id/ops/plans/:contact_plan_id", HostPageLive, :show,
-        metadata: %{host_policy: :ops}
-      )
-
-      live("/missions/:mission_id/ops/contacts", HostPageLive, :index,
-        metadata: %{host_policy: :ops}
-      )
-
-      live("/missions/:mission_id/ops/contacts/records/:contact_id", HostPageLive, :show,
-        metadata: %{host_policy: :ops}
-      )
-
-      live("/missions/:mission_id/ops/contacts/:provider_reservation_id", HostPageLive, :show,
-        metadata: %{host_policy: :ops}
-      )
-
       live("/missions/:mission_id/ops/alarms", HostPageLive, :index,
         metadata: %{host_policy: :ops}
       )
