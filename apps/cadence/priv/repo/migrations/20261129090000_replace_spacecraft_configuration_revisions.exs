@@ -1,22 +1,24 @@
 defmodule Cadence.Repo.Migrations.ReplaceSpacecraftConfigurationRevisions do
   use Ecto.Migration
 
+  @append_only ~w(spacecraft_configuration_assignments spacecraft_configuration_artifacts)
+
   def up do
     create table(:spacecraft_configuration_artifacts, primary_key: false) do
-      add(:organization_id, :text, primary_key: true)
-      add(:mission_id, :text, primary_key: true)
-      add(:sha256, :text, primary_key: true)
+      add(:organization_id, :text, primary_key: true, collation: "C")
+      add(:mission_id, :text, primary_key: true, collation: "C")
+      add(:sha256, :text, primary_key: true, collation: "C")
       add(:document, :map, null: false)
-      add(:catalog_revision_id, :text)
-      add(:composition_id, :text)
-      add(:effective_revision_id, :text)
+      add(:catalog_revision_id, :text, collation: "C")
+      add(:composition_id, :text, collation: "C")
+      add(:effective_revision_id, :text, collation: "C")
     end
 
     execute("""
     ALTER TABLE spacecraft_configuration_artifacts
       ADD CONSTRAINT spacecraft_configuration_artifacts_mission_fk
       FOREIGN KEY (organization_id, mission_id)
-      REFERENCES missions (organization_id, mission_id) ON DELETE CASCADE
+      REFERENCES missions (organization_id, mission_id)
     """)
 
     create(
@@ -26,16 +28,16 @@ defmodule Cadence.Repo.Migrations.ReplaceSpacecraftConfigurationRevisions do
     )
 
     create table(:spacecraft_configuration_assignments, primary_key: false) do
-      add(:configuration_revision_id, :text, primary_key: true)
-      add(:organization_id, :text, null: false)
-      add(:mission_id, :text, null: false)
-      add(:spacecraft_id, :text, null: false)
+      add(:configuration_revision_id, :text, primary_key: true, collation: "C")
+      add(:organization_id, :text, null: false, collation: "C")
+      add(:mission_id, :text, null: false, collation: "C")
+      add(:spacecraft_id, :text, null: false, collation: "C")
       add(:version, :integer, null: false)
-      add(:artifact_sha256, :text, null: false)
-      add(:source_endpoint_id, :text)
-      add(:application_basis, :text, null: false)
-      add(:created_by, :text, null: false)
-      add(:change_set_id, :text)
+      add(:artifact_sha256, :text, null: false, collation: "C")
+      add(:source_endpoint_id, :text, collation: "C")
+      add(:application_basis, :text, null: false, collation: "C")
+      add(:created_by, :text, null: false, collation: "C")
+      add(:change_set_id, :text, collation: "C")
       add(:change_set_revision, :integer)
       add(:inserted_at, :utc_datetime_usec, null: false)
     end
@@ -76,17 +78,17 @@ defmodule Cadence.Repo.Migrations.ReplaceSpacecraftConfigurationRevisions do
     ALTER TABLE spacecraft_configuration_assignments
       ADD CONSTRAINT spacecraft_configuration_assignments_spacecraft_fk
       FOREIGN KEY (organization_id, mission_id, spacecraft_id)
-      REFERENCES mission_spacecraft (organization_id, mission_id, spacecraft_id) ON DELETE CASCADE,
+      REFERENCES mission_spacecraft (organization_id, mission_id, spacecraft_id),
       ADD CONSTRAINT spacecraft_configuration_assignments_artifact_fk
       FOREIGN KEY (organization_id, mission_id, artifact_sha256)
       REFERENCES spacecraft_configuration_artifacts (organization_id, mission_id, sha256)
     """)
 
     create table(:spacecraft_configuration_heads, primary_key: false) do
-      add(:organization_id, :text, primary_key: true)
-      add(:mission_id, :text, primary_key: true)
-      add(:spacecraft_id, :text, primary_key: true)
-      add(:configuration_revision_id, :text, null: false)
+      add(:organization_id, :text, primary_key: true, collation: "C")
+      add(:mission_id, :text, primary_key: true, collation: "C")
+      add(:spacecraft_id, :text, primary_key: true, collation: "C")
+      add(:configuration_revision_id, :text, null: false, collation: "C")
     end
 
     execute("""
@@ -94,22 +96,20 @@ defmodule Cadence.Repo.Migrations.ReplaceSpacecraftConfigurationRevisions do
       ADD CONSTRAINT spacecraft_configuration_heads_assignment_fk
       FOREIGN KEY (organization_id, mission_id, spacecraft_id, configuration_revision_id)
       REFERENCES spacecraft_configuration_assignments
-        (organization_id, mission_id, spacecraft_id, configuration_revision_id) ON DELETE CASCADE
+        (organization_id, mission_id, spacecraft_id, configuration_revision_id)
     """)
 
-    execute("""
-    CREATE FUNCTION refuse_spacecraft_configuration_history_update()
-    RETURNS trigger LANGUAGE plpgsql AS $$
-    BEGIN
-      RAISE EXCEPTION 'spacecraft configuration history is immutable' USING ERRCODE = 'check_violation';
-    END;
-    $$
-    """)
-
-    for table <- ~w(spacecraft_configuration_assignments spacecraft_configuration_artifacts) do
+    for table <- @append_only do
       execute("""
-      CREATE TRIGGER configuration_history_immutable BEFORE UPDATE ON #{table}
-      FOR EACH ROW EXECUTE FUNCTION refuse_spacecraft_configuration_history_update()
+      CREATE TRIGGER #{table}_append_only_rows
+        BEFORE UPDATE OR DELETE ON #{table}
+        FOR EACH ROW EXECUTE FUNCTION cadence_decision_record_append_only();
+      """)
+
+      execute("""
+      CREATE TRIGGER #{table}_append_only_truncate
+        BEFORE TRUNCATE ON #{table}
+        FOR EACH STATEMENT EXECUTE FUNCTION cadence_decision_record_append_only();
       """)
     end
 

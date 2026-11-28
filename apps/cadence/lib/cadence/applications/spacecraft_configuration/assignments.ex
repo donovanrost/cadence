@@ -1,5 +1,12 @@
 defmodule Cadence.Applications.SpacecraftConfiguration.Assignments do
-  @moduledoc "Versioned spacecraft assignments to immutable, identity-free configuration artifacts."
+  @moduledoc """
+  Stores a spacecraft's saved configuration as assignments to shared, immutable artifacts.
+
+  Each spacecraft's head points to its latest saved assignment. Assignments preserve the version,
+  author, and exact endpoint. The artifact holds the shared inputs without the endpoint, so two
+  spacecraft can use the same artifact. Reads join the assignment and artifact to resolve the
+  full document.
+  """
 
   import Ecto.Query
 
@@ -16,10 +23,14 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Assignments do
   # Bound the number of PostgreSQL parameters per INSERT while keeping ordinary fleets in one batch.
   @batch_size 4_000
 
+  @doc "Whether any spacecraft in this mission has a saved configuration."
+  @spec saved?(binary(), binary()) :: boolean()
   def saved?(org, mission) do
     Repo.exists?(heads(org, mission))
   end
 
+  @doc "Resolves the requested spacecraft heads, keyed by spacecraft ID."
+  @spec latest_many(binary(), binary(), [binary()]) :: %{binary() => AssignmentRow.t()}
   def latest_many(_org, _mission, []), do: %{}
 
   def latest_many(org, mission, ids) do
@@ -30,10 +41,16 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Assignments do
     |> Map.new(&{&1.spacecraft_id, &1})
   end
 
+  @doc "Returns the mission's spacecraft IDs and their head assignment IDs."
+  @spec latest_for_mission(binary(), binary()) :: [
+          %{spacecraft_id: binary(), configuration_revision_id: binary()}
+        ]
   def latest_for_mission(org, mission) do
     org |> heads(mission) |> head_references() |> Repo.all()
   end
 
+  @doc "Returns the requested spacecraft's head assignment IDs without resolving documents."
+  @spec latest_references(binary(), binary(), [binary()]) :: %{binary() => binary()}
   def latest_references(org, mission, ids) do
     org
     |> heads(mission)
@@ -43,6 +60,10 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Assignments do
     |> Map.new(&{&1.spacecraft_id, &1.configuration_revision_id})
   end
 
+  @doc "Returns the mission's spacecraft heads that name a catalog revision."
+  @spec catalog_usage_entries(binary(), binary()) :: [
+          %{spacecraft_id: binary(), catalog_revision_id: binary()}
+        ]
   def catalog_usage_entries(org, mission) do
     org
     |> headed_assignments(mission)
@@ -79,6 +100,8 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Assignments do
     |> Map.new()
   end
 
+  @doc "Resolves exact assignments by ID, including historical assignments."
+  @spec fetch_many(binary(), binary(), [binary()]) :: %{binary() => AssignmentRow.t()}
   def fetch_many(_org, _mission, []), do: %{}
 
   def fetch_many(org, mission, ids) do
@@ -89,6 +112,8 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Assignments do
     |> Map.new(&{&1.configuration_revision_id, &1})
   end
 
+  @doc "Returns up to 20 resolved assignments, newest version first."
+  @spec history(binary(), binary(), binary()) :: [AssignmentRow.t()]
   def history(org, mission, spacecraft) do
     org
     |> scoped(mission)
@@ -98,6 +123,15 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Assignments do
     |> resolved()
   end
 
+  @doc "Prepares an assignment from the resolved document and the change that produced it."
+  @spec new(
+          %{organization_id: binary(), mission_id: binary()},
+          binary(),
+          pos_integer(),
+          map(),
+          binary(),
+          map()
+        ) :: AssignmentRow.t()
   def new(mission, spacecraft, version, document, actor, evidence) do
     %AssignmentRow{
       organization_id: mission.organization_id,
@@ -119,6 +153,7 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Assignments do
   end
 
   @doc "Appends assignments and advances their heads under the caller's mission lock and transaction."
+  @spec append([AssignmentRow.t()]) :: [AssignmentRow.t()]
   def append([]), do: []
 
   def append(rows) do
@@ -195,7 +230,10 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Assignments do
     from(head in heads(org, mission),
       join: row in AssignmentRow,
       as: :assignment,
-      on: row.configuration_revision_id == head.configuration_revision_id
+      on:
+        row.configuration_revision_id == head.configuration_revision_id and
+          row.organization_id == head.organization_id and row.mission_id == head.mission_id and
+          row.spacecraft_id == head.spacecraft_id
     )
   end
 

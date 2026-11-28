@@ -2,6 +2,8 @@ defmodule Cadence.Applications.SpacecraftConfiguration.AssignmentRow do
   @moduledoc false
   use Ecto.Schema
 
+  @type t :: %__MODULE__{}
+
   @primary_key {:configuration_revision_id, :string, autogenerate: false}
   @timestamps_opts [type: :utc_datetime_usec, updated_at: false]
 

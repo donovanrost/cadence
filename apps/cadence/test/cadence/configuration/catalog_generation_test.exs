@@ -158,13 +158,35 @@ defmodule Cadence.Configuration.CatalogGenerationTest do
                c.mission.mission_id,
                assignment.configuration_revision_id
              )
+  end
 
-    assert {:error, %Postgrex.Error{postgres: %{code: :check_violation}}} =
-             Repo.query(
-               "UPDATE spacecraft_configuration_assignments SET created_by = $1 WHERE configuration_revision_id = $2",
-               ["another-actor", assignment.configuration_revision_id],
-               mode: :savepoint
-             )
+  test "the database refuses to update, delete, or truncate configuration evidence", c do
+    assignment = Drafts.latest(c.org, c.mission.mission_id, c.craft.spacecraft_id)
+
+    assert_append_only(
+      "spacecraft_configuration_assignments",
+      "configuration_revision_id",
+      assignment.configuration_revision_id
+    )
+
+    assert_append_only(
+      "spacecraft_configuration_artifacts",
+      "sha256",
+      assignment.artifact_sha256
+    )
+  end
+
+  defp assert_append_only(table, key, value) do
+    for {operation, sql, params} <- [
+          {"UPDATE", "UPDATE #{table} SET #{key} = #{key} WHERE #{key} = $1", [value]},
+          {"DELETE", "DELETE FROM #{table} WHERE #{key} = $1", [value]},
+          {"TRUNCATE", "TRUNCATE #{table} CASCADE", []}
+        ] do
+      assert {:error, %Postgrex.Error{postgres: %{code: :raise_exception, message: message}}} =
+               Repo.query(sql, params, mode: :savepoint)
+
+      assert message == "decision records are append-only: #{operation} on #{table} refused"
+    end
   end
 
   test "a new draft round-trips an explicit nil source without taking a spacecraft endpoint", c do
