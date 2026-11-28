@@ -47,6 +47,7 @@ defmodule Cadence.Control.ConfigurationGeneration do
     ConfigurationSelections,
     ConfigurationSwitches,
     ModelApprovalGate,
+    MonitoringGeneration,
     WithdrawnPins
   }
 
@@ -71,6 +72,8 @@ defmodule Cadence.Control.ConfigurationGeneration do
         }
 
   @spec build(input()) :: {:ok, nil | map()} | {:error, term()}
+  def build(%{set: %{lane: "monitoring"}} = input), do: MonitoringGeneration.build(input)
+
   def build(%{set: set} = input) do
     touched = touched_spacecraft(input.entries)
 
@@ -568,9 +571,13 @@ defmodule Cadence.Control.ConfigurationGeneration do
     catalog = document["catalog_revision_id"]
     {selected, pins} = input.selected
     composition = pins[catalog]
-    revision = ConfigurationSelections.revision_of(selected[composition])
+    base = ConfigurationSelections.revision_of(selected[composition])
 
-    with {:ok, inputs, cache} <- Review.cached_inputs(cache, mission, catalog, revision) do
+    # Every generation runs a craft at its composition's current authored head (P3 M2, #451): a
+    # configuration change bringing in a composition where an authored declaration doesn't
+    # resolve fails here, as a NO-GO naming the composition.
+    with {:ok, revision, cache} <- at_head(mission, composition, base, cache),
+         {:ok, inputs, cache} <- Review.cached_inputs(cache, mission, catalog, revision) do
       evidence = %{
         composition_id: composition,
         effective_revision_id: inputs.model["revision_id"],
@@ -582,12 +589,29 @@ defmodule Cadence.Control.ConfigurationGeneration do
     end
   end
 
-  defp next_binding_set(_mission, active, []), do: {:ok, active.binding_set}
+  # Once per composition, never per craft: the head read and the compile are memoized in the
+  # derivation's cache, so a fleet's statement count stays constant (#1049).
+  defp at_head(mission, composition, base, cache) do
+    key = {:at_head, composition, base}
+
+    case Map.fetch(cache, key) do
+      {:ok, revision} ->
+        {:ok, revision, cache}
+
+      :error ->
+        with {:ok, revision} <- MonitoringGeneration.at_head(mission, composition, base),
+             do: {:ok, revision, Map.put(cache, key, revision)}
+    end
+  end
+
+  @doc false
+  # Shared with Control.MonitoringGeneration (P3 M2, #451).
+  def next_binding_set(_mission, active, []), do: {:ok, active.binding_set}
 
   # Hashed and applied as it reads back, like Control.Activations: the in-memory build carries
   # packet field ids the store doesn't keep, so its hash could never re-admit after a restart
   # (2026-11-12, catalog-generations.md).
-  defp next_binding_set(mission, active, items) do
+  def next_binding_set(mission, active, items) do
     with {:ok, persisted} <-
            Governance.persist_binding_set(
              mission.organization_id,
@@ -638,7 +662,9 @@ defmodule Cadence.Control.ConfigurationGeneration do
     |> Enum.map(& &1.source_endpoint_id)
   end
 
-  defp activate(input, active, binding_set, changed) do
+  @doc false
+  # Shared with Control.MonitoringGeneration (P3 M2, #451).
+  def activate(input, active, binding_set, changed) do
     mission_id = input.set.mission_id
 
     # A revision this generation introduces must be approved and its comparison passed (#92 a).

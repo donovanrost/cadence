@@ -60,10 +60,45 @@ defmodule Cadence.MissionModels do
           {:ok, CompilerResult.t()} | {:error, term()}
   def compile_layers(layers, opts \\ []) when is_list(layers) and is_list(opts) do
     with {:ok, %CompilerResult{} = result} <- Compiler.compile(layers, opts),
+         {:ok, result} <- keep_command_plan(result, Keyword.get(opts, :command_plan)),
          {:ok, _changes} <- persist_compilation(layers, result) do
       {:ok, result}
     end
   end
+
+  # A revision at an authored head runs its base's command plan unchanged (P3 M2, #451; option B
+  # agreed with commanding): the authored layer can't hold a command declaration, so its own
+  # command plan differs from the base's only by the embedded revision id. That is checked, never
+  # assumed: any other difference refuses the compile.
+  defp keep_command_plan(result, nil), do: {:ok, result}
+
+  defp keep_command_plan(
+         %CompilerResult{plans: %{command: own} = plans} = result,
+         %RuntimePlan{} = base
+       ) do
+    if without_revision(own.plan) == without_revision(base.plan),
+      do:
+        {:ok,
+         %{
+           result
+           | plans: %{
+               plans
+               | command: %{base | mission_model_revision_id: result.revision.revision_id}
+             }
+         }},
+      else: {:error, :authored_head_changes_command_plan}
+  end
+
+  defp keep_command_plan(result, _base), do: {:ok, result}
+
+  defp without_revision(%{} = map) when not is_struct(map),
+    do:
+      map
+      |> Map.drop(["mission_model_revision_id", :mission_model_revision_id])
+      |> Map.new(fn {k, v} -> {k, without_revision(v)} end)
+
+  defp without_revision(list) when is_list(list), do: Enum.map(list, &without_revision/1)
+  defp without_revision(value), do: value
 
   @doc """
   The mission composition that names `revision_id` (#542), or

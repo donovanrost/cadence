@@ -1,0 +1,161 @@
+defmodule Cadence.Control.MonitoringGeneration do
+  @moduledoc """
+  The generation a monitoring change set's apply makes (ADR-020 P3 slice M2, #451; the design
+  agreed with commanding and mm-engineer on #1106).
+
+  Inside the apply's transaction, under its locks:
+
+    1. the next authored layer is built from the set's entries (`MissionModels.AuthoredLayer`):
+       the head's declarations with the set's monitoring changes, as version head + 1 of this set;
+    2. it's recorded as that version for the revision this apply writes
+       (`Control.AuthoredVersions.record/5`, checked again by the database at commit);
+    3. every composition in use compiles at the new head, once each
+       (`Compositions.effective_revision/5`); a declaration that doesn't resolve in a composition
+       it's scoped to is a NO-GO naming the composition;
+    4. each craft's contribution is recompiled in memory against its composition's head revision,
+       from the craft's **existing** configuration assignment: a monitoring change changes no
+       craft's configuration, so no assignment row is written;
+    5. one generation through the model gate and activation, with no pin move.
+
+  `at_head/3` is the same step for a configuration apply: every generation runs a craft at its
+  composition's current head.
+  """
+
+  alias Cadence.Applications.SpacecraftConfiguration.{Active, Assignments, Review}
+  alias Cadence.Control.{AuthoredVersions, ConfigurationGeneration}
+  alias Cadence.MissionModels.{AuthoredHead, AuthoredLayer, Compositions}
+  alias Cadence.Missions
+  alias Cadence.SourceEndpoints
+
+  @spec build(map()) :: {:ok, nil | map()} | {:error, term()}
+  def build(%{set: set} = input) do
+    org = set.organization_id
+    mission_id = set.mission_id
+
+    with {:ok, mission} <- Missions.fetch_mission(org, mission_id),
+         active = active(mission),
+         compositions = in_use(active),
+         {:ok, layer} <-
+           AuthoredLayer.next(org, mission_id, input.entries, compositions, set.change_set_id),
+         {:ok, _version} <-
+           AuthoredVersions.record(
+             org,
+             mission_id,
+             layer.layer_id,
+             set.change_set_id,
+             input.revision
+           ) do
+      generate(mission, input, active, compositions, layer.layer_id)
+    end
+  end
+
+  @doc """
+  The revision a craft of `composition_id` runs: `base` (its selected revision) compiled at the
+  mission's current authored head, or `base` itself before the first monitoring apply.
+  """
+  @spec at_head(map(), binary() | nil, binary() | nil) :: {:ok, binary() | nil} | {:error, term()}
+  def at_head(_mission, nil, base), do: {:ok, base}
+
+  def at_head(mission, composition_id, base) do
+    case AuthoredHead.head(mission.organization_id, mission.mission_id) do
+      nil -> {:ok, base}
+      %{layer_id: head} -> compile_at(mission, composition_id, head)
+    end
+  end
+
+  # No active fleet: the version is recorded and the next fleet generation runs at it.
+  defp generate(_mission, _input, nil, _compositions, _head), do: {:ok, nil}
+
+  defp generate(mission, input, active, compositions, head) do
+    with {:ok, heads} <- heads(mission, compositions, head),
+         {:ok, items} <- recompile(mission, active.entries, heads),
+         {:ok, binding_set} <- ConfigurationGeneration.next_binding_set(mission, active, items) do
+      changed = Map.new(items, &{&1.id, &1.entry})
+      ConfigurationGeneration.activate(input, active, binding_set, changed)
+    end
+  end
+
+  defp active(mission) do
+    case Active.load(mission) do
+      {:ok, %{activation: %{}} = active} -> active
+      _none -> nil
+    end
+  end
+
+  defp in_use(nil), do: []
+
+  defp in_use(active) do
+    active.entries
+    |> Map.values()
+    |> Enum.map(& &1["composition_id"])
+    |> Enum.filter(&is_binary/1)
+    |> Enum.uniq()
+    |> Enum.sort()
+  end
+
+  # `%{composition_id => head revision id}`, one compile per composition.
+  defp heads(mission, compositions, head) do
+    Enum.reduce_while(compositions, {:ok, %{}}, fn composition_id, {:ok, acc} ->
+      case compile_at(mission, composition_id, head) do
+        {:ok, revision_id} -> {:cont, {:ok, Map.put(acc, composition_id, revision_id)}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+  end
+
+  defp compile_at(mission, composition_id, head) do
+    case Compositions.effective_revision(
+           mission.organization_id,
+           mission.mission_id,
+           composition_id,
+           head
+         ) do
+      {:ok, revision_id} -> {:ok, revision_id}
+      {:error, reason} -> {:error, {:monitoring_composition_invalid, composition_id, reason}}
+    end
+  end
+
+  # Each craft on a composition in use, recompiled against its head revision from its existing
+  # assignment: inputs once per {catalog, revision} (Review.cached_inputs), sources in one read.
+  defp recompile(mission, entries, heads) do
+    org = mission.organization_id
+    mission_id = mission.mission_id
+
+    on_heads =
+      for {id, entry} <- entries, is_map_key(heads, entry["composition_id"]), into: %{} do
+        {id, entry}
+      end
+
+    rows =
+      org
+      |> Assignments.fetch_many(
+        mission_id,
+        on_heads |> Map.values() |> Enum.map(& &1["configuration_revision_id"]) |> Enum.uniq()
+      )
+
+    sources =
+      org
+      |> SourceEndpoints.list_source_endpoints_for_spacecrafts(mission_id, Map.keys(on_heads))
+      |> Map.new(fn {id, endpoints} -> {id, Enum.map(endpoints, & &1.source_endpoint_id)} end)
+
+    on_heads
+    |> Enum.sort_by(&elem(&1, 0))
+    |> Enum.reduce_while({:ok, [], %{}}, fn {id, entry}, {:ok, items, cache} ->
+      with %{} = row <-
+             Map.get(rows, entry["configuration_revision_id"]) ||
+               {:error, :spacecraft_configuration_not_found},
+           revision = Map.fetch!(heads, entry["composition_id"]),
+           {:ok, inputs, cache} <-
+             Review.cached_inputs(cache, mission, entry["catalog_revision_id"], revision),
+           {:ok, item} <- Review.compile(mission, id, row, inputs, Map.get(sources, id, [])) do
+        {:cont, {:ok, [item | items], cache}}
+      else
+        {:error, reason} -> {:halt, {:error, {reason, id}}}
+      end
+    end)
+    |> case do
+      {:ok, items, _cache} -> {:ok, Enum.reverse(items)}
+      error -> error
+    end
+  end
+end

@@ -74,6 +74,14 @@ defmodule Cadence.MissionModels.AuthoredLayer do
   @spec next(binary(), binary(), [entry()], [binary()], binary()) ::
           {:ok, Layer.t()} | {:error, term()}
   def next(organization_id, mission_id, entries, compositions, change_set_id) do
+    with {:ok, layer} <- build(organization_id, mission_id, entries, compositions, change_set_id),
+         do: MissionModels.persist_layer(layer)
+  end
+
+  @doc "The layer `next/5` would persist, without persisting it (for a preview's checks)."
+  @spec build(binary(), binary(), [entry()], [binary()], binary()) ::
+          {:ok, Layer.t()} | {:error, term()}
+  def build(organization_id, mission_id, entries, compositions, change_set_id) do
     entries = Enum.filter(entries, &(&1.kind in @kinds))
     current = current(organization_id, mission_id)
 
@@ -81,9 +89,14 @@ defmodule Cadence.MissionModels.AuthoredLayer do
            apply_entries(organization_id, mission_id, current, entries, compositions),
          :ok <- changed(declarations, current),
          :ok <- bounded(declarations) do
-      organization_id
-      |> layer(mission_id, declarations, next_version(organization_id, mission_id), change_set_id)
-      |> MissionModels.persist_layer()
+      {:ok,
+       layer(
+         organization_id,
+         mission_id,
+         declarations,
+         next_version(organization_id, mission_id),
+         change_set_id
+       )}
     end
   end
 

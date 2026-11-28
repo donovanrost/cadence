@@ -46,6 +46,8 @@ defmodule Cadence.MissionModels.AuthoredLayerTest do
     {:ok, composition} =
       Compositions.insert_or_get(@org, mission, [{layer.layer_id, "/"}], @actor)
 
+    # Its base, at the current compiler: what a head builds on (and whose command plan it keeps).
+    {:ok, _base} = Compositions.effective_revision(@org, mission, composition.composition_id, nil)
     composition.composition_id
   end
 
@@ -141,6 +143,18 @@ defmodule Cadence.MissionModels.AuthoredLayerTest do
 
     assert policy_paths(c, here) |> Enum.member?("/mission/monitoring/Bus_only")
     refute policy_paths(c, there) |> Enum.member?("/mission/monitoring/Bus_only")
+
+    # Option B (#451): the head runs its base's command plan, the same identity, as its own row.
+    {:ok, base} = Compositions.effective_revision(@org, c.mission, c.composition, nil)
+    {:ok, head_command} = MissionModels.fetch_plan(@org, c.mission, here, :command)
+    {:ok, base_command} = MissionModels.fetch_plan(@org, c.mission, base, :command)
+
+    assert {head_command.plan_id, head_command.content_sha256,
+            head_command.target_contract_version} ==
+             {base_command.plan_id, base_command.content_sha256,
+              base_command.target_contract_version}
+
+    assert head_command.mission_model_revision_id == here
   end
 
   defp imported_layer_ids(c) do

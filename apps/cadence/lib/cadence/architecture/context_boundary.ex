@@ -53,6 +53,10 @@ defmodule Cadence.Architecture.ContextBoundary do
     "lib/cadence/control/model_withdrawal.ex" => :composition,
     # P3 M1 (#451): records an authored version from an applied set (configuration + model).
     "lib/cadence/control/authored_versions.ex" => :composition,
+    # P3 M2 (#451): a monitoring apply's generation (configuration, model, activations).
+    "lib/cadence/control/monitoring_generation.ex" => :composition,
+    # P3 M2 (#451): the monitoring lane's limits and alarm rules kind.
+    "lib/cadence/control/monitoring_policy_kind.ex" => :composition,
     "lib/cadence/control/withdrawn_pins.ex" => :composition,
     "lib/cadence/control/configuration_switches.ex" => :composition,
     "lib/cadence/control/configuration_apids.ex" => :composition,
