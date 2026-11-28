@@ -1,6 +1,6 @@
 import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vite-plus/test";
-import { decode, missionId } from "@/api";
+import { decode, missionId, spacecraftId } from "@/api";
 import { appsReader, type App } from "./api.ts";
 import AppRow from "./AppRow.vue";
 
@@ -51,6 +51,25 @@ describe("an app row (L19)", () => {
     expect(w.text()).toContain("Platform · always on");
     expect(w.text()).not.toContain("Waiting");
     expect(w.text()).not.toContain("Status not known");
+  });
+
+  it("a headless app (no surfaces, #669) is a plain row with its verbs and no link", () => {
+    const headless = { ...app({ state: "active", label: null, version: "1" }), platform: false };
+    const w = mount(AppRow, {
+      props: {
+        missionId: missionId("mission_1"),
+        app: headless,
+        canInstall: true,
+        uninstallScope: { kind: "spacecraft" },
+        spacecraftId: spacecraftId("sc_1"),
+      },
+      global: { stubs: { RouterLink: true } },
+    });
+    expect(w.text()).toContain("Telemetry decom");
+    expect(w.find("router-link-stub").exists()).toBe(false);
+    expect(w.findAll("button").map((b) => b.text())).toEqual(
+      expect.arrayContaining(["Disable", "Uninstall"]),
+    );
   });
 
   it("says an unknown state is not known rather than guessing", () => {

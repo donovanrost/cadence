@@ -261,7 +261,7 @@ fe-setup's P4 aside calls `preview` with *unstaged* ops (the same function, no c
    with the checks. HOLDs need `acknowledged_holds: true`.
 2. **Compose:** compute the post-state, build the fleet's spacecraft configuration entries from the
    effective profile + overrides (`profile-routing.md` §4), and compose the next binding set
-   (reuse `MissionBindingComposer` / `Review.replace_contributions`).
+   (reuse `SpacecraftConfiguration.Review.binding_set/3`).
 3. **Request:** `Management.Activations.request(change_class: max(kinds), metadata:
    %{"change_set" => %{id, content_sha256, base_revision}, "spacecraft_configurations" => …})`.
    The policy decides between:

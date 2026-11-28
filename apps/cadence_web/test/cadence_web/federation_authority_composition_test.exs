@@ -4,8 +4,8 @@ defmodule CadenceWeb.FederationAuthorityCompositionTest do
   alias Cadence.Applications.{CatalogRegistry, ReleaseContribution, ReleaseRegistry}
   alias Cadence.Reads.ApplicationSurfaces.ProviderRegistry, as: SurfaceProviderRegistry
 
+  # Telemetry Decom is headless (#669): it is in the catalog with no surfaces and no release.
   @provider_ledger [
-    Cadence.Applications.TelemetryDecom,
     Cadence.Applications.OpsConsole
   ]
 
@@ -58,7 +58,6 @@ defmodule CadenceWeb.FederationAuthorityCompositionTest do
 
     assert contributions
            |> Enum.frequencies_by(& &1.application_key) == %{
-             "telemetry_decom" => 2,
              "ops_console" => 7
            }
   end

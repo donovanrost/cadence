@@ -5,13 +5,12 @@ defmodule CadenceWeb.ApplicationHostBridgeTest do
     ActionDefinition,
     ActionRequest,
     ApplicationDefinition,
-    ApplicationInstallations,
     HostContext,
     SurfaceDefinition
   }
 
   alias Cadence.Auth.Scope
-  alias CadenceWeb.{ApplicationActionIdempotency, ApplicationHostBridge, TestFixtures}
+  alias CadenceWeb.{ApplicationHostBridge, TestFixtures}
 
   @now "2026-09-03T12:00:00Z"
 
@@ -68,14 +67,14 @@ defmodule CadenceWeb.ApplicationHostBridgeTest do
   end
 
   test "carries explicit admitted surface identity into provider dispatch" do
-    {scope, route_context} = installed_telemetry_context()
+    {scope, route_context} = ops_mission_context()
 
     params = %{
-      "applicationKey" => "telemetry_decom",
+      "applicationKey" => "ops_console",
       "applicationVersion" => 1,
-      "surfaceId" => "packet_bindings",
+      "surfaceId" => "data_sources",
       "surfaceVersion" => 1,
-      "actionId" => "save_packet_bindings",
+      "actionId" => "probe-source",
       "params" => %{"selected" => true}
     }
 
@@ -89,22 +88,22 @@ defmodule CadenceWeb.ApplicationHostBridgeTest do
              )
 
     assert %ActionRequest{
-             surface_id: "packet_bindings",
+             surface_id: "data_sources",
              surface_version: 1,
              params: %{"selected" => true}
            } = prepared.dispatch_request
 
-    assert prepared.request_document["surfaceId"] == "packet_bindings"
+    assert prepared.request_document["surfaceId"] == "data_sources"
     assert prepared.request_document["surfaceVersion"] == 1
   end
 
   test "requires the exact surface identity for every action" do
-    {scope, route_context} = installed_telemetry_context()
+    {scope, route_context} = ops_mission_context()
 
     params = %{
-      "applicationKey" => "telemetry_decom",
+      "applicationKey" => "ops_console",
       "applicationVersion" => 1,
-      "actionId" => "save_packet_bindings",
+      "actionId" => "probe-source",
       "params" => %{"selected" => true}
     }
 
@@ -124,12 +123,11 @@ defmodule CadenceWeb.ApplicationHostBridgeTest do
     assert ApplicationHostBridge.host_dom_id(:user) == "user-application-host"
   end
 
-  defp installed_telemetry_context do
+  defp ops_mission_context do
     user = TestFixtures.persist_user!()
     organization = TestFixtures.persist_org!()
     membership = TestFixtures.grant_membership!(user, organization)
     mission = TestFixtures.persist_mission!(organization)
-    spacecraft = TestFixtures.persist_spacecraft!(mission)
 
     scope =
       Scope.new(%{
@@ -139,16 +137,11 @@ defmodule CadenceWeb.ApplicationHostBridgeTest do
         organization_membership: membership
       })
 
-    host_context = HostContext.spacecraft(mission.mission_id, spacecraft.spacecraft_id)
-
-    assert {:ok, _installation} =
-             ApplicationInstallations.install(scope, host_context, "telemetry_decom")
-
     {scope,
      %{
-       host_context: host_context,
+       host_context: HostContext.mission(mission.mission_id),
        mission: mission,
-       spacecraft: spacecraft
+       spacecraft: nil
      }}
   end
 end

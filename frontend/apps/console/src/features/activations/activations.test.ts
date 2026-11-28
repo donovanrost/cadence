@@ -18,9 +18,8 @@ import {
 /** Fixtures: plans/activations.md (proposed 11-13). */
 const request: ActivationRequest = {
   id: "act_1",
-  kind: "telemetry_decom",
-  app: { key: "telemetry_decom", name: "Telemetry decom" },
-  summary: "Decom composition for 3 spacecraft",
+  kind: "spacecraft_configuration",
+  summary: "Spacecraft configuration for 3 spacecraft",
   binding_set: { id: "bs_1", version: 4 },
   requested_by: { kind: "user", id: "u1", name: "Mira K." },
   requested_at: "2026-11-13T02:10:00Z",
@@ -173,7 +172,7 @@ describe("app activation approvals (L10)", () => {
 
     // Applied carries the apply's finish time, never the decision's (U20); none until api sends it.
     expect(decisionText({ ...notRequired, ...applied })).toBe(
-      "Applied Decom composition for 3 spacecraft at 11-13 02:31Z without a second person's approval, as this mission's setting allows.",
+      "Applied Spacecraft configuration for 3 spacecraft at 11-13 02:31Z without a second person's approval, as this mission's setting allows.",
     );
     expect(
       decisionText({
@@ -181,7 +180,7 @@ describe("app activation approvals (L10)", () => {
         execution: { ...applied.execution, finished_at: undefined },
       }),
     ).toBe(
-      "Applied Decom composition for 3 spacecraft without a second person's approval, as this mission's setting allows.",
+      "Applied Spacecraft configuration for 3 spacecraft without a second person's approval, as this mission's setting allows.",
     );
     // ADMIN MODE goes right after the decider's name, only when true.
     const admin = decisionLine({ ...decided, decision: { ...decided.decision, admin_mode: true } });
@@ -334,8 +333,7 @@ describe("app activation approvals (L10)", () => {
     const row = {
       id: "activation_request_1",
       kind: null,
-      app: null,
-      summary: "Decom composition for 3 spacecraft",
+      summary: "Spacecraft configuration for 3 spacecraft",
       binding_set: { id: "bs_1", version: 4 },
       requested_by: { kind: "user", id: "u1", name: "Mira K." },
       requested_at: "2026-11-13T02:10:00Z",
@@ -373,7 +371,6 @@ describe("app activation approvals (L10)", () => {
     const row = {
       id: "activation_request_2",
       kind: "spacecraft_configuration",
-      app: null,
       summary: "EARENDIL-004 configuration v4",
       binding_set: { id: "bs_2", version: 4 },
       requested_by: { kind: "user", id: "u1", name: "Mira K." },
@@ -418,7 +415,6 @@ describe("app activation approvals (L10)", () => {
     const decided = (extra: Record<string, unknown>) => ({
       id: "activation_request_3",
       kind: "spacecraft_configuration",
-      app: null,
       summary: "EARENDIL-004 configuration v5",
       binding_set: { id: "bs_3", version: 5 },
       requested_by: { kind: "user", id: "u1", name: "Mira K." },

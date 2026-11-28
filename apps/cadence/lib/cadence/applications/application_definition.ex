@@ -9,7 +9,6 @@ defmodule Cadence.Applications.ApplicationDefinition do
 
   alias Cadence.Applications.{
     ActionDefinition,
-    ApplicationDependency,
     LifecycleContract,
     ResourceContract,
     SettingsSectionDefinition,
@@ -30,12 +29,10 @@ defmodule Cadence.Applications.ApplicationDefinition do
           installation_policy: installation_policy(),
           availability: availability(),
           installable_scopes: [scope()],
-          dependencies: [ApplicationDependency.t()],
           configuration_contract: map(),
           resource_contract: ResourceContract.t(),
           lifecycle_contract: LifecycleContract.t(),
           status_query_id: binary() | nil,
-          preflight_query_id: binary() | nil,
           actions: [ActionDefinition.t()],
           surfaces: [SurfaceDefinition.t()],
           settings_sections: [SettingsSectionDefinition.t()],
@@ -60,10 +57,8 @@ defmodule Cadence.Applications.ApplicationDefinition do
     :trust,
     :availability,
     :status_query_id,
-    :preflight_query_id,
     installation_policy: :optional,
     installable_scopes: [],
-    dependencies: [],
     configuration_contract: %{},
     resource_contract: %ResourceContract{},
     lifecycle_contract: %LifecycleContract{},
@@ -75,7 +70,6 @@ defmodule Cadence.Applications.ApplicationDefinition do
 
   @scopes [:organization, :user, :admin, :mission, :spacecraft, :source_endpoint, :transport]
   @capability_kinds [:semantic_handler, :managed_application, :projection, :transport_extension]
-  @max_dependencies 16
   # Route-level applications may expose a finite action vocabulary per
   # surface. Keep the application-wide envelope explicit while allowing the
   # Ops cohort to retain its exact declared identities.
@@ -86,6 +80,15 @@ defmodule Cadence.Applications.ApplicationDefinition do
   @spec available?(t()) :: boolean()
   def available?(%__MODULE__{availability: :available}), do: true
   def available?(%__MODULE__{}), do: false
+
+  @doc """
+  Whether the application has no surfaces of its own (#669): it is installed, configured and
+  activated through the console's own screens and the server's domain paths, and the host
+  mounts nothing for it. Such an application needs no workspace surface.
+  """
+  @spec headless?(t()) :: boolean()
+  def headless?(%__MODULE__{surfaces: []}), do: true
+  def headless?(%__MODULE__{}), do: false
 
   @doc "Whether a platform definition supports this scope without an installation."
   @spec platform?(t(), scope()) :: boolean()
@@ -117,14 +120,13 @@ defmodule Cadence.Applications.ApplicationDefinition do
          true <- definition.installation_policy in [:platform, :optional],
          true <- definition.availability in [:available, :roadmap],
          true <- valid_installable_scopes?(definition.installable_scopes),
-         true <- valid_dependencies?(definition.dependencies, definition.application_key),
          true <- valid_configuration_contract?(definition.configuration_contract),
          :ok <- ResourceContract.validate(definition.resource_contract),
          :ok <- LifecycleContract.validate(definition.lifecycle_contract),
          true <- optional_text?(definition.status_query_id),
-         true <- optional_text?(definition.preflight_query_id),
          true <- valid_actions?(definition.actions, definition.installable_scopes),
          true <- distinct_action_contracts?(definition),
+         true <- platform_actions_only?(definition),
          true <- valid_surfaces?(definition),
          true <- valid_settings_sections?(definition.settings_sections),
          true <- valid_capability_contributions?(definition.capability_contributions) do
@@ -152,25 +154,6 @@ defmodule Cadence.Applications.ApplicationDefinition do
   end
 
   defp valid_settings_sections?(_sections), do: false
-
-  defp valid_dependencies?(dependencies, application_key) when is_list(dependencies) do
-    identities = Enum.map(dependencies, &dependency_identity/1)
-
-    length(dependencies) <= @max_dependencies and
-      Enum.all?(dependencies, &(ApplicationDependency.validate(&1) == :ok)) and
-      Enum.all?(dependencies, &(&1.application_key != application_key)) and
-      length(Enum.uniq(identities)) == length(identities)
-  end
-
-  defp valid_dependencies?(_dependencies, _application_key), do: false
-
-  defp dependency_identity(%ApplicationDependency{
-         application_key: application_key,
-         scope: scope
-       }),
-       do: {application_key, scope}
-
-  defp dependency_identity(_dependency), do: nil
 
   defp valid_configuration_contract?(contract) when map_size(contract) == 0, do: true
 
@@ -201,6 +184,13 @@ defmodule Cadence.Applications.ApplicationDefinition do
     Enum.all?(domain_action_ids, &(&1 not in definition.lifecycle_contract.actions))
   end
 
+  # Only a platform application's actions are dispatched (#669 b): nothing checks an optional
+  # application's installation before running one, so an optional application declares none.
+  defp platform_actions_only?(%__MODULE__{installation_policy: :optional} = definition),
+    do: definition.actions == [] and definition.lifecycle_contract.actions == []
+
+  defp platform_actions_only?(%__MODULE__{}), do: true
+
   defp valid_surfaces?(%__MODULE__{} = definition) when is_list(definition.surfaces) do
     surface_identities = Enum.map(definition.surfaces, &surface_identity/1)
     declared_action_ids = declared_action_ids(definition)
@@ -228,14 +218,17 @@ defmodule Cadence.Applications.ApplicationDefinition do
     |> MapSet.new()
   end
 
+  # An application with surfaces gives every installable scope a workspace; a roadmap or
+  # headless one has none to give.
   defp workspace_surface_coverage?(%__MODULE__{availability: :roadmap}), do: true
 
   defp workspace_surface_coverage?(%__MODULE__{} = definition) do
-    Enum.all?(definition.installable_scopes, fn scope ->
-      Enum.any?(definition.surfaces, fn surface ->
-        surface.scope == scope and surface.placement == :application_workspace
+    headless?(definition) or
+      Enum.all?(definition.installable_scopes, fn scope ->
+        Enum.any?(definition.surfaces, fn surface ->
+          surface.scope == scope and surface.placement == :application_workspace
+        end)
       end)
-    end)
   end
 
   defp valid_capability_contributions?(contributions) when is_list(contributions) do

@@ -4,7 +4,7 @@ defmodule Cadence.TestActionProviders.Raising do
   @behaviour Cadence.Applications.ActionProvider
 
   @impl true
-  def application_key, do: "telemetry_decom"
+  def application_key, do: "ops_console"
 
   @impl true
   def execute(_scope, _host_context, _request), do: raise("synthetic action provider failure")

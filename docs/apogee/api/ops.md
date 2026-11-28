@@ -428,9 +428,9 @@ Every item has every field; fields that don't apply to its `kind` are `null` (or
   - **`activation_apply`** (director C, ux U41): an approved activation whose apply failed or
     stalled. **P1** while `runtime_not_applied` is true (telemetry isn't processed until it
     applies), else P2; `due_at` null. `spacecraft` holds every member it names (fleet names).
-    `attention` adds `{error_code, error, retryable, activation_request_id, summary, kind, app {key,
-    name} | null, spacecraft_ids, spacecraft_count, runtime_not_applied, since, approved_by {id,
-    name} | null, approved_at | null}` (pass fields `contact_id`, `station`, `provider`,
+    `attention` adds `{error_code, error, retryable, activation_request_id, summary, kind,
+    spacecraft_ids, spacecraft_count, runtime_not_applied, since, approved_by {id, name} | null,
+    approved_at | null}` (pass fields `contact_id`, `station`, `provider`,
     `starts_at` are null). `Retry apply` is `POST …/activations/:id/resume` (activations.md), shown
     only when `retryable`. Resolved: `action` `applied` | `superseded`, `resolved_by.kind`
     `system`.

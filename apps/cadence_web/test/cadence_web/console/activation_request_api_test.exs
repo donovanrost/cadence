@@ -314,7 +314,7 @@ defmodule CadenceWeb.Console.ActivationRequestAPITest do
       )
 
     {:ok, request} =
-      Cadence.MissionModels.request_promotion(
+      Cadence.MissionModelFixtures.request_model_activation(
         c.scope,
         c.mission.mission_id,
         compilation.revision.revision_id,

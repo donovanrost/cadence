@@ -60,7 +60,6 @@ describe("L9 re-pinning bridge (api: one scope per session)", () => {
       create: f.create,
       repin: async () => session("s2"),
       navigate: () => undefined,
-      onReceipt: () => undefined,
       onLost: () => (lost = true),
     });
     await b.bridge.query(query);
@@ -77,24 +76,22 @@ describe("L9 re-pinning bridge (api: one scope per session)", () => {
       create: f.create,
       repin: async () => session("s2"),
       navigate: () => undefined,
-      onReceipt: () => undefined,
       onLost: () => (lost = true),
     });
     await expect(b.bridge.query(query)).rejects.toThrow(LOST_TEXT);
     expect(lost).toBe(true);
   });
 
-  it("hands every receipt to the save seam", async () => {
-    const seen: string[] = [];
+  it("re-pins and retries an action once too", async () => {
+    const f = fakes(new Set(["s1"]));
     const b = repinningBridge({
       session: session("s1"),
-      create: fakes(new Set()).create,
-      repin: async () => null,
+      create: f.create,
+      repin: async () => session("s2"),
       navigate: () => undefined,
-      onReceipt: (actionId) => seen.push(actionId),
       onLost: () => undefined,
     });
     await b.bridge.execute(action);
-    expect(seen).toEqual(["save_packet_bindings"]);
+    expect(f.answered).toEqual(["s2"]);
   });
 });

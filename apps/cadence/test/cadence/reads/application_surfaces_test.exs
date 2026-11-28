@@ -2,7 +2,6 @@ defmodule Cadence.Reads.ApplicationSurfacesTest do
   use Cadence.DataCase, async: false
 
   alias Cadence.Applications.{
-    ApplicationInstallations,
     HostContext,
     Registry,
     SurfaceDefinition,
@@ -12,7 +11,7 @@ defmodule Cadence.Reads.ApplicationSurfacesTest do
 
   alias Cadence.Auth.Scope
 
-  alias Cadence.Reads.{ApplicationReferences, ApplicationSurfaces}
+  alias Cadence.Reads.ApplicationSurfaces
   alias Cadence.Reads.ApplicationSurfaces.ProviderRegistry
 
   @organization_id "org-application-surfaces"
@@ -29,37 +28,6 @@ defmodule Cadence.Reads.ApplicationSurfacesTest do
     }
 
     %{scope: scope, host_context: HostContext.mission(@mission_id)}
-  end
-
-  test "requires the exact active installation before loading a declared surface", context do
-    decom = decom_surface("spacecraft-surface-install")
-
-    assert {:error, :application_not_installed} =
-             ApplicationSurfaces.load(
-               context.scope,
-               decom.host,
-               decom.definition.application_key,
-               decom.definition.version,
-               decom.surface
-             )
-
-    assert {:ok, _installation} =
-             ApplicationInstallations.install(
-               context.scope,
-               decom.host,
-               decom.definition.application_key
-             )
-
-    assert {:ok, %{"data" => data}} =
-             ApplicationSurfaces.load(
-               context.scope,
-               decom.host,
-               decom.definition.application_key,
-               decom.definition.version,
-               decom.surface
-             )
-
-    assert is_map(data)
   end
 
   test "dispatches two contributed applications concurrently without cross-talk", context do
@@ -204,80 +172,18 @@ defmodule Cadence.Reads.ApplicationSurfacesTest do
   end
 
   test "rejects undeclared surface contracts even when their query id is known", context do
-    decom = decom_surface("spacecraft-surface-undeclared")
-
-    assert {:ok, _installation} =
-             ApplicationInstallations.install(
-               context.scope,
-               decom.host,
-               decom.definition.application_key
-             )
-
-    %SurfaceDefinition{} = surface = decom.surface
-
+    {:ok, definition} = Registry.fetch_available("ops_console")
+    {:ok, %SurfaceDefinition{} = surface} = Registry.fetch_default_surface(definition, :mission)
     altered_surface = %SurfaceDefinition{surface | surface_id: "operator-supplied-surface"}
 
     assert {:error, :undeclared_application_surface} =
              ApplicationSurfaces.load(
                context.scope,
-               decom.host,
-               decom.definition.application_key,
-               decom.definition.version,
+               context.host_context,
+               definition.application_key,
+               definition.version,
                altered_surface
              )
-  end
-
-  test "searches bounded reference pages through the authorized installed surface", context do
-    decom = decom_surface("spacecraft-surface-references")
-    {:ok, surface} = Registry.fetch_surface(decom.definition, :spacecraft, "manage")
-
-    search = fn field, query ->
-      ApplicationReferences.search(
-        context.scope,
-        decom.host,
-        decom.definition.application_key,
-        decom.definition.version,
-        surface,
-        field,
-        query
-      )
-    end
-
-    assert {:error, :application_not_installed} = search.("catalog_revision_id", "")
-
-    assert {:ok, _installation} =
-             ApplicationInstallations.install(
-               context.scope,
-               decom.host,
-               decom.definition.application_key
-             )
-
-    # The revision choice is a select reference: it resolves with the surface, never by search.
-    assert {:error, :reference_not_searchable} = search.("catalog_revision_id", "missing")
-
-    assert {:error, :unknown_application_surface_reference} =
-             search.("operator_field", "channel")
-
-    assert {:ok, _installation} =
-             ApplicationInstallations.disable(
-               context.scope,
-               decom.host,
-               decom.definition.application_key
-             )
-
-    assert {:error, :application_installation_disabled} = search.("catalog_revision_id", "")
-  end
-
-  defp decom_surface(spacecraft_id) do
-    persist_test_spacecraft(spacecraft_id)
-    {:ok, definition} = Registry.fetch_available("telemetry_decom")
-    {:ok, surface} = Registry.fetch_default_surface(definition, :spacecraft)
-
-    %{
-      host: HostContext.spacecraft(@mission_id, spacecraft_id),
-      definition: definition,
-      surface: surface
-    }
   end
 
   defp persist_test_spacecraft(spacecraft_id) do

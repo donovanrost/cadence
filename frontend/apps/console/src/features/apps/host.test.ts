@@ -1,21 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { saveOutcome } from "./saveOutcome.ts";
 import { hostRefusal, setupSurfaces } from "./surfaces.ts";
-
-describe("L9 save-outcome seam (DECISIONS #77)", () => {
-  it("says what each app's own save did, never 'staged'", () => {
-    expect(saveOutcome("telemetry_decom", "save_packet_bindings")).toEqual({
-      kind: "saved",
-      text: "Saved. It applies now.",
-    });
-    expect(saveOutcome("telemetry_decom", "request_activation")).toEqual({
-      kind: "activation_requested",
-      text: "Activation requested. It applies once it's approved.",
-    });
-    expect(saveOutcome("telemetry_decom", "disable")).toBeNull();
-    expect(saveOutcome("someone_else", "save_x")).toBeNull();
-  });
-});
 
 describe("L9 host frame helpers", () => {
   const s = (surface_id: string, order: number, area: "setup" | "ops") => ({
@@ -54,7 +38,6 @@ describe("L9 host frame helpers", () => {
 describe("L9 status line (ux #77)", () => {
   it("says who requested the pending activation and when", async () => {
     const { pendingLine } = await import("./host.ts");
-    const { saveMode } = await import("./saveOutcome.ts");
     const { lostText } = await import("./hostBridge.ts");
     const at = (iso: string) => iso.slice(11, 16) + "Z";
     const base = { state: "activation_pending" as const, label: null, version: "3" };
@@ -74,7 +57,6 @@ describe("L9 status line (ux #77)", () => {
       "Waiting for activation approval",
     );
     expect(pendingLine({ ...base, state: "active", activation_request: null }, at)).toBeNull();
-    expect([saveMode("telemetry_decom"), saveMode("x")]).toEqual(["activation", null]);
     expect(lostText(true)).toContain("Changes you haven't saved here will be lost.");
   });
 });

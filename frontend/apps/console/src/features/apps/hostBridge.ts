@@ -12,7 +12,6 @@ import { hasErrorCode } from "@/api";
  * L9 bridge for one mounted surface (api: the app-host session pins ONE scope per browser session, so
  * a surface in another tab can take it over). On `host_session_mismatch` the host re-requests its
  * `/host` read to re-pin, rebuilds the bridge and retries once; if that fails too it says so plainly.
- * Every action receipt goes to `onReceipt` (the save-outcome seam).
  */
 export const LOST_TEXT = "This page lost its connection to the app. Reload the page to continue.";
 /** ux: when the surface reported unsaved changes, say they're lost before asking for a reload. */
@@ -36,7 +35,6 @@ export function repinningBridge(options: {
   create: (session: HostSessionDescriptor) => HttpHostBridge;
   repin: () => Promise<HostSessionDescriptor | null>;
   navigate: (href: string) => void;
-  onReceipt: (actionId: string, receipt: HostActionReceipt) => void;
   onLost: () => void;
   /** The surface's optional `report({dirty})` (plugin-sdk HostBridge.report). */
   onReport?: (state: HostSurfaceReport) => void;
@@ -71,13 +69,9 @@ export function repinningBridge(options: {
     query: (request) => withRepin((b) => b.query(request)),
     subscribe: (listener) => current.subscribe(listener),
     report: (state) => options.onReport?.(state),
-    async execute<TInput, TResult>(
+    execute: <TInput, TResult>(
       request: HostActionRequest<TInput>,
-    ): Promise<HostActionReceipt<TResult>> {
-      const receipt = await withRepin((b) => b.execute<TInput, TResult>(request));
-      options.onReceipt(request.actionId, receipt);
-      return receipt;
-    },
+    ): Promise<HostActionReceipt<TResult>> => withRepin((b) => b.execute<TInput, TResult>(request)),
   };
   return { bridge, repinNow, dispose: () => current.invalidate() };
 }

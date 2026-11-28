@@ -1,35 +1,13 @@
 defmodule Cadence.Applications.TelemetryDecomCatalogContribution do
-  @moduledoc "Application-owned frontend release contributions for Telemetry Decom."
+  @moduledoc """
+  Application-owned catalog contribution for Telemetry Decom. The application is headless (#669),
+  so it contributes no surface queries and no frontend release.
+  """
 
-  alias Cadence.Applications.{
-    CatalogContribution,
-    Registry,
-    ReleaseContribution,
-    SurfaceQueryContribution
-  }
+  alias Cadence.Applications.{CatalogContribution, Registry}
 
   @package_id "cadence.telemetry-decom"
   @package_version 1
-
-  @spec surface_query_contributions() :: [SurfaceQueryContribution.t()]
-  def surface_query_contributions do
-    [
-      %SurfaceQueryContribution{
-        application_key: "telemetry_decom",
-        application_version: 1,
-        query_id: "cadence.telemetry_decom.manage",
-        query_version: 1,
-        provider: Cadence.Reads.ApplicationSurfaces.TelemetryDecom.Configuration
-      },
-      %SurfaceQueryContribution{
-        application_key: "telemetry_decom",
-        application_version: 1,
-        query_id: "cadence.packet_bindings.manage",
-        query_version: 1,
-        provider: Cadence.Reads.ApplicationSurfaces.PacketBindings
-      }
-    ]
-  end
 
   @spec catalog_contributions() :: [CatalogContribution.t()]
   def catalog_contributions do
@@ -38,34 +16,6 @@ defmodule Cadence.Applications.TelemetryDecomCatalogContribution do
         definition: fetch_definition!(),
         package_id: @package_id,
         package_version: @package_version
-      }
-    ]
-  end
-
-  @spec release_contributions() :: [ReleaseContribution.t()]
-  def release_contributions do
-    [
-      %ReleaseContribution{
-        application_key: "telemetry_decom",
-        application_version: 1,
-        surface_id: "manage",
-        surface_version: 1,
-        federation: :module_federation,
-        release_id: "telemetry-decom-v1",
-        remote_name: "cadence_telemetry_decom",
-        manifest_path: "/assets/application-host/telemetry-decom/mf-manifest.json",
-        exposed_module: "./Application"
-      },
-      %ReleaseContribution{
-        application_key: "telemetry_decom",
-        application_version: 1,
-        surface_id: "packet_bindings",
-        surface_version: 1,
-        federation: :module_federation,
-        release_id: "telemetry-decom-v1",
-        remote_name: "cadence_telemetry_decom",
-        manifest_path: "/assets/application-host/telemetry-decom/mf-manifest.json",
-        exposed_module: "./Application"
       }
     ]
   end
