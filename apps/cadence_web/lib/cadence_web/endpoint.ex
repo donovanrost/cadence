@@ -8,11 +8,6 @@ defmodule CadenceWeb.Endpoint do
     same_site: "Lax"
   ]
 
-  socket("/live", Phoenix.LiveView.Socket,
-    websocket: [connect_info: [session: @session_options]],
-    longpoll: [connect_info: [session: @session_options]]
-  )
-
   # Apogee console SPA live data. Session-authenticated: the client sends its
   # CSRF token as the `_csrf_token` param so Phoenix exposes the cookie session.
   socket("/socket", CadenceWeb.ConsoleSocket,
@@ -45,9 +40,6 @@ defmodule CadenceWeb.Endpoint do
     headers: %{"cache-control" => "public, max-age=31536000, immutable"}
   )
 
-  plug(CadenceWeb.Plugs.FrontendReleasePublisher)
-  plug(CadenceWeb.Plugs.FrontendReleaseRequestBody)
-
   # Dev only, and not on the console-e2e CI server (config/dev.exs `:tidewave?`): its toolbar loads
   # from tidewave.ai into every page and scans the DOM, which the fleet-scale budgets were timing
   # as Fleet's longest task (#867).
@@ -63,7 +55,7 @@ defmodule CadenceWeb.Endpoint do
     json_decoder: Jason
   )
 
-  plug(CadenceWeb.Plugs.FrontendReleasePublisherSession, @session_options)
+  plug(CadenceWeb.Plugs.Session, @session_options)
   plug(Plug.MethodOverride)
   plug(CadenceWeb.Plugs.PreserveRequestMethod)
   plug(Plug.Head)

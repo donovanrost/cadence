@@ -1,5 +1,4 @@
 export const developmentPorts = Object.freeze({
-  host: 5173,
   "ops-console": 4180,
   console: 5181,
 });

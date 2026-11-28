@@ -34,13 +34,6 @@ defmodule Cadence.Applications.OpsConsole do
       actions: []
     },
     %{
-      id: "telemetry_explore",
-      purpose: :operations,
-      label: "Telemetry Explore",
-      path: "/missions/:mission_id/ops/explore",
-      actions: ["apply_filters", "apply_question"]
-    },
-    %{
       id: "data_sources",
       purpose: :configuration,
       label: "Data Sources",
@@ -86,20 +79,6 @@ defmodule Cadence.Applications.OpsConsole do
         "retry-deployment-run",
         "requeue-deployment-run"
       ]
-    },
-    %{
-      id: "alarms",
-      purpose: :operations,
-      label: "Alarms",
-      path: "/missions/:mission_id/ops/alarms",
-      actions: ~w(filter reset_filters)
-    },
-    %{
-      id: "timeline",
-      purpose: :activity,
-      label: "Timeline",
-      path: "/missions/:mission_id/ops/timeline",
-      actions: ~w(apply_timeline_filters clear_timeline_selection)
     }
   ]
 
@@ -109,12 +88,9 @@ defmodule Cadence.Applications.OpsConsole do
   # intentional: every declared surface participates in the partition.
   @residual_action_ledger %{
     "workspace" => [],
-    "telemetry_explore" => [],
     "data_sources" => [],
     "data_source_registration" => [],
-    "data_source_settings" => [],
-    "alarms" => [],
-    "timeline" => []
+    "data_source_settings" => []
   }
 
   @deep_route_interaction_ledger %{

@@ -14,6 +14,7 @@ const run = (diff: unknown) => ({
   revision: { id: "rev3", number: 3, label: null, composition_id: "comp3" },
   base_revision: { id: "rev2", number: 2 },
   diff,
+  permissions: [],
 });
 
 describe("rolloutTarget (C3 pins the revision's composition; D3, #544)", () => {

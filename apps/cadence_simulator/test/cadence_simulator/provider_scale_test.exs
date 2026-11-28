@@ -21,6 +21,9 @@ defmodule CadenceSimulator.ProviderScaleTest do
 
   setup do
     :ok = Store.clear()
+    # Store.clear resets persistence, but streams are tracked by the Orchestrator.
+    # Reconcile synchronously before asserting that this test starts with none.
+    :ok = Orchestrator.reconcile()
     {:ok, listener} = :gen_tcp.listen(0, [:binary, active: false, reuseaddr: true])
     {:ok, {_address, port}} = :inet.sockname(listener)
     acceptor = spawn_link(fn -> accept_connections(listener) end)

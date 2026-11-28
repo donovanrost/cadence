@@ -33,6 +33,7 @@ const valid = () => ({
     finding("routing.missing", "blocker", { kind: "profile", id: "type_1", label: null }),
   ],
   recent_changes: null,
+  permissions: [],
 });
 
 describe("readinessReader", () => {

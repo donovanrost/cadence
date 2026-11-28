@@ -190,7 +190,7 @@ stations, profiles, pages. Results are **actions**: open, plot, "Command EARENDI
 | `M/ops/contacts/**`, `M/ops/contact-workspace/**` | Ops › Contacts (live), contact drawer | Four separate lists become one contact with one state model. |
 | `M/settings/**` | Setup › Mission settings | |
 | `/settings/**` | Org › Settings | |
-| `M/applications`, `M/applications/:key/:surface` | Setup › Apps; app surfaces in the console surface host (L9, screens/AppSurfaces.md) | |
+| `M/applications`, `M/applications/:key/:surface` | Setup › Apps (install, disable, uninstall) | The console hosts no app surfaces (#672). |
 | `/notifications` | stays on the existing page (DECISIONS #64: no console route) | |
 | `/admin/**`, `/admin-mode` | Unchanged (existing host) | Linked from the account menu. |
 | Service identities (today in platform admin org detail) | Org › People & access › Service identities | Per S5 step 03. |
@@ -208,7 +208,7 @@ stations, profiles, pages. Results are **actions**: open, plot, "Command EARENDI
 | **Provider accounts** (org) | Org › Provider accounts. | No |
 | **Mission settings** (governance etc.) | Setup › 09 Mission settings. | No |
 | **Notifications** | Dropped (#64): the Now attention queue is the console's notification surface. | No |
-| **Federated app surfaces** | Setup › Apps lists apps; their surfaces open in the console surface host (L9, screens/AppSurfaces.md). | No |
+| **Federated app surfaces** | Removed (#672): Setup › Apps lists apps with their verbs; the console mounts no app surfaces. | No |
 | **Mission creation** | Org › Missions › New. Not on the canvas; build as a reading-layout form. | No |
 | **Platform admin** | Stays on the existing host, linked from the account menu for `platform_admin`. | Decided: DECISIONS #12 |
 | **Fleet, Alarms list, Telemetry, Timeline, Spacecraft tabs other than Investigate** | In the canvas nav but not drawn. ux writes screen specs composed from existing components (stat strip, matrix, table, event line, time series) before they're built. | No |

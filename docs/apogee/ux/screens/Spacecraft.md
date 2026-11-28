@@ -1,7 +1,7 @@
 # Spacecraft: the directory and a spacecraft's page (Setup) — not on the canvas
 
-Routes: directory `M/setup/spacecraft` · a spacecraft `M/setup/spacecraft/:spacecraftId` · its app pages
-`M/setup/spacecraft/:spacecraftId/apps/:appKey/:surface?` (AppSurfaces.md, U103). Adding spacecraft is its own flow
+Routes: directory `M/setup/spacecraft` · a spacecraft `M/setup/spacecraft/:spacecraftId`. Its apps are listed on
+its page (install, disable, uninstall; the console hosts no app pages, #672). Adding spacecraft is its own flow
 (AddSpacecraft.md). Owner: fe-setup; words: mms-ux. Written from the console as built (the Setup gap audit, #305),
 so the spec matches what ships; items marked **gap** are console work on the board.
 

@@ -13,9 +13,6 @@ inventory remains in `docs/cleanup-inventory.json` and is not a violation allowa
 
 The `no-captured-workflow-dispatch` rule rejects the retired `port.captured` flag. Features still
 using the legacy workflow declare an explicit `page-snapshot` or `remote-query` protocol.
-Contact scheduling now uses a shared domain service with transport details confined to adapters.
-The scoped `scheduling-domain-api-only` rule prevents direct dispatch, protocol selection, and
-fetching in that feature's component, workflow, and transitions.
 
 These structural checks supplement Vue-aware TypeScript and typed lint. They cannot establish
 type relationships, runtime data admission, or lifecycle behavior.

@@ -36,7 +36,11 @@ const rowReader = d.object({
   condition: d.knownText(conditions),
   /** The ground-limit vocabulary (`yellow_high`, …); null for a live row. */
   raw_limit_state: d.nullable(d.knownText(limitStates)),
-  /** false: an active ground limit and a sample, but no job has evaluated it yet. */
+  /**
+   * false: a point the compiled monitoring plan evaluates on, with no state yet (#1113, source
+   * `catalog_monitoring`): it never left normal, or the runtime hasn't evaluated it since the rule
+   * was applied. It reads "Not evaluated yet", whatever its source.
+   */
   evaluated: d.boolean,
   /** When the ground-limit job ran; null for a live row (live by definition). */
   evaluated_at: d.nullable(d.timestamp),

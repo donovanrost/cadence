@@ -11,9 +11,6 @@ const alarm = {
   scid: 1,
   point: { id: "EPS.sa1_current", name: "sa1_current", subsystem: "EPS" },
   severity: "critical",
-  condition: "red_low",
-  value: -6.1,
-  thresholds: { red_low: -5.5, yellow_low: -5, yellow_high: 5, red_high: 6 },
   firstCrossedAt: "2026-11-08T22:55:20Z",
   receivedAt: "2026-11-08T22:55:57Z",
 } as const;

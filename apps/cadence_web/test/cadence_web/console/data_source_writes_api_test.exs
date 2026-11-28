@@ -201,4 +201,39 @@ defmodule CadenceWeb.Console.DataSourceWritesAPITest do
              })
              |> json_response(200)
   end
+
+  describe "D1: data_sources.manage agrees with the write, per role (#1160)" do
+    setup c do
+      member = TestFixtures.persist_user!()
+      TestFixtures.grant_membership!(member, c.org, role: :member)
+      Map.put(c, :member_conn, TestFixtures.member_conn(member))
+    end
+
+    defp register(conn, c),
+      do:
+        post(conn, api(c, "/data-sources"), %{
+          "display_name" => "Agreement probe",
+          "logical_source" => "telemetry",
+          "kind" => "managed_tsdb",
+          "isolation_level" => "mission_isolated",
+          "storage" => "questdb"
+        })
+
+    defp advertised(conn, c),
+      do:
+        conn
+        |> get(api(c, "/data-sources"))
+        |> json_response(200)
+        |> get_in(["data", "permissions"])
+
+    test "an organization admin is advertised the permission and the write passes", c do
+      assert advertised(c.conn, c) == ["data_sources.manage"]
+      assert c.conn |> register(c) |> json_response(201)
+    end
+
+    test "a plain member is shown no permission, and the write is refused", c do
+      assert advertised(c.member_conn, c) == []
+      assert c.member_conn |> register(c) |> json_response(403)
+    end
+  end
 end

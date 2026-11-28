@@ -11,6 +11,7 @@ defmodule Cadence.Projections.TelemetryLatestLimitStatesTest do
   alias Cadence.DerivedTelemetry.Definition, as: DerivedTelemetryDefinition
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Limits.Definition
+  alias Cadence.Limits.Store
   alias Cadence.Limits.Store.LatestStateRow, as: TelemetryLatestLimitStateRow
   alias Cadence.Limits.Store.LimitEventRow, as: TelemetryLimitEventRow
   alias Cadence.Telemetry.PacketDefinition

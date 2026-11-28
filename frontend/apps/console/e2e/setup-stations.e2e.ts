@@ -91,11 +91,12 @@ test.describe("Ground stations (organization admin)", () => {
 test.describe("Ground stations (organization member)", () => {
   test.use({ storageState: storageStateFor("operator") });
 
-  test("can read the list but has no Add station or editor", async ({ page }) => {
+  // #1160: staging is any mission operator's (config.stage); the change set is what's reviewed.
+  test("can read the list, and add a station for review", async ({ page }) => {
     await openConsole(page, screen);
     await expect(page.getByRole("table").locator("tbody tr")).toHaveCount(10);
-    await expect(page.getByRole("link", { name: "Add station" })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Add station" })).toBeVisible();
     await openConsole(page, missionPath("setup/stations/new"));
-    await expect(page.getByRole("button", { name: "Stage change" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Stage change" })).toBeVisible();
   });
 });

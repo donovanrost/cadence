@@ -15,11 +15,11 @@ in `L/reads/`** and the domain functions the controllers call. Console endpoints
 | Route family | Pipeline | Authenticates with | Policy | SPA as-is? |
 | --- | --- | --- | --- | --- |
 | ~~`/api/organizations/:org/...`~~ | ~~`:api` + `:authenticated_api` (`FetchCurrentScope`, `RequireCurrentScope`)~~ | **Removed (#754, #922, #747):** the scope, the pipeline and both plugs are deleted. A service authenticates with its bearer on `/api/v1` (opted in through `Console.ServiceAccess`) and on the two named machine surfaces. | — | — |
-| `/api/cadence/application-host/v1/...` | `:browser` + `RequireAuthenticatedScope` + `:application_host_json` | Session cookie. CSRF via `ApplicationHostCSRF` (`x-csrf-token`, JSON 403 `invalid_csrf`). On non-GET, `x-cadence-poc-session` must match the `application_host_session_id` issued by the first GET (returned as `sessionId` by `GET .../catalog`). Actions also need `idempotency-key` | `:read_application_catalog`, which is `:operate_mission` with **the session's current org** (`current_scope.organization_id`). After that, surface admission plus each action's own policy | Technically yes, but it's the wrong shape: versioned surface envelopes and presentation output (§3) |
+| ~~`/api/cadence/application-host/v1/...`~~ | ~~`:browser` + `RequireAuthenticatedScope` + `:application_host_json`~~ | **Removed (#672):** the scope, its pipeline, the `ApplicationHostCSRF`, `ApplicationHostSession` and `RequireApplicationHostScope` plugs, and the console's `/host` read are deleted; the console mounts no app surfaces. | — | — |
 | ~~`/api/cadence/contact-workspace/v1/...`~~ | ~~`:browser` + `RequireAuthenticatedScope`~~ | **Removed:** no such route remains; the contact schedule is the console's. | — | — |
 | `/health/live`, `/health/ready` | `:api` | none | none | Yes, but it's only infra (`GET /api/health` deleted, #747) |
 | Browser GETs: `/missions/:m/catalog/artifacts/:id/download`, `/missions/:m/ops/dashboards/:id/export` | `:browser` + `RequireAuthenticatedScope` | cookie | Download only fetches within the session's current org (no named policy). Export uses `DashboardAuthorAuth.authorized?` | Usable as plain links when the session org matches |
-| `/api/cadence/frontend-release/v1/...` | `FrontendReleasePublisher` | publisher credentials | n/a | No (CI publishing) |
+| ~~`/api/cadence/frontend-release/v1/...`, `/releases/:app/:release/artifacts/*`~~ | ~~`FrontendReleasePublisher`~~ | **Removed (#672):** release publishing, artifact serving, their plugs and the stage janitor are deleted. | — | — |
 
 Policy facts that console endpoints depend on (`L/auth/policy.ex`): `:operate_mission` lets in an active member of
 the scope's org, any `platform_admin` (admin mode), or a service bound to that exact mission. Most
@@ -36,26 +36,11 @@ the rest with #922 and #747's last step. Every area has a console endpoint under
 other docs in this folder), and a service reaches the ones it may with its bearer through
 `Console.ServiceAccess`. The rows that stood here are in the git history.
 
-## 3. Browser JSON bridges
+## 3. Browser JSON bridges (removed)
 
-**Application host** (`W/controllers/application_host_controller.ex`, `W/application_host_bridge.ex`). This is the transport for the
-federated application surfaces that the old host SPA (`frontend/apps/host`) renders.
-- `GET .../catalog` (mission, spacecraft, or org/user/admin by `scope`) returns the admitted applications/surfaces and `sessionId`.
-  With `scope=organization` it answers `404 no_organization_applications` ("No applications are installed at the organization level."): since §11c A + L13 no application has an organization-scope surface (the route stays until a later #80 shrink).
-- `POST .../query` body: `applicationKey, applicationVersion, surfaceId, surfaceVersion, queryId, queryVersion, params`.
-  `Applications.HostQueryRegistry` answers the registered compatibility host queries first. Everything else is `ApplicationSurfaces.load`
-  returning `{host, declarative_surface, application_surface_rows, ...}` or `{host, navigation, trusted_surface}`. These are
-  presentation documents (labels, hrefs, tones), not domain DTOs.
-- `POST .../actions` body: the same identity fields plus `actionId, actionVersion, params`, with header `idempotency-key`. Returns `{receiptId, completedAt, result}`.
-- Query ids follow `cadence.<app>.<surface>` (`L/reads/application_surfaces/provider_registry.ex`). The remaining federated
-  apps declare `cadence.limits.{manage,activity,status}`, `cadence.derived_telemetry.{manage,status}`,
-  `cadence.telemetry_decom.{manage,status,activation_preflight}`, `cadence.packet_bindings.manage` and
-  `cadence.ops.<surface>` (`workspace`, `alarms`, `timeline`, `commands`, `telemetry_explore`, `data_sources`,
-  `data_source_registration`, `data_source_settings`). The spacecraft, mission catalog, comms and organization-admin
-  apps are deleted (#917, #1010, #1015), and so are the ops contacts and planning surfaces (#1006). Actions are per
-  surface.
-- **Reuse:** don't call it from the console. Its value is the per-surface read functions behind it (`Reads.Spacecraft.Pages`,
-  `Reads.Catalog.Pages`, `Reads.Comms.Pages`, ...) and the action providers (for example `Spacecraft.Identity.action/5`).
+The application host bridge (`/api/cadence/application-host/v1`: catalog, query and actions for the
+federated app surfaces) is deleted with the console's surface host (#672). The read functions and
+action providers behind it are in `L/` until the app registries go; the console doesn't call them.
 
 ## 4. Read models to wrap (`L/reads/`)
 
@@ -67,7 +52,6 @@ DTOs should drop.
 | --- | --- | --- |
 | `MissionHealth` (raw) | `summary/3` (`:spacecraft_id`) | point counts, `worst_normalized_state`, `point_buckets`, per-spacecraft `scope_summaries` |
 | `Alarms` (raw) | `snapshot/3`, `summary/3` | limit-condition rows sorted by severity/recency, `spacecraft_ids`, summary |
-| `LimitAlarmConditions` (auth) | `load(scope, mission_id, params)`, `admit_query/1` | paged conditions for one spacecraft/state (backs `/ops/alarms`) |
 | `Limits` (raw) | `latest_state`, `latest_states_for_mission`, `latest_states_for_points`, `event_history`, `definition_intervals`, `watermark_result` | `Limits.Event` latest/transitions; `DefinitionInterval` bands over time |
 | `Telemetry` (raw) | `latest_value`, `latest_values_for_mission`, `sample_history(_result)`, `decimated_sample_history(_result)`, `sample_watermark` | samples; decimated `{buckets, diagnostics}` via `HistoryStore` (backend-dependent) |
 | `DerivedTelemetry` (raw) | `latest_value(s)`, `sample_history` | derived-point samples |
@@ -114,7 +98,7 @@ From `docs/apogee/plans/ops.md` ("Missing-data ask list") and `docs/apogee/plans
 | M6 ranked action queue | `Alarms.snapshot` + approval-pending requests + `Applications.Inventory` | compose |
 | M7 passes by station, next AOS / last LOS | `ContactSchedule.load`; `OperationalState.list_scheduled_contacts` | station field and window filter **new** |
 | M8 fleet deltas, live points, uplink progress | invalidations live on `mission:<id>`; `Limits.Facts`, `Telemetry.Facts` (EventBus) | data pushes **new** |
-| M9 alarms JSON `?spacecraft_id&state` | `LimitAlarmConditions.load`, `Alarms.snapshot`, `Limits.event_history` (first-crossed) | wrap |
+| M9 alarms JSON `?spacecraft_id&state` | `Reads.AlarmList` over `SemanticObservations.AlarmPage` (#1117); a spacecraft's points: `Reads.PointConditions` | done |
 | M10 decimated history | `Reads.Telemetry.decimated_sample_history_result` | wrap (check backend support) |
 | M11 limit bands for a point | `Reads.Limits.definition_intervals` | wrap |
 | M15/M16 group request N×K, no cap of 25 | `Control.Commanding.WorkspaceSubmission` (1 command × ≤25 targets) | **new** |

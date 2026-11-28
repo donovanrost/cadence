@@ -3,7 +3,7 @@ import { computed, ref } from "vue";
 import { useRoute } from "vue-router";
 import { stationIdParam, useRemoteQuery, type StationId } from "@/api";
 import { useMissionInvalidation } from "@/live";
-import { canAdministerOrganization, paramText, useMissionScope, useSession } from "@/shell";
+import { paramText, useMissionScope } from "@/shell";
 import {
   ApButton,
   ApEmptyState,
@@ -20,6 +20,7 @@ import {
   KindEditor,
   StagedArchive,
   type RefusalOutcome,
+  useCanStage,
 } from "@/features/changes/index.ts";
 import { stationName } from "./names.ts";
 import StationsTable from "./StationsTable.vue";
@@ -46,8 +47,7 @@ const edited = computed(() =>
 );
 useMissionInvalidation(missionId, ["configuration"], refetch);
 const route = useRoute();
-const session = useSession();
-const canStage = computed(() => canAdministerOrganization(session, scope.value.organization));
+const canStage = useCanStage(scope.value.mission.id);
 /** `new` = add; an id = edit that station; none = list only. */
 const editing = computed((): "new" | StationId | null =>
   paramText(route.params, "stationId") === "new"

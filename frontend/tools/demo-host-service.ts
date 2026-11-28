@@ -1,6 +1,4 @@
-import { developmentOrigin } from "./dev-services.ts";
 import { randomUUID } from "node:crypto";
-import type { IncomingMessage, ServerResponse } from "node:http";
 
 const APPLICATION_HOST_CONTRACT = "cadence.application-host.v1" as const;
 const FRONTEND_APPLICATION_CATALOG_SCHEMA = "cadence.first-party-frontend-catalog.v1" as const;
@@ -190,7 +188,7 @@ export class DemoHostService {
   }
 
   handle(request: DemoRequest): DemoResponse | undefined {
-    const url = new URL(request.url, developmentOrigin("host"));
+    const url = new URL(request.url, "http://127.0.0.1");
 
     if (request.method === "GET" && url.pathname === `${bridgeBaseUrl}/catalog`) {
       return this.#catalogResponse(url);
@@ -335,49 +333,6 @@ export class DemoHostService {
   }
 }
 
-export function createDemoHostMiddleware(mode: DemoMode) {
-  const service = new DemoHostService(mode);
-
-  return async function demoHostMiddleware(
-    request: IncomingMessage,
-    response: ServerResponse,
-    next: () => void,
-  ): Promise<void> {
-    const url = request.url ?? "/";
-    if (!url.startsWith("/api/cadence/application-host/v1/")) {
-      next();
-      return;
-    }
-
-    let body: unknown;
-    if (request.method === "POST") {
-      try {
-        body = JSON.parse(await requestBody(request));
-      } catch {
-        writeResponse(
-          response,
-          problem(400, "invalid_json", "The request body is not valid JSON."),
-        );
-        return;
-      }
-    }
-
-    const result = service.handle({
-      method: request.method ?? "GET",
-      url,
-      headers: normalizeHeaders(request.headers),
-      body,
-    });
-
-    if (!result) {
-      next();
-      return;
-    }
-
-    writeResponse(response, result);
-  };
-}
-
 function catalogApplications(
   mode: DemoMode,
   scenario: DemoScenario,
@@ -491,28 +446,4 @@ function problem(status: number, code: string, message: string): DemoResponse {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-async function requestBody(request: IncomingMessage): Promise<string> {
-  const chunks: Uint8Array[] = [];
-  for await (const chunk of request) {
-    if (typeof chunk === "string") chunks.push(Buffer.from(chunk));
-    else if (Buffer.isBuffer(chunk)) chunks.push(chunk);
-    else throw new Error("Unexpected request body chunk");
-  }
-  return Buffer.concat(chunks).toString("utf8");
-}
-
-function normalizeHeaders(headers: IncomingMessage["headers"]): Record<string, string | undefined> {
-  return Object.fromEntries(
-    Object.entries(headers).map(([name, value]) => [
-      name.toLowerCase(),
-      Array.isArray(value) ? value.join(", ") : value,
-    ]),
-  );
-}
-
-function writeResponse(response: ServerResponse, result: DemoResponse): void {
-  response.writeHead(result.status, result.headers);
-  response.end(JSON.stringify(result.body));
 }

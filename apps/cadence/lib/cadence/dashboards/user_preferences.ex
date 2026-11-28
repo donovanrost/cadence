@@ -9,20 +9,13 @@ defmodule Cadence.Dashboards.UserPreferences do
 
   import Ecto.Query
 
-  alias Cadence.Dashboards.DashboardSummary
   alias Cadence.Dashboards.DashboardUserPreference
   alias Cadence.Dashboards.DocumentStore.DashboardRow
   alias Cadence.Dashboards.UserPreferences.PreferenceRow
   alias Cadence.Ids
   alias Cadence.Repo
 
-  @navigation_limit 5
   @conflict_target [:organization_id, :mission_id, :user_id, :dashboard_id]
-
-  @type navigation :: %{
-          starred: [DashboardSummary.t()],
-          recent: [DashboardSummary.t()]
-        }
 
   @spec list(binary(), binary(), binary()) :: [DashboardUserPreference.t()]
   def list(organization_id, mission_id, user_id)
@@ -36,32 +29,6 @@ defmodule Cadence.Dashboards.UserPreferences do
     |> order_by([row], desc: row.starred, desc_nulls_last: row.last_viewed_at)
     |> Repo.all()
     |> Enum.map(&PreferenceRow.to_domain/1)
-  end
-
-  @spec navigation(binary(), binary(), binary(), [DashboardSummary.t()]) :: navigation()
-  def navigation(organization_id, mission_id, user_id, summaries)
-      when is_binary(organization_id) and is_binary(mission_id) and is_binary(user_id) and
-             is_list(summaries) do
-    summaries_by_id = Map.new(summaries, &{&1.dashboard_id, &1})
-    preferences = list(organization_id, mission_id, user_id)
-
-    starred =
-      preferences
-      |> Enum.filter(& &1.starred)
-      |> dashboards_for_preferences(summaries_by_id)
-      |> Enum.take(@navigation_limit)
-
-    starred_ids = MapSet.new(starred, & &1.dashboard_id)
-
-    recent =
-      preferences
-      |> Enum.reject(&is_nil(&1.last_viewed_at))
-      |> Enum.sort_by(& &1.last_viewed_at, {:desc, DateTime})
-      |> dashboards_for_preferences(summaries_by_id)
-      |> Enum.reject(&MapSet.member?(starred_ids, &1.dashboard_id))
-      |> Enum.take(@navigation_limit)
-
-    %{starred: starred, recent: recent}
   end
 
   @spec set_starred(binary(), binary(), binary(), binary(), boolean(), keyword()) ::
@@ -144,15 +111,6 @@ defmodule Cadence.Dashboards.UserPreferences do
       dashboard_id: dashboard_id,
       lifecycle_state: "active"
     )
-  end
-
-  defp dashboards_for_preferences(preferences, summaries_by_id) do
-    Enum.flat_map(preferences, fn preference ->
-      case Map.fetch(summaries_by_id, preference.dashboard_id) do
-        {:ok, summary} -> [summary]
-        :error -> []
-      end
-    end)
   end
 
   defp observed_at(opts) do

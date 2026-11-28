@@ -10,57 +10,6 @@ const renderer = { kind: "federated-vue", exposedModule: "./Application" } as co
 
 const routeSurfaces = [
   [
-    "contact_schedule",
-    "operations",
-    "Contact Schedule",
-    "cadence.ops.contact_schedule",
-    ["validate", "search", "reserve", "cancel"],
-  ],
-  [
-    "contact_plan_show",
-    "subject_detail",
-    "Contact Plan",
-    "cadence.ops.contact_plan_show",
-    ["submit-plan", "approve-plan", "reject-plan", "execute-plan"],
-  ],
-  [
-    "contact_detail",
-    "subject_detail",
-    "Contact Detail",
-    "cadence.ops.contact_detail",
-    ["approve-provider-change", "reject-provider-change", "acknowledge-provider-change"],
-  ],
-  ["contact_record", "subject_detail", "Contact Record", "cadence.ops.contact_record", []],
-  [
-    "fleet_planning",
-    "operations",
-    "Fleet Planning",
-    "cadence.ops.fleet_planning",
-    ["refresh-planning"],
-  ],
-  [
-    "fleet_planning_new",
-    "configuration",
-    "New Fleet Run",
-    "cadence.ops.fleet_planning_new",
-    ["validate-fleet-run", "create-fleet-run"],
-  ],
-  [
-    "fleet_planning_run",
-    "subject_detail",
-    "Fleet Planning Run",
-    "cadence.ops.fleet_planning_run",
-    ["refresh-fleet-run", "repair-fleet-run"],
-  ],
-  ["commands", "operations", "Commands", "cadence.ops.commands", []],
-  [
-    "telemetry_explore",
-    "operations",
-    "Telemetry Explore",
-    "cadence.ops.telemetry_explore",
-    ["apply_filters", "apply_question"],
-  ],
-  [
     "data_sources",
     "configuration",
     "Data Sources",
@@ -103,14 +52,6 @@ const routeSurfaces = [
       "retry-deployment-run",
       "requeue-deployment-run",
     ],
-  ],
-  ["alarms", "operations", "Alarms", "cadence.ops.alarms", ["filter", "reset_filters"]],
-  [
-    "timeline",
-    "activity",
-    "Timeline",
-    "cadence.ops.timeline",
-    ["apply_timeline_filters", "clear_timeline_selection"],
   ],
 ] as const;
 

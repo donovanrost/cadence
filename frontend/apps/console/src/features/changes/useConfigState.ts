@@ -1,5 +1,12 @@
 import type { MissionId } from "@/api/index.ts";
-import { computed, effectScope, onScopeDispose, type EffectScope, type ShallowRef } from "vue";
+import {
+  computed,
+  effectScope,
+  onScopeDispose,
+  type ComputedRef,
+  type EffectScope,
+  type ShallowRef,
+} from "vue";
 import { useRemoteQuery, type RemoteState } from "@/api";
 import { useMissionInvalidation } from "@/live";
 import { fetchConfigState } from "./api.ts";
@@ -50,4 +57,16 @@ export function useConfigState(missionId: MissionId) {
 /** After a write on the Changes page, refresh the shared state the top bar and staged bar show. */
 export function refreshConfigState(missionId: MissionId): void {
   shared.get(missionId)?.refetch();
+}
+
+/**
+ * #1160 row 1: may this viewer stage configuration changes? The server's `config.stage`, from the
+ * check staging makes (`Configuration.Access` `:stage`, operate_mission). Staging changes nothing
+ * until a reviewed change set applies it. False until the config state is read.
+ */
+export function useCanStage(missionId: MissionId): ComputedRef<boolean> {
+  const { state } = useConfigState(missionId);
+  return computed(
+    () => state.value.status === "ready" && state.value.value.permissions.has("config.stage"),
+  );
 }

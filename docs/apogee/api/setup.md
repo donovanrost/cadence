@@ -613,6 +613,9 @@ Rules (v1), by area:
   actor: {name} | null}]`. `[]` when nothing has been applied yet (show the panel empty, or omit
   it). `version_label` is the revision number; open `GET /config/revisions/:n` for the detail.
   It's `null` only if the revisions can't be read.
+- `permissions` (#1160): `["catalog.import"] | []`, the header's Import catalog, from the check
+  an import makes (`Catalog.Upload.authorize/2`, `:operate_mission`). Add spacecraft reads
+  `config.stage` from `GET /config` instead.
 
 ## `GET /api/v1/missions/:mission_id/profiles/:profile_id`
 
@@ -685,6 +688,10 @@ The shape is setup-shapes.md §C1. `?database_id=` selects a database (default: 
 `database` is `null` when the mission has none. Refetch on `invalidate` with `catalog`.
 
 - `revisions`: newest first, at most 50. `import_runs`: newest first, at most 20.
+- `permissions` (#1160): `["catalog.import"] | []`, whether the caller may import. It comes from
+  the check the upload and a reimport make (`Catalog.Upload.authorize/2`: any mission operator;
+  the candidate revision still needs an organization admin's approval, `:approve_mission_model`).
+  C3 and the source-file page send the same.
 - `revisions[].declaration_count` comes from the producing import run. `current_revision`
   also has `command_count` and `telemetry_count` (commands and telemetry parameters in its
   declarations); they're `null` only when the revision's model can't be read. Revisions in the
@@ -748,6 +755,7 @@ The shape is setup-shapes.md §C3, plus `declaration_count`.
   `revision_number` below its own), or `null` (first revision, or no revision produced). It's the
   same base as the revision read's `breaking_base` (the model approval gate above).
 - `requested_by`: as the index's run row (C1 above).
+- `permissions` (#1160): as C1's; Replace file starts a new import.
 - `diff` (DECISIONS #9 v1, from the two revisions alone): `null` when there's no base or either
   revision can't be read: it has no model, its model revision isn't stored for this mission, or its
   declarations can't be queried (#367: a missing model is never read as an empty one, which would
@@ -1251,7 +1259,9 @@ sources come first, then by name.
     - `credentials_ref`: the reference with its middle elided, never material, or `null`.
   - `kind` is a closed set: `managed_tsdb | byo_tsdb | postgres | object_archive | projection`.
   - `permissions: ["data_sources.manage"]` (top level) when the caller passes the check the
-    writes use (`operate_mission` today), else `[]`.
+    writes use (`Actions.may_manage?/3`: `operate_mission` and an organization admin, #1160), else `[]`. A
+    member who can operate the mission but isn't an organization admin gets `[]`, and their writes
+    are `403`.
 
 ### Data sources (L11): writes, and the reads behind them
 
@@ -1369,58 +1379,21 @@ audited lifecycle events.
 - Errors: `404 app_not_found`, `403 forbidden`, `422` with the domain's code (for example
   `application_dependency_missing`). Refetch on `invalidate` with `configuration`.
 - Rows also carry (§11 L9) `status: {state: "active" | "not_installed" | "disabled" |
-  "activation_pending" | "failed", label, version}` and `surfaces: [{surface_id, label, order,
-  purpose, area: "setup" | "ops", scope: "mission" | "spacecraft"}]` (by order). `active`: a
-  platform app, or installed and its status loads; `activation_pending`: an approval-pending
-  activation request for its binding set (telemetry decom only today); `failed`: installed but its
-  status can't be loaded. `label` is the app's own status words ("Monitoring") or `null`. While
-  `activation_pending`, status adds `activation_request: {requested_by: {name} | null,
-  requested_at}` (the open request; ux #77). `area`
-  comes from the surface placement (`application_workspace` is Setup, `ops_*` Ops); administration
-  surfaces aren't listed. Spacecraft-scope apps aren't in this list yet (L19).
+  "activation_pending" | "failed", label, version}`. `active`: a platform app, or installed and its
+  status loads; `activation_pending`: an approval-pending activation request for its binding set
+  (telemetry decom only today); `failed`: installed but its status can't be loaded. `label` is the
+  app's own status words ("Monitoring") or `null`. While `activation_pending`, status adds
+  `activation_request: {requested_by: {name} | null, requested_at}` (the open request; ux #77).
+  Rows carry no surfaces: the console hosts no app surfaces (#672).
 
 ### `GET /missions/:mission_id/spacecraft/:spacecraft_id/apps` (§11 L19)
 
 The apps installable on one spacecraft (today `spacecraft` and `telemetry_decom`) with **this
-spacecraft's** installations: `{apps: [<A1 row>], permissions}`. `surfaces` holds only the
-spacecraft-scope ones (open them with S1's `?spacecraft_id=`), and `status` is the app's status
+spacecraft's** installations: `{apps: [<A1 row>], permissions}`. `status` is the app's status
 at this spacecraft. `activation_pending` counts only a decom request that names this spacecraft
 (or names none: a mission-wide composition). Installations are per spacecraft, so the A1 verbs apply under this path: `POST
 …/spacecraft/:spacecraft_id/apps/:key/install | disable | uninstall` → the row. `404
 spacecraft_not_found` and A1's errors.
-
-### `GET /missions/:mission_id/apps/:key/surfaces/:surface_id/host?spacecraft_id=` (§11 L9, S1)
-
-Everything the console needs to load one app surface (a Module Federation component) and let it
-talk to the server: `{catalog, status, surfaces}`.
-
-- `catalog` is the application-host catalog for that one app and surface, **schema unchanged**
-  (`cadence.first-party-frontend-catalog.v1`; check it with plugin-sdk's
-  `assertFrontendApplicationCatalog`): session id, CSRF token, bridge base URL, context, the
-  app's package and release coordinates. The surface talks through the existing bridge
-  (`/api/cadence/application-host/v1/…/query|actions`), same-origin, no new token.
-- The one change inside: `session.context.actor.permissions` are real, from a closed vocabulary:
-  `applications:view` (always), `applications:operate` (the actor passes the policy of every
-  action the surface declares), `activations:request` (the surface can request activation and the
-  actor may). Without `applications:operate`, render read-only. Under today's Policy whoever loads
-  a surface may also operate it (todo(authz): read-only becomes real with Cedar).
-- `status` and `surfaces` are the A1 row's.
-- **Several scopes at once (L19b):** like the bridge's `GET /catalog`, this pins the host scope
-  (mission, or one spacecraft) in the browser session, which keeps the 16 most recently loaded
-  scopes. Surfaces at any of them work side by side, so you don't need to re-pin on focus.
-  `host_session_mismatch` now only means this session never loaded that scope (or 16 newer ones
-  pushed it out): re-request `/host` on that error, then retry once.
-- Errors: `404 application_not_found | surface_not_found | spacecraft_not_found`;
-  `409 application_not_installed` with `details.status` (`not_installed` or `disabled`; the host
-  shows "<App> isn't installed on <mission>." with `Install` for admins); `403 forbidden`;
-  `503 application_unavailable` (no release, or the catalog can't be built).
-- **A mission that isn't the session organization's** (another organization's, or one that
-  doesn't exist): with L4 (`51e3babb1`, director 11-14) the policy refuses it before any lookup.
-  The bridge's `GET /api/cadence/application-host/v1/…/catalog` answers `404
-  application_unavailable` (was `404 mission_not_found`), and the legacy REST paths that take a raw
-  mission id answer `403 scope_mismatch`. Foreign and nonexistent missions get the same answer, so
-  it reveals nothing. Note that the same code `application_unavailable` also appears as a 503 (no
-  release); read the status.
 
 ### Settings (ST1): `GET /missions/:mission_id/settings` and `GET /organizations/:organization_id/settings`
 
@@ -1476,8 +1449,10 @@ section refuses), `409 version_conflict` (with `details.expected_version`, the s
 version; also when another save lands between the read and the write), `409
 settings_enforced_by_organization`, `404 settings_section_not_found`, `403 forbidden`, and
 `422 settings_write_unconfirmed` / `422 settings_unavailable` when the section's owner fails or
-can't be read (retry). Edit needs `settings.edit` (any mission operator
-today, from the enforcing check).
+can't be read (retry). Edit needs `settings.edit`, derived from the enforcing check
+(`:manage_settings`, #1159): a mission operator for a mission's settings, an **organization admin**
+for the organization's (`GET /organizations/:id/settings` sends `permissions: []` to a member, whose
+`PUT` is `403 forbidden`). Reading is any active member's.
 
 The approval setting adds two 403s (#233; ux U96 words, by the level saved). A refused change
 writes nothing:

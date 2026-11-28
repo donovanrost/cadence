@@ -15,7 +15,7 @@ import {
 async function fixture(t) {
   const root = await mkdtemp(join(tmpdir(), "cadence-typecheck-"));
   t.after(() => rm(root, { recursive: true, force: true }));
-  const project = join(root, "modules", "example");
+  const project = join(root, "packages", "example");
   await mkdir(join(project, "src"), { recursive: true });
   await writeFile(
     join(project, "package.json"),
@@ -25,7 +25,7 @@ async function fixture(t) {
     join(root, "tsconfig.json"),
     JSON.stringify({
       files: [],
-      references: [{ path: "./modules/example" }, { path: "./tsconfig.tools.json" }],
+      references: [{ path: "./packages/example" }, { path: "./tsconfig.tools.json" }],
     }),
   );
   const config = {
@@ -53,15 +53,15 @@ async function fixture(t) {
   return { root, project };
 }
 
-void test("new domain modules cannot silently escape type checking", async (t) => {
+void test("new packages cannot silently escape type checking", async (t) => {
   const { root, project } = await fixture(t);
   await writeFile(join(project, "src", "Feature.vue"), "<template><p>Review</p></template>");
   assert.deepEqual(await discoverTypecheckProjects(root), [
-    "modules/example",
+    "packages/example",
     "tsconfig.tools.json",
   ]);
   await rm(join(project, "tsconfig.json"));
-  await assert.rejects(discoverTypecheckProjects(root), /modules\/example.*no tsconfig/);
+  await assert.rejects(discoverTypecheckProjects(root), /packages\/example.*no tsconfig/);
 });
 
 void test("root references cannot omit or duplicate a discovered project", async (t) => {
@@ -73,8 +73,8 @@ void test("root references cannot omit or duplicate a discovered project", async
     JSON.stringify({
       files: [],
       references: [
-        { path: "modules/example" },
-        { path: "modules/example" },
+        { path: "packages/example" },
+        { path: "packages/example" },
         { path: "tsconfig.tools.json" },
       ],
     }),
@@ -89,14 +89,14 @@ void test("CSS-only packages need no artificial TypeScript project", async (t) =
   await writeFile(join(tokens, "package.json"), JSON.stringify({ name: "@cadence/tokens" }));
   await writeFile(join(tokens, "theme.css"), ":root { --color: red; }");
   assert.deepEqual(await discoverTypecheckProjects(root), [
-    "modules/example",
+    "packages/example",
     "tsconfig.tools.json",
   ]);
 });
 
 void test("the actual compiler rejects invalid Vue template types and accepts their repair", async (t) => {
   const { root, project } = await fixture(t);
-  const req = createRequire(resolve(import.meta.dirname, "../apps/host/package.json"));
+  const req = createRequire(resolve(import.meta.dirname, "../apps/console/package.json"));
   await mkdir(join(project, "node_modules"));
   await symlink(
     dirname(req.resolve("vue/package.json")),

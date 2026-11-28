@@ -5,25 +5,10 @@
       "path": "./apps/console"
     },
     {
-      "path": "./apps/host"
-    },
-    {
       "path": "./apps/ops-console"
     },
     {
       "path": "./apps/surface-fixture"
-    },
-    {
-      "path": "./modules/commanding"
-    },
-    {
-      "path": "./modules/dashboards-and-exploration"
-    },
-    {
-      "path": "./modules/limits-and-alarming"
-    },
-    {
-      "path": "./modules/planning-and-contacts"
     },
     {
       "path": "./packages/apogee-ui"

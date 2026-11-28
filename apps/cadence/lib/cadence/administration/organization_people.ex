@@ -15,7 +15,14 @@ defmodule Cadence.Administration.OrganizationPeople do
   """
 
   alias Cadence.{Accounts, Organizations}
-  alias Cadence.Accounts.{InvitationDelivery, MembershipAdministration, OrganizationMembership}
+
+  alias Cadence.Accounts.{
+    AccessEvents,
+    InvitationDelivery,
+    MembershipAdministration,
+    OrganizationMembership
+  }
+
   alias Cadence.Auth.{Policy, Scope}
 
   @roles %{"member" => :member, "organization_admin" => :organization_admin}
@@ -162,7 +169,9 @@ defmodule Cadence.Administration.OrganizationPeople do
   def change_role(%Scope{} = scope, organization_id, user_id, params) do
     with :ok <- authorize(scope, :manage_organization_members, organization_id),
          {:ok, role} <- role_param(params) do
-      MembershipAdministration.change_role(organization_id, user_id, role, actor_id(scope))
+      organization_id
+      |> MembershipAdministration.change_role(user_id, role, actor_id(scope))
+      |> announce(user_id)
     end
   end
 
@@ -170,9 +179,19 @@ defmodule Cadence.Administration.OrganizationPeople do
   @spec remove_member(Scope.t(), binary(), binary()) :: {:ok, map()} | {:error, term()}
   def remove_member(%Scope{} = scope, organization_id, user_id) do
     with :ok <- authorize(scope, :manage_organization_members, organization_id) do
-      MembershipAdministration.remove_member(organization_id, user_id, actor_id(scope))
+      organization_id
+      |> MembershipAdministration.remove_member(user_id, actor_id(scope))
+      |> announce(user_id)
     end
   end
+
+  # A person's access changed: their live console channels re-check (#1153). After the commit.
+  defp announce({:ok, _member} = result, user_id) do
+    AccessEvents.changed(user_id)
+    result
+  end
+
+  defp announce(result, _user_id), do: result
 
   @doc "Revokes a pending invitation; its link stops working."
   @spec revoke_invitation(Scope.t(), binary(), binary()) :: :ok | {:error, term()}

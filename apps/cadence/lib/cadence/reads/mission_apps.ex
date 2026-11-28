@@ -14,7 +14,7 @@ defmodule Cadence.Reads.MissionApps do
   - `permissions`: `apps.install` from the check the install, disable and
     uninstall actions enforce (`ApplicationInstallations`: `:operate_mission`;
     DECISIONS #38).
-  - `status` (`Cadence.Reads.AppStatus`) and `surfaces` (§11 L9): what the surface host shows.
+  - `status` (`Cadence.Reads.AppStatus`): the app's status at this scope.
 
   The actions stay direct (not a change-set kind): an installation is a
   host lifecycle record, versioned by its own lifecycle events.
@@ -37,8 +37,7 @@ defmodule Cadence.Reads.MissionApps do
 
   @doc """
   The apps at a host context (L19): `HostContext.mission/1`, or `HostContext.spacecraft/2` for
-  the apps installable on one spacecraft, with that spacecraft's installations and only the
-  surfaces of that scope.
+  the apps installable on one spacecraft, with that spacecraft's installations.
   """
   @spec load_at(Scope.t(), binary(), HostContext.t()) :: {:ok, map()} | {:error, term()}
   def load_at(%Scope{} = scope, mission_id, context) do
@@ -84,45 +83,10 @@ defmodule Cadence.Reads.MissionApps do
     if Policy.authorize(scope, :operate_mission, params) == :ok, do: ["apps.install"], else: []
   end
 
-  @doc """
-  An app's surfaces the console can host, by order: `{surface_id, label, order, purpose, area:
-  setup | ops, scope}`. `area` is the placement: `application_workspace` is Setup, `ops_*` Ops;
-  administration surfaces aren't hosted.
-  """
-  @spec surfaces(ApplicationDefinition.t()) :: [map()]
-  def surfaces(%ApplicationDefinition{surfaces: surfaces}) do
-    for surface <- surfaces || [],
-        area = area(surface.placement),
-        area != nil do
-      %{
-        surface_id: surface.surface_id,
-        label: get_in(surface.navigation || %{}, [:label]),
-        order: get_in(surface.navigation || %{}, [:order]),
-        purpose: surface.purpose,
-        area: area,
-        scope: surface.scope
-      }
-    end
-    |> Enum.sort_by(&{&1.order || 1_000_000, &1.surface_id})
-  end
-
-  defp area(:application_workspace), do: :setup
-  defp area(placement) when placement in [:ops_workspace, :ops_dock], do: :ops
-  defp area(_administration), do: nil
-
   defp row(scope, context, %ApplicationDefinition{} = definition, installation) do
-    level = context.placement
-
     definition
     |> row(installation)
-    |> Map.merge(%{
-      status: AppStatus.status(scope, definition, installation, context),
-      surfaces:
-        if(level == :mission,
-          do: surfaces(definition),
-          else: Enum.filter(surfaces(definition), &(&1.scope == level))
-        )
-    })
+    |> Map.put(:status, AppStatus.status(scope, definition, installation, context))
   end
 
   defp row(%ApplicationDefinition{} = definition, installation) do

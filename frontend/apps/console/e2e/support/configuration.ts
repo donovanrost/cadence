@@ -40,6 +40,7 @@ export const snapshotWire = (o: Record<string, unknown> = {}) => ({
     source: "organization",
     can_request: true,
     can_review: false,
+    can_save: true,
   },
   catalogs: [
     {

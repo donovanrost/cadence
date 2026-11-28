@@ -1,5 +1,6 @@
 import { isKnown } from "@/api";
-import { formatClock, formatCountdown, type OpState } from "@/ui";
+import { formatAbsolute, formatClock, formatCountdown, type OpState } from "@/ui";
+import { formatValue } from "./format.ts";
 import type { Episode, EpisodeDetail, EpisodeEvent } from "./episodes.ts";
 
 /** Words for alarm episodes (ux U16): source, status, escalation, and event lines. */
@@ -16,9 +17,26 @@ export function sourceTag(episode: Episode, now: Date): string {
     : "Ground limits · not evaluated yet";
 }
 
-/** The readout label for the value: ground limits show the value at evaluation (U16). */
-export const valueLabel = (episode: Episode | null) =>
-  episode?.source === "ground_limit" ? "At evaluation" : "Now";
+/**
+ * The value readout (#1117): the episode's last evaluated value with its time ("Last value 3.92 V
+ * at 14:02:10Z"), never a live reading; an alarm row carries no value. Null without one.
+ */
+export function lastValueReadout(
+  episode: Episode | null | undefined,
+  now: Date = new Date(),
+): Readonly<{ label: string; value: string; caption: string }> | null {
+  const value = episode ? formatValue(episode.last_value) : null;
+  if (!episode || value === null) return null;
+  const at = episode.last_evaluated_at;
+  if (at === null) return { label: "Last value", value, caption: "time not reported" };
+  const d = new Date(at);
+  const sameDay = at.slice(0, 10) === now.toISOString().slice(0, 10);
+  return {
+    label: "Last value",
+    value,
+    caption: `at ${sameDay ? `${formatClock(d)}Z` : formatAbsolute(d)}`,
+  };
+}
 
 export function statusLine(
   episode: Episode,

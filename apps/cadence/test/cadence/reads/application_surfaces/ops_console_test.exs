@@ -10,7 +10,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsoleTest do
              OpsConsole.load(
                scope(),
                HostContext.mission("mission-1"),
-               request("timeline", %{"unknown" => "value"})
+               request("data_sources", %{"unknown" => "value"})
              )
   end
 
@@ -19,7 +19,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsoleTest do
              OpsConsole.load(
                scope(),
                HostContext.mission("mission-1"),
-               request("timeline", %{"mission_id" => "mission-2"})
+               request("data_sources", %{"mission_id" => "mission-2"})
              )
   end
 
@@ -30,7 +30,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsoleTest do
              OpsConsole.load(
                other_mission_scope,
                HostContext.mission("mission-1"),
-               request("timeline", %{})
+               request("data_sources", %{})
              )
   end
 

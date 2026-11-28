@@ -42,12 +42,28 @@ defmodule Cadence.Catalog.Upload do
 
   def validate(_database_id, _params), do: {:error, %{"name" => "Invalid upload fields."}}
 
+  @doc """
+  Who may import or reimport a catalog: any mission operator (`:operate_mission`). An import
+  yields a candidate revision that only an organization admin can approve
+  (`:approve_mission_model`), so the human decision sits at the approval (#1160). The check
+  `import_revision/5` and `Cadence.Catalog.Reimport.execute/3` make, and `permissions/2` reports.
+  """
+  @spec authorize(Scope.t(), binary()) :: :ok | {:error, term()}
+  def authorize(%Scope{} = scope, mission_id) when is_binary(mission_id) do
+    Policy.authorize(scope, :operate_mission, %{
+      organization_id: scope.organization_id,
+      mission_id: mission_id
+    })
+  end
+
+  @doc "`catalog.import` for the console when `authorize/2` passes, so the two can't drift."
+  @spec permissions(Scope.t(), binary()) :: [binary()]
+  def permissions(%Scope{} = scope, mission_id) do
+    if authorize(scope, mission_id) == :ok, do: ["catalog.import"], else: []
+  end
+
   def import_revision(%Scope{} = scope, mission_id, database_id, params, upload) do
-    with :ok <-
-           Policy.authorize(scope, :operate_mission, %{
-             organization_id: scope.organization_id,
-             mission_id: mission_id
-           }),
+    with :ok <- authorize(scope, mission_id),
          {:ok, actor} <- Actor.from_scope(scope),
          {:ok, _mission} <- Missions.fetch_mission(scope.organization_id, mission_id),
          {:ok, values} <- validate(database_id, params),

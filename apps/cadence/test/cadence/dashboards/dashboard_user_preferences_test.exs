@@ -51,83 +51,29 @@ defmodule Cadence.Dashboards.DashboardUserPreferencesTest do
 
     assert DateTime.compare(recent.last_viewed_at, DateTime.add(observed_at, 60, :second)) == :eq
 
-    summaries =
-      Dashboards.list_dashboard_summaries(
+    preferences =
+      Dashboards.list_dashboard_user_preferences(
         context.organization_id,
-        context.mission.mission_id
+        context.mission.mission_id,
+        context.user.user_id
       )
 
-    assert %{starred: [%{dashboard_id: starred_id}], recent: [%{dashboard_id: recent_id}]} =
-             Dashboards.dashboard_navigation(
-               context.organization_id,
-               context.mission.mission_id,
-               context.user.user_id,
-               summaries
-             )
+    assert [
+             %{dashboard_id: starred_id, starred: true},
+             %{dashboard_id: recent_id, starred: false, last_viewed_at: %DateTime{}}
+           ] = preferences
 
     assert starred_id == first.dashboard_id
     assert recent_id == second.dashboard_id
 
     other_user = persist_user!()
 
-    assert %{starred: [], recent: []} =
-             Dashboards.dashboard_navigation(
+    assert [] =
+             Dashboards.list_dashboard_user_preferences(
                context.organization_id,
                context.mission.mission_id,
-               other_user.user_id,
-               summaries
+               other_user.user_id
              )
-  end
-
-  test "navigation caps starred and recent groups at five dashboards", context do
-    observed_at = ~U[2026-08-01 12:00:00Z]
-
-    dashboards =
-      for index <- 1..12 do
-        persist_dashboard!(context, "Dashboard #{index}")
-      end
-
-    dashboards
-    |> Enum.take(6)
-    |> Enum.each(fn dashboard ->
-      assert {:ok, _preference} =
-               Dashboards.set_dashboard_starred(
-                 context.organization_id,
-                 context.mission.mission_id,
-                 context.user.user_id,
-                 dashboard.dashboard_id,
-                 true,
-                 observed_at: observed_at
-               )
-    end)
-
-    dashboards
-    |> Enum.drop(6)
-    |> Enum.with_index()
-    |> Enum.each(fn {dashboard, index} ->
-      assert {:ok, _preference} =
-               Dashboards.record_dashboard_view(
-                 context.organization_id,
-                 context.mission.mission_id,
-                 context.user.user_id,
-                 dashboard.dashboard_id,
-                 observed_at: DateTime.add(observed_at, index, :second)
-               )
-    end)
-
-    navigation =
-      Dashboards.dashboard_navigation(
-        context.organization_id,
-        context.mission.mission_id,
-        context.user.user_id,
-        Dashboards.list_dashboard_summaries(
-          context.organization_id,
-          context.mission.mission_id
-        )
-      )
-
-    assert length(navigation.starred) == 5
-    assert length(navigation.recent) == 5
   end
 
   test "rejects a dashboard outside the supplied scope", context do

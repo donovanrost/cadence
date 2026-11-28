@@ -61,7 +61,6 @@ container=cadence_qdb_$slug
 server_port=$((11000 + slot))
 sim_port=$((11100 + slot))
 console_port=$((11200 + slot))
-live_port=$((11300 + slot))
 qhttp=$((10000 + slot))
 qpg=$((10100 + slot))
 qilp=$((10200 + slot))
@@ -182,7 +181,6 @@ prepare_env() {
   set_env MIX_TEST_PARTITION "$slot"
   set_env PORT "$server_port"
   set_env PHX_URL_PORT "$server_port"
-  set_env CADENCE_LIVE_VUE_VITE_PORT "$live_port"
   set_env CONSOLE_VITE_PORT "$console_port"
   if [ -f "$review_file" ] && [ "$review" = false ]; then
     review_origin=$(sed -n '2p' "$review_file")

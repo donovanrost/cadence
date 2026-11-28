@@ -3,8 +3,6 @@ export {
   alarmSeverities,
   sourceStates,
   conditionWords,
-  crossedCondition,
-  crossedLimit,
   engineeringValue,
   fetchAlarmPage,
   fetchAlarms,
@@ -44,5 +42,5 @@ export {
   eventText,
   sourceTag,
   statusLine,
-  valueLabel,
+  lastValueReadout,
 } from "./episodeText.ts";

@@ -5,19 +5,11 @@ defmodule CadenceWeb do
 
   def controller do
     quote do
-      use Phoenix.Controller, formats: [:html, :json], layouts: [html: CadenceWeb.Layouts]
+      use Phoenix.Controller, formats: [:html, :json]
 
       import Plug.Conn
 
       unquote(verified_routes())
-    end
-  end
-
-  def live_view do
-    quote do
-      use Phoenix.LiveView, layout: {CadenceWeb.Layouts, :app}
-
-      unquote(html_helpers())
     end
   end
 
@@ -27,39 +19,12 @@ defmodule CadenceWeb do
 
       import Plug.Conn
       import Phoenix.Controller
-      import Phoenix.LiveView.Router
     end
   end
 
   def endpoint do
     quote do
       use Phoenix.Endpoint, otp_app: :cadence_web
-    end
-  end
-
-  def html do
-    quote do
-      use Phoenix.Component
-
-      import Phoenix.Controller, only: [get_csrf_token: 0, view_module: 1, view_template: 1]
-
-      unquote(html_helpers())
-    end
-  end
-
-  defp html_helpers do
-    quote do
-      import Phoenix.HTML
-
-      alias CadenceWeb.Layouts
-
-      use LiveVue
-      use LiveVue.Components, vue_root: ["../../frontend/apps/host/src/shell"]
-
-      import Phoenix.Component, except: [sigil_H: 2]
-      import LiveVue.SharedPropsView, only: [sigil_H: 2]
-
-      unquote(verified_routes())
     end
   end
 

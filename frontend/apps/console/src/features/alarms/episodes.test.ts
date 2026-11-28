@@ -19,7 +19,7 @@ import {
   eventText,
   sourceTag,
   statusLine,
-  valueLabel,
+  lastValueReadout,
 } from "./episodeText.ts";
 
 const episode = episodeFixture;
@@ -53,8 +53,23 @@ describe("alarm episodes", () => {
   it("never implies ground limits are live (U16)", () => {
     expect(sourceTag(episode(), now)).toBe("Ground limits · evaluated 02:41:00Z · T+00:03:00");
     expect(sourceTag(episode({ source: "catalog_monitoring" }), now)).toBe("Live");
-    expect(valueLabel(episode())).toBe("At evaluation");
-    expect(valueLabel(null)).toBe("Now");
+  });
+
+  it("reads the value as the episode's last, with its time, never as live (#1117)", () => {
+    expect(lastValueReadout(episode(), now)).toEqual({
+      label: "Last value",
+      value: "23.1",
+      caption: "at 02:41:00Z",
+    });
+    expect(lastValueReadout(episode(), new Date("2026-11-09T09:00:00Z"))?.caption).toBe(
+      "at 2026-11-08 02:41:00Z",
+    );
+    expect(lastValueReadout(episode({ last_evaluated_at: null }), now)?.caption).toBe(
+      "time not reported",
+    );
+    // No episode, or no value: no readout at all (an always-empty tile is noise).
+    expect(lastValueReadout(null, now)).toBeNull();
+    expect(lastValueReadout(episode({ last_value: null }), now)).toBeNull();
   });
 
   it("states status, ack and assignee in words", () => {

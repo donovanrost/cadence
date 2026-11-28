@@ -52,8 +52,6 @@ async function writeRemote(root, remoteName) {
 
 async function publicationFixture() {
   const root = await mkdtemp(join(tmpdir(), "cadence-production-publication-check-"));
-  await mkdir(join(root, "host"), { recursive: true });
-  await writeFile(join(root, "host", "host.js"), "export const host = true;\n");
   for (const [bundle, remoteName] of /** @type {const} */ ([
     ["ops-console", "cadence_ops_console"],
   ])) {
@@ -63,37 +61,20 @@ async function publicationFixture() {
   return root;
 }
 
-void test("requires an exact host and allowed-remote publication root inventory", async () => {
+void test("requires an exact allowed-remote publication root inventory", async () => {
   const root = await publicationFixture();
   try {
     const result = await validateProductionPublication(root);
-    assert.equal(result.host.fileCount, 1);
     assert.equal(result.remotes.length, 1);
 
-    await writeFile(
-      join(root, "host", "host.js"),
-      "const loaded = ready ? fallback : import(target).then(done).catch(fail);\n",
-    );
-    await assert.rejects(
-      () => validateProductionPublication(root),
-      /unresolved dynamic local import/,
-    );
-
-    await writeFile(join(root, "host", "host.js"), "const loaded = new URL(target);\n");
-    await assert.rejects(
-      () => validateProductionPublication(root),
-      /unresolved dynamic local asset URL/,
-    );
-
-    await writeFile(join(root, "host", "host.js"), "export const host = true;\n");
     await writeFile(join(root, "index.html"), "<!doctype html>\n");
     await assert.rejects(
       () => validateProductionPublication(root),
       /publication root inventory is not exactly/,
     );
-
     await rm(join(root, "index.html"));
-    await mkdir(join(root, "host", "empty-directory"));
+
+    await mkdir(join(root, "ops-console", "empty-directory"));
     await assert.rejects(
       () => validateProductionPublication(root),
       /empty or nested publication directory/,
@@ -106,15 +87,6 @@ void test("requires an exact host and allowed-remote publication root inventory"
 void test("refuses a publication that contains or references the test-only surface fixture", async () => {
   const root = await publicationFixture();
   try {
-    await writeFile(
-      join(root, "host", "host.js"),
-      'export const remote = "cadence_surface_fixture";\n',
-    );
-    await assert.rejects(
-      () => validateProductionPublication(root),
-      /references the test-only surface fixture/,
-    );
-    await writeFile(join(root, "host", "host.js"), "export const host = true;\n");
     await writeFile(
       join(root, "ops-console", "assets", "application.js"),
       'export const key = "surface-fixture";\n',

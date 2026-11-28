@@ -658,7 +658,12 @@ Base: `/api/v1/missions/:mission_id/contact-planning`.
 ### `GET /policy` (CP2)
 
 `{policy_id, version, active_version, document, pending: {version, requested_by, requested_at,
-document, reason} | null, schema: [field], defaults, permissions: ["planning.edit", "planning.approve"]}`.
+document, reason} | null, schema: [field], defaults, permissions}`.
+`permissions` (#1160 row 5): one token per server action, each from the check that action makes
+(`Control.PlanningPolicy.permissions/2`): `planning.template.manage` (template writes and moves,
+`:manage_mission`), `fleet_planning_policy.manage` (saving a policy version,
+`:manage_fleet_planning_policy`), `planning.requirement.edit` (requirement create, update, close,
+cancel, `:operate_mission`) and `planning.approve` (deciding a pending version).
 `document` groups the six policy sections: `horizon, scoring, resources, budgets, redundancy,
 automation`.
 
@@ -697,7 +702,7 @@ count, suggested_target: target | null}], permissions}`. `policy: null` means no
 Coverage counts the next 24 h of the **active** templates: `covered` is how many spacecraft at
 least one of them targets now, and `contacts_per_day` counts occurrences × targeted spacecraft ×
 `contact_count`. `not_covered` groups the rest by profile, largest first, and suggests a profile
-target. Permissions are the CP2 ones (`planning.edit` is what template writes need).
+target. Permissions are the CP2 ones (`planning.template.manage` is what template writes need).
 
 ### Templates (CP3; design: [`domain/contact-templates.md`](../domain/contact-templates.md))
 
@@ -734,7 +739,7 @@ schedule, the requirement content each occurrence generates, and the catch-up bo
   (final). The version doesn't change; requirements the template already made stay (only active
   templates make new ones). `409 version_conflict` (`details.expected_version` = current),
   `409 template_transition_not_allowed` (`details.state` = current), `422 details.reason` (required,
-  ≤ 2000), `403 forbidden` (the same check as template writes: `planning.edit`). The template detail
+  ≤ 2000), `403 forbidden` (the same check as template writes: `planning.template.manage`). The template detail
   carries `state_changed: {state, at, actor {kind, id, name}, reason} | null`, the last move a person
   made (`null` while it's active since create).
 - `POST /templates/:id` `{name?, target?, document?, expected_version}` → `201 {id, version}`.
@@ -921,7 +926,8 @@ rationale, provider_constraints_document {allowed, excluded}, station_constraint
   required), `earliest_start` / `latest_end` (`datetime`, required) and `max_gap_seconds`
   (DECISIONS #74: `integer | null`, unit `s`, 600–604800, optional, `advanced`; "Longest time
   without a contact"). `group` is `window` or `requirement`. `rationale` is required (a one-off
-  must say why).
+  must say why). `permissions` (#1160 row 4): `["planning.requirement.edit"] | []`, whether the
+  caller may create one; the requirement detail carries the same for Edit, Close and Cancel.
 - `GET /requirements?spacecraft_id=&state=&source=&page=&limit=` → `{requirements: [row], page,
   next_page}`. Each row is a requirement at its **current version**, most recently changed first.
   `state` is `active | closed | canceled`; `source` is `one_off | template`; `limit` 1–200

@@ -569,13 +569,23 @@ defmodule Cadence.ContactPlanning.FleetPlanningPolicies do
   defp require_reason(""), do: {:error, :fleet_planning_policy_decision_reason_required}
   defp require_reason(_reason), do: :ok
 
-  defp authorize_manage(scope) do
+  @doc """
+  Who may save a new version of the fleet planning policy (`:manage_fleet_planning_policy`):
+  the check `save` makes, and `fleet_planning_policy.manage` reports (#1160 row 5).
+  """
+  @spec authorize_manage(Scope.t()) :: :ok | {:error, term()}
+  def authorize_manage(scope) do
     Policy.authorize(scope, :manage_fleet_planning_policy, %{
       organization_id: scope.organization_id
     })
   end
 
-  defp authorize_approve(scope) do
+  @doc """
+  Who may approve or reject a pending version (`:approve_fleet_planning_policy`): the check a
+  decision makes, and `planning.approve` reports.
+  """
+  @spec authorize_approve(Scope.t()) :: :ok | {:error, term()}
+  def authorize_approve(scope) do
     Policy.authorize(scope, :approve_fleet_planning_policy, %{
       organization_id: scope.organization_id
     })

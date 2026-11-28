@@ -33,7 +33,7 @@ POST /close     {expected_version, reason}  → 200 {id, state: "closed", versio
   403 forbidden
 ```
 - `version` is the template's version after the move (unchanged if a lifecycle move doesn't bump it; say which).
-- Who: whoever `authorize_admin` admits today; the console shows the buttons when `permissions` has `planning.edit`
+- Who: whoever `authorize_admin` admits today; the console shows the buttons when `permissions` has `planning.template.manage` (#1160)
   (say if pause/close needs a different token).
 - **Please add** to the template detail: `state_changed {state, at, actor {id, name}, reason}|null`, the last
   lifecycle move, so the page can say "Paused by Mira K. on 11-12: provider outage".
