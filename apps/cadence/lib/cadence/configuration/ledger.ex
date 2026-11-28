@@ -186,7 +186,9 @@ defmodule Cadence.Configuration.Ledger do
       end)
 
     rows
-    |> Enum.chunk_every(500)
+    # A 1,000-craft rollout also records the profile edit. Keep that ledger write in one
+    # batch, with room below PostgreSQL's parameter limit for all 12 entry fields.
+    |> Enum.chunk_every(1_500)
     |> Enum.reduce({0, nil}, fn chunk, {count, nil} ->
       {inserted, nil} = Repo.insert_all(RevisionEntryRow, chunk)
       {count + inserted, nil}

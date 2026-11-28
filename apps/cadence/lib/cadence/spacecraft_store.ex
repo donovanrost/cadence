@@ -267,23 +267,23 @@ defmodule Cadence.SpacecraftStore do
     end
   end
 
-  @doc """
-  `fetch_spacecrafts/3` over any number of ids, one bounded batch per query (qa #43, #49: a
-  500-spacecraft fleet exceeds one batch). Ids that aren't valid binaries are an error, as there.
-  """
+  @doc "Loads any number of explicitly named spacecraft in bounded fleet batches."
   @spec fetch_spacecrafts_in_batches(binary(), binary(), [binary()]) ::
           {:ok, %{optional(binary()) => Spacecraft.t()}} | {:error, :batch_bounds_exceeded}
   def fetch_spacecrafts_in_batches(organization_id, mission_id, spacecraft_ids)
       when is_list(spacecraft_ids) do
-    spacecraft_ids
-    |> Enum.uniq()
-    |> Enum.chunk_every(@max_batch_size)
-    |> Enum.reduce_while({:ok, %{}}, fn chunk, {:ok, acc} ->
-      case fetch_spacecrafts(organization_id, mission_id, chunk) do
-        {:ok, found} -> {:cont, {:ok, Map.merge(acc, found)}}
-        {:error, reason} -> {:halt, {:error, reason}}
-      end
-    end)
+    if Enum.all?(spacecraft_ids, &(is_binary(&1) and &1 != "")) do
+      spacecraft =
+        spacecraft_ids
+        |> Enum.uniq()
+        |> Enum.chunk_every(1_000)
+        |> Enum.flat_map(&scoped_spacecraft_rows(organization_id, mission_id, &1))
+        |> Map.new(fn row -> {row.spacecraft_id, SpacecraftRow.to_domain(row)} end)
+
+      {:ok, spacecraft}
+    else
+      {:error, :batch_bounds_exceeded}
+    end
   end
 
   @doc "The most spacecraft ids `fetch_spacecrafts/3` takes in one call."
@@ -303,17 +303,18 @@ defmodule Cadence.SpacecraftStore do
         {:ok, %{}}
 
       {:ok, ids} ->
-        rows =
-          SpacecraftRow
-          |> where(
-            [row],
-            row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-              row.spacecraft_id in ^ids
-          )
-          |> Repo.all()
-
+        rows = scoped_spacecraft_rows(organization_id, mission_id, ids)
         {:ok, Map.new(rows, fn row -> {row.spacecraft_id, SpacecraftRow.to_domain(row)} end)}
     end
+  end
+
+  defp scoped_spacecraft_rows(organization_id, mission_id, ids) do
+    from(row in SpacecraftRow,
+      where:
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+          row.spacecraft_id in ^ids
+    )
+    |> Repo.all()
   end
 
   @doc """

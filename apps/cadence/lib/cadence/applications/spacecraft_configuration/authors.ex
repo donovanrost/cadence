@@ -4,11 +4,11 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Authors do
   spacecraft, everyone who saved a configuration version AFTER the spacecraft's active
   configuration, up to and including the reviewed version (every version when none is active).
   Each save stores the whole document, but the content carries every saver's choices, so all of
-  them count, as a change set's change authors do. Read from the immutable revision rows.
+  them count, as a change set's change authors do. Read from the immutable assignments.
   """
   import Ecto.Query
 
-  alias Cadence.Applications.SpacecraftConfiguration.{Active, RevisionRow}
+  alias Cadence.Applications.SpacecraftConfiguration.{Active, AssignmentRow}
   alias Cadence.Catalog.ConfigurationReviews
   alias Cadence.Repo
 
@@ -64,7 +64,7 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Authors do
   defp revision_rows(_mission, []), do: %{}
 
   defp revision_rows(mission, revision_ids) do
-    RevisionRow
+    AssignmentRow
     |> where(
       [row],
       row.organization_id == ^mission.organization_id and row.mission_id == ^mission.mission_id and
@@ -84,7 +84,7 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Authors do
     floors = Map.new(reviewed, fn {id, _version} -> {id, floor_version(entries[id])} end)
     ids = Map.keys(reviewed)
 
-    RevisionRow
+    AssignmentRow
     |> where(
       [row],
       row.organization_id == ^mission.organization_id and row.mission_id == ^mission.mission_id and

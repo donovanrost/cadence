@@ -34,6 +34,7 @@ defmodule Cadence.Reads.PointConditions do
   alias Cadence.Ops.PointCatalog
   alias Cadence.Reads.{DurableReceiptCache, FleetStatus, PointInfo}
   alias Cadence.SemanticObservations
+  alias Cadence.SemanticRuntime.AlarmLevel
   alias Cadence.SpacecraftStore
   alias Cadence.Telemetry.{CurrentValueStore, SpacecraftReceipts}
 
@@ -168,9 +169,13 @@ defmodule Cadence.Reads.PointConditions do
   defp ground_condition(_other), do: :nominal
 
   # The mapping the alarm episodes use (`Alarms.Sources`).
-  defp live_condition(state) when state in ["distress", "critical", "severe"], do: :critical
-  defp live_condition(state) when state in ["watch", "warning"], do: :caution
-  defp live_condition(_normal_unknown_disabled), do: :nominal
+  defp live_condition(state) do
+    case AlarmLevel.level(state) do
+      :critical -> :critical
+      :caution -> :caution
+      _normal_or_ignored -> :nominal
+    end
+  end
 
   # -- freshness ----------------------------------------------------------------------------------
 

@@ -24,6 +24,7 @@ defmodule Cadence.SemanticObservations.FleetAlarms do
 
   alias Cadence.Repo
   alias Cadence.SemanticObservations.{FleetAlarmSummaryRow, LatestAlarmStateRow}
+  alias Cadence.SemanticRuntime.AlarmLevel
 
   @type alarm :: %{
           limit_state: :critical | :caution,
@@ -38,8 +39,9 @@ defmodule Cadence.SemanticObservations.FleetAlarms do
         }
 
   # The severity rank of a live state: critical 2, caution 1.
-  @rank "(CASE WHEN effective_state IN ('distress', 'critical', 'severe') THEN 2 ELSE 1 END)"
-  @active "effective_state IN ('watch', 'warning', 'distress', 'critical', 'severe')"
+  # The level table is `SemanticRuntime.AlarmLevel`'s; the SQL lists are built from it.
+  @rank "(CASE WHEN effective_state IN (#{AlarmLevel.sql_in([:critical])}) THEN 2 ELSE 1 END)"
+  @active "effective_state IN (#{AlarmLevel.sql_in([:caution, :critical])})"
 
   @spec load(binary(), binary()) :: %{binary() => alarm()}
   def load(organization_id, mission_id) do
