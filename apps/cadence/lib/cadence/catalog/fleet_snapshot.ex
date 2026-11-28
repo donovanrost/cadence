@@ -220,6 +220,24 @@ defmodule Cadence.Catalog.FleetSnapshot do
 
   def catalog_usage(_metadata), do: %{}
 
+  @doc false
+  def revision_assignments_query(fleet) do
+    from(member in MemberRow,
+      join: fleet in subquery(fleet),
+      on:
+        member.organization_id == fleet.organization_id and
+          member.mission_id == fleet.mission_id and member.fleet_sha256 == fleet.fleet_sha256,
+      join: entry in EntryRow,
+      on:
+        entry.organization_id == member.organization_id and entry.mission_id == member.mission_id and
+          entry.entry_sha256 == member.entry_sha256,
+      select: %{
+        spacecraft_id: member.spacecraft_id,
+        revision_id: fragment("? #>> '{mission_model,revision_id}'", entry.entry)
+      }
+    )
+  end
+
   @doc "Commanding-enabled entries only (`spacecraft_id => entry`)."
   @spec commanding_entries(map()) :: {:ok, map()} | {:error, term()}
   def commanding_entries(%{"spacecraft_configuration_version" => 2, "fleet" => fleet}) do
