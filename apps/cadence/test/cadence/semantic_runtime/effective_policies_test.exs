@@ -217,7 +217,7 @@ defmodule Cadence.SemanticRuntime.EffectivePoliciesTest do
       assert [mon] = r2.monitoring_results
       assert mon.effective_state == :critical
       assert mon.transition == nil
-      assert %{rule_changed: %{from: from, to: to}} = mon.metadata
+      assert %{rule_changed: %{from: from, to: to, rule_ids: ["policy:limit"]}} = mon.metadata
       assert from != to
     end
 

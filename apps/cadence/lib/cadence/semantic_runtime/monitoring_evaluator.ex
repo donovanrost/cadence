@@ -54,20 +54,9 @@ defmodule Cadence.SemanticRuntime.MonitoringEvaluator do
     end
   end
 
-  # The ids of the compiled rules in force (sorted), so the episode event says what changed.
-  defp rule_ids(plan) do
-    rules = plan.default_rules ++ Enum.flat_map(plan.contexts, &value(&1, :rules, []))
-
-    rules
-    |> Enum.flat_map(fn rule ->
-      case value(rule, :rule_id) do
-        id when is_binary(id) and id != "" -> [id]
-        _none -> []
-      end
-    end)
-    |> Enum.uniq()
-    |> Enum.sort()
-  end
+  # The compiled policy's `rule_id`, so the episode event says which rule's digest changed.
+  defp rule_ids(%MonitoringPlan{rule_id: nil}), do: []
+  defp rule_ids(%MonitoringPlan{rule_id: rule_id}), do: [rule_id]
 
   defp put_rule_digest(next, %MonitoringPlan{rule_digest: nil}), do: next
 
