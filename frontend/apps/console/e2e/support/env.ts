@@ -14,7 +14,7 @@ export type PersonaKey = "admin" | "operator" | "second" | "orgAdmin" | "orgAdmi
 
 function required(key: string): string {
   const value = process.env[key];
-  if (!value) throw new Error(`${key} is required; run dev/stack env and use mise exec`);
+  if (!value) throw new Error(`${key} is required; run dev/stack up and use mise exec`);
   return value;
 }
 
@@ -54,10 +54,10 @@ export const DEFAULT_STORAGE_STATE = storageStateFor("orgAdmin");
 // Seeded demo data (dev/seed/earendil.exs). dev/stack writes the generated ids to mise.local.toml.
 export const DEMO = {
   organizationName: process.env["E2E_ORG_NAME"] ?? "Reflect Orbital",
-  organizationId: process.env["E2E_ORG_ID"] ?? "org-reflect-orbital-demo",
+  organizationId: required("E2E_ORG_ID"),
   organizationSlug: process.env["E2E_ORG_SLUG"] ?? "reflect-orbital",
   missionName: process.env["E2E_MISSION_NAME"] ?? "Earendil",
-  missionId: process.env["E2E_MISSION_ID"] ?? "mission-earendil-demo",
+  missionId: required("E2E_MISSION_ID"),
   missionSlug: process.env["E2E_MISSION_SLUG"] ?? "earendil",
   spacecraftCount: Number(process.env["E2E_SPACECRAFT_COUNT"] ?? "500"),
 } as const;

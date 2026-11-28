@@ -612,6 +612,9 @@ jobs:
       EARENDIL_DEMO_PROVIDER_TOKEN: earendil-local-provider
       EARENDIL_INGRESS_BASE_PORT: "43100"
       EARENDIL_UPLINK_BASE_PORT: "48100"
+      # The REST seed saves configuration drafts but never approves their activation in e2e.
+      # E2E_MUTATE stays unset; the director 11-18 specs own their own activation changes.
+      EARENDIL_SEED_APPROVE_CONFIGURATION: "0"
       OTEL_EXPORTER_OTLP_ENDPOINT: ""
       # Serve the built console from priv/static/console (browser-assets), not a Vite dev server.
       CONSOLE_VITE_ORIGIN: ""

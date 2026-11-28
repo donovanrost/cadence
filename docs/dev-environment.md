@@ -50,6 +50,9 @@ route. Rerunning `seed-rest` reuses existing records. Its dynamic Earendil IDs a
 to the gitignored `var/stack/seed.ids` and `mise.local.toml` for console e2e.
 Configuration approval uses groups of 250 spacecraft while #1020 removes the backend's
 per-craft queries from a single 1,000-craft approval transaction.
+Console e2e sets `EARENDIL_SEED_APPROVE_CONFIGURATION=0`: the REST seed still saves drafts and
+enables the fleet switches, but leaves configuration activation to the specs. Normal
+`dev/stack up` approves and applies the configuration.
 
 Fresh `reset --no-seed` plus `seed-rest` measurements on the Platform worktree
 (2026-11-28; totals exclude stack startup and vary with machine load):

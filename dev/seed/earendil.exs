@@ -49,6 +49,7 @@ defmodule EarendilSeed do
     base = System.get_env("BASE_URL") || "http://127.0.0.1:#{System.get_env("PORT", "4001")}"
     email = System.fetch_env!("CADENCE_ADMIN_EMAIL")
     password = System.fetch_env!("CADENCE_ADMIN_PASSWORD")
+    approve_configuration? = System.get_env("EARENDIL_SEED_APPROVE_CONFIGURATION", "1") != "0"
 
     client = phase("admin session", fn -> sign_in(base, email, password) end)
 
@@ -95,7 +96,7 @@ defmodule EarendilSeed do
 
     client =
       phase("spacecraft sources and configuration drafts", fn ->
-        seed_configurations(client, approver, mission_id, count)
+        seed_configurations(client, approver, mission_id, count, approve_configuration?)
       end)
 
     client = phase("orbits", fn -> EarendilOrbits.seed(client, mission_id) end)
@@ -105,7 +106,11 @@ defmodule EarendilSeed do
 
     IO.puts("  #{sites} station and profile changes approved by the second administrator")
 
-    IO.puts("  configuration activation approved by the second administrator")
+    if approve_configuration? do
+      IO.puts("  configuration activation approved by the second administrator")
+    else
+      IO.puts("  configuration drafts saved without activation")
+    end
 
     ids_path = Path.expand("../../var/stack/seed.ids", __DIR__)
     File.mkdir_p!(Path.dirname(ids_path))
@@ -478,7 +483,7 @@ defmodule EarendilSeed do
     )
   end
 
-  defp seed_configurations(client, approver, mission_id, count) do
+  defp seed_configurations(client, approver, mission_id, count, approve_configuration?) do
     {client, catalog} = request!(client, :get, "/missions/#{mission_id}/catalog")
     revision_id = get_in(catalog, ["database", "current_revision", "id"])
     unless revision_id, do: fail!("configuration", "catalog revision is missing")
@@ -512,7 +517,8 @@ defmodule EarendilSeed do
       end)
 
     IO.puts("  #{count} spacecraft sources, Telemetry Decom installations and saved drafts")
-    if reviews != [], do: review_configurations(client, approver, mission_id, reviews)
+    if approve_configuration? and reviews != [],
+      do: review_configurations(client, approver, mission_id, reviews)
     if switches != [], do: enable_switches(client, approver, mission_id, switches)
     client
   end
@@ -858,6 +864,8 @@ defmodule EarendilSeed do
         scid: index,
         spacecraft_type_id: "spacecraft_type_earendil_demo",
         spacecraft_type_version: 1,
+        telemetry_enabled: true,
+        commanding_enabled: true,
         metadata: %{
           "synthetic" => true,
           "fixture" => "reflect-orbital-v1",
