@@ -97,6 +97,74 @@ defmodule Cadence.Catalog.MissionModelSystemOwnerTest do
     assert entry["runtime_name"] == "/bus/temperature"
   end
 
+  test "a per-craft override lives where its target does, whatever path it was authored under" do
+    bus = yaml_layer()
+    payload = xtce_layer()
+
+    target =
+      policy("/bus/monitoring/temperature", "/bus/parameters/HK/temperature_c", 40)
+
+    # Authored under the payload system, on the bus's parameter, for one craft.
+    override =
+      Declaration.new(%{
+        kind: :monitoring_policy,
+        qualified_name: "/payload/monitoring/temperature_craft_a",
+        references: [
+          %{
+            expected_kind: :parameter,
+            source_ref: "/bus/parameters/HK/temperature_c",
+            role: :parameter
+          },
+          %{
+            expected_kind: :monitoring_policy,
+            source_ref: "/bus/monitoring/temperature",
+            role: :overrides
+          }
+        ],
+        definition: %{
+          "spacecraft_ids" => ["craft-a"],
+          "default_rules" => [%{"kind" => "range", "max" => 55, "severity" => "warning"}]
+        }
+      })
+
+    authored =
+      Layer.new(%{
+        organization_id: bus.organization_id,
+        mission_id: bus.mission_id,
+        layer_kind: :authored,
+        name: "limits",
+        declarations: [target, override]
+      })
+
+    assert {:ok, result} =
+             Compiler.compile([bus, payload, authored],
+               mounts: %{bus.layer_id => "/bus", payload.layer_id => "/payload"}
+             )
+
+    assert [mission, craft] =
+             Enum.sort_by(result.plans.monitoring.plan["policies"], & &1["scope"])
+
+    assert mission["scope"] == "mission" and craft["scope"] == "spacecraft"
+    assert craft["declaration_id"] != mission["declaration_id"]
+
+    for field <- ~w(space_system_id space_system_path runtime_name policy_id rule_id) do
+      assert craft[field] == mission[field], "#{field} differs"
+    end
+
+    assert craft["space_system_path"] == "/bus"
+  end
+
+  defp policy(path, parameter, max) do
+    Declaration.new(%{
+      kind: :monitoring_policy,
+      qualified_name: path,
+      references: [%{expected_kind: :parameter, source_ref: parameter, role: :parameter}],
+      definition: %{
+        "default_rules" => [%{"kind" => "range", "max" => max, "severity" => "warning"}]
+      }
+    })
+  end
+
   test "where a policy lives is not part of its rule digest" do
     result = compile()
     assert [entry] = result.plans.monitoring.plan["policies"]
