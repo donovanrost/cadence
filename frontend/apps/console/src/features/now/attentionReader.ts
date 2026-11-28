@@ -180,7 +180,13 @@ export const attentionReader = d.object({
   holder: d.optional(d.nullable(holderReader)),
   /** listen_endpoint_claimed only (U81 §3): the port, and OUR transport that uses it. */
   listen_port: d.optional(d.nullable(d.integer)),
+  /** Also listener_refusal (#993): the transport its listen profile was materialized from. */
   transport_id: d.optional(d.nullable(d.token)),
+  /**
+   * listener_refusal (#993, DECISIONS #115): who sets the listener's allowed source addresses, a
+   * provider (its delivery profile's egress) or a Cadence transport; null when the profile is gone.
+   */
+  allowlist_source: d.optional(d.nullable(d.knownText(["provider", "transport"] as const))),
   // free-text: that transport's display name ("INU S-band")
   transport_name: d.optional(d.nullable(d.string)),
   /** ingress_backpressure (U47): the downlink transport, its buffer, and what it dropped. */
