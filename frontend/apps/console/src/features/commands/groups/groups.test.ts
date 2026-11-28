@@ -20,7 +20,7 @@ import { EMPTY_QUERY } from "../compose/targets.ts";
 import { fetchGroups, groupRow, preflightReader, type Preflight } from "./api.ts";
 import { memberStageWord } from "./words.ts";
 import { checkMeta, checkRows, noGoReason, routingProfile } from "./checks.ts";
-import { showBody } from "./fixtures.ts";
+import { groupOf, showBody } from "./fixtures.ts";
 import { groupReader } from "./show.ts";
 import {
   notPlottable,
@@ -466,6 +466,32 @@ describe("L22 archived spacecraft (ux U40)", () => {
     expect(memberStageWord("canceled", "queued", "spacecraft_archived")).toBe(
       "Not released: the spacecraft is archived",
     );
+  });
+});
+
+describe("E2 withdrawn after GO (#546, #1019)", () => {
+  it("words a member the lane refused because the model's approval was withdrawn after GO", () => {
+    expect(memberStageWord("canceled", "queued", "model_approval_withdrawn_after_go")).toBe(
+      "Not released: the model's approval was withdrawn after GO",
+    );
+    // The reason decodes as a known end reason, not an unrecognized one.
+    const g = groupOf({
+      state: "queued",
+      targets: [
+        {
+          ...showBody.targets[0],
+          stage: "canceled",
+          members: [
+            {
+              ...showBody.targets[0]?.members[0],
+              stage: "canceled",
+              end_reason: "model_approval_withdrawn_after_go",
+            },
+          ],
+        },
+      ],
+    });
+    expect(g.targets[0]?.members[0]?.end_reason).toBe("model_approval_withdrawn_after_go");
   });
 });
 

@@ -44,6 +44,8 @@ export const endReasons = [
   "catalog_changed",
   // L22 (api, ux U40): released never; the spacecraft was archived after preview.
   "spacecraft_archived",
+  // E2 (#546, #1019): an unattended release refused it; the model's approval was withdrawn after GO.
+  "model_approval_withdrawn_after_go",
   "excluded_at_review",
   "canceled",
   "rejected",
