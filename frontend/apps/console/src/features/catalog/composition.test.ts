@@ -40,6 +40,15 @@ const comp = (
   return r.value;
 };
 
+describe("a layer's content digest (D4, #545, readers first)", () => {
+  it("reads with or without content_sha256, so the server can add it in either order", () => {
+    const sha = "a".repeat(64);
+    const [before] = comp([layer("a", "/", "Bus", 4)]).imported_layers;
+    const [after] = comp([{ ...layer("a", "/", "Bus", 4), content_sha256: sha }]).imported_layers;
+    expect([before?.content_sha256, after?.content_sha256]).toEqual([undefined, sha]);
+  });
+});
+
 describe("naming and Made of", () => {
   it("is composed only with more than one catalog; one catalog reads as today", () => {
     expect(isComposed(comp([layer("a", "/", "Bus", 4)]))).toBe(false);
