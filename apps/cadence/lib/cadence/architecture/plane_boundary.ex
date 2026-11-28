@@ -112,17 +112,17 @@ defmodule Cadence.Architecture.PlaneBoundary do
     ]
   ]
 
-  # Reviewed Phoenix host request adapters. This is an exact ownership ledger,
-  # not an Applications prefix exemption; byte-runtime modules remain data plane.
+  # Reviewed console request adapters: the data-source writes and platform-wide bindings the
+  # console API calls, which orchestrate public owners across contexts. This is an exact
+  # ownership ledger, not a data-sources prefix exemption.
   @host_adapter_paths MapSet.new([
-                        "lib/cadence/applications/ops_console/actions/data_sources.ex",
-                        "lib/cadence/applications/ops_console/actions/platform_bindings.ex"
+                        "lib/cadence/management/data_sources/writes.ex",
+                        "lib/cadence/management/data_sources/platform_bindings.ex"
                       ])
 
   @public_composition_values MapSet.new([
                                "lib/cadence/applications/settings_provider.ex",
                                "lib/cadence/applications/settings_section_definition.ex",
-                               "lib/cadence/applications/ops_console.ex",
                                "lib/cadence/applications/registry.ex",
                                "lib/cadence/extension_catalog.ex",
                                "lib/cadence/control/process_namespace.ex",
@@ -167,7 +167,6 @@ defmodule Cadence.Architecture.PlaneBoundary do
     "lib/cadence/comms/peer_addresses.ex" => :shared,
     "lib/cadence/comms/listen_endpoint.ex" => :shared,
     "lib/cadence/extensions/registry.ex" => :composition,
-    "lib/cadence/applications/ops_console.ex" => :composition,
     "lib/cadence/control/process_namespace.ex" => :composition,
     "lib/cadence/runtime/process_namespace.ex" => :composition,
     "lib/cadence/applications/mission_binding_contribution.ex" => :shared,
@@ -197,7 +196,6 @@ defmodule Cadence.Architecture.PlaneBoundary do
     "lib/cadence/data_sources/probe_scheduler.ex" => :composition,
     "lib/cadence/observability.ex" => :adapter,
     "lib/cadence/persistence.ex" => :platform,
-    "lib/cadence/applications/action_request.ex" => :shared,
     "lib/cadence/applications/application_dependency.ex" => :shared,
     "lib/cadence/applications/application_definition.ex" => :shared,
     "lib/cadence/applications/settings_section_definition.ex" => :shared,

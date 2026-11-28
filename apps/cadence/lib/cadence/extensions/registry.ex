@@ -12,8 +12,6 @@ defmodule Cadence.Extensions.Registry do
     WidgetTypeContribution
   }
 
-  alias Cadence.Applications.OpsConsole
-
   @type fetch_error ::
           :unknown_extension_package
           | :unsupported_extension_package_version
@@ -23,7 +21,6 @@ defmodule Cadence.Extensions.Registry do
   def all,
     do: [
       telemetry_package(),
-      ops_console_package(),
       runtime_foundations_package(),
       cfdp_package(),
       tcp_transport_package(),
@@ -99,23 +96,6 @@ defmodule Cadence.Extensions.Registry do
           family_key: :uplink_gateway,
           family_version: 1,
           kind: :transport_extension
-        }
-      ]
-    }
-  end
-
-  defp ops_console_package do
-    identity = OpsConsole.identity()
-
-    %ExtensionPackage{
-      package_id: identity.package_id,
-      version: identity.package_version,
-      trust: :first_party,
-      compatibility: %{cadence_application_contract: 1},
-      contributions: [
-        %ApplicationContribution{
-          application_key: identity.application_key,
-          application_version: identity.application_version
         }
       ]
     }

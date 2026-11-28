@@ -3,7 +3,7 @@ defmodule Cadence.Reads.AppStatus do
   One application's status at one host scope, for the console Apps list (A1):
   `%{state, label, version}`.
 
-  - `active`: a platform app, or installed and its status loads.
+  - `active`: installed and its status loads.
   - `not_installed`: no installation row, or uninstalled. `disabled`: installed then disabled.
   - `activation_pending`: installed with an approval-pending activation request for its binding
     set (only telemetry decom requests activation today; L10 approves it). At a spacecraft, only a
@@ -11,10 +11,9 @@ defmodule Cadence.Reads.AppStatus do
   - `failed`: installed but its status can't be loaded.
 
   `label` is the app's own status words (`Cadence.Applications.Status.label`, e.g. "Monitoring")
-  or nil; `version` is the installed version (the definition's for a platform app). While
-  `activation_pending`, `activation_request` is `%{requested_by: %{name} | nil, requested_at}`
-  (ux #77: "requested by Mira K. at 02:10Z"). Callers authorize first; the status providers
-  authorize again.
+  or nil; `version` is the installed version. While `activation_pending`, `activation_request` is
+  `%{requested_by: %{name} | nil, requested_at}` (ux #77: "requested by Mira K. at 02:10Z").
+  Callers authorize first; the status providers authorize again.
   """
 
   alias Cadence.Accounts.MemberNames
@@ -30,9 +29,6 @@ defmodule Cadence.Reads.AppStatus do
   @spec status(Scope.t(), ApplicationDefinition.t(), struct() | nil, HostContext.t()) :: t()
   def status(%Scope{} = scope, %ApplicationDefinition{} = definition, installation, host_context) do
     cond do
-      definition.installation_policy == :platform ->
-        loaded(scope, definition, host_context, :active, definition.version)
-
       is_nil(installation) or installation.lifecycle_state == :uninstalled ->
         %{state: :not_installed, label: nil, version: nil}
 

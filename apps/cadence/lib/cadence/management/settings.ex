@@ -79,7 +79,7 @@ defmodule Cadence.Management.Settings do
 
     applications =
       for definition <- Registry.available(),
-          definition.installation_policy == :platform or definition.application_key in installed,
+          definition.application_key in installed,
           section <- definition.settings_sections,
           scope in section.scopes do
         %{

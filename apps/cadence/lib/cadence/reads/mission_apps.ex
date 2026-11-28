@@ -3,8 +3,7 @@ defmodule Cadence.Reads.MissionApps do
   A1, the console's Apps list (Setup rail 08): every application that can be
   installed on a mission, with this mission's installation state.
 
-  - `state`: `installed | disabled | not_installed`. Platform applications are
-    always on (`platform: true`) and can't be changed.
+  - `state`: `installed | disabled | not_installed`.
   - `version` / `available_version` / `update_available`: the installed version, the
     version this deployment ships, and whether the shipped one is newer (the server
     decides; clients never compare versions). `available_version` is set for every
@@ -52,7 +51,7 @@ defmodule Cadence.Reads.MissionApps do
            level
            |> Registry.available_for_scope()
            |> Enum.map(&row(scope, context, &1, Map.get(by_key, &1.application_key)))
-           |> Enum.sort_by(&{not &1.platform, &1.name}),
+           |> Enum.sort_by(& &1.name),
          permissions: permissions(scope, mission_id),
          spacecraft_count: spacecraft_count(scope, mission_id, context)
        }}
@@ -90,26 +89,18 @@ defmodule Cadence.Reads.MissionApps do
   end
 
   defp row(%ApplicationDefinition{} = definition, installation) do
-    platform? = definition.installation_policy == :platform
-
-    state =
-      cond do
-        platform? -> :installed
-        is_nil(installation) -> :not_installed
-        true -> state(installation.lifecycle_state)
-      end
+    state = if is_nil(installation), do: :not_installed, else: state(installation.lifecycle_state)
+    version = installation_version(installation)
 
     %{
       key: definition.application_key,
       name: definition.display_name,
       description: definition.description,
-      platform: platform?,
       installed: state == :installed,
       state: state,
-      version: if(state != :not_installed, do: installed_version(installation, definition)),
+      version: if(state != :not_installed, do: version),
       available_version: definition.version,
-      update_available:
-        update_available?(state, installation_version(installation), definition.version),
+      update_available: update_available?(state, version, definition.version),
       consequence_if_missing: nil
     }
   end
@@ -129,7 +120,4 @@ defmodule Cadence.Reads.MissionApps do
 
   defp installation_version(nil), do: nil
   defp installation_version(installation), do: installation.application_version
-
-  defp installed_version(nil, definition), do: definition.version
-  defp installed_version(installation, _definition), do: installation.application_version
 end

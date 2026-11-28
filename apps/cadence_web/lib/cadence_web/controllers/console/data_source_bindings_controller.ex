@@ -6,9 +6,9 @@ defmodule CadenceWeb.Console.DataSourceBindingsController do
 
   use CadenceWeb, :controller
 
-  alias Cadence.Applications.OpsConsole.Actions.PlatformBindings
   alias Cadence.Auth.Scope
   alias Cadence.Management.DataSources
+  alias Cadence.Management.DataSources.PlatformBindings
   alias CadenceWeb.Console.{ConfigJSON, Problem}
 
   @doc "The mission's own bindings first, then the platform ones it falls back to."

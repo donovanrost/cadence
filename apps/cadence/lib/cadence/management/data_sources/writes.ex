@@ -1,50 +1,40 @@
-defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
+defmodule Cadence.Management.DataSources.Writes do
   @moduledoc """
   The data-source writes the console's Data Sources screens make
-  (`CadenceWeb.Console.DataSourceWritesController`), as exact typed action requests.
+  (`CadenceWeb.Console.DataSourceWritesController`).
+
+  Each write names its action (`"register-source"`, `"change-binding"`, ...) and takes exact,
+  string-keyed params. The params are checked against the mission, and the caller authorized
+  (`operate_mission` and `read_organization`), before any domain call; the action id goes into
+  the payload of the record the write makes.
   """
 
-  alias Cadence.Applications.{ActionRequest, HostContext, JSONBoundary}
-  alias Cadence.Applications.OpsConsole.Actions.PlatformBindings
+  alias Cadence.Applications.JSONBoundary
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Control.DataSources, as: DataSourceControl
   alias Cadence.Control.ManagedResources
-  alias Cadence.DataSources.{AdapterRegistry, DataBinding, DataSource, SourceHealthEvent}
+  alias Cadence.DataSources.{AdapterRegistry, DataBinding, DataSource}
   alias Cadence.ExtensionCatalog
   alias Cadence.Jobs
   alias Cadence.Jobs.Job
   alias Cadence.Management.DataSources
+  alias Cadence.Management.DataSources.PlatformBindings
   alias Cadence.Secrets.EnvBackend
 
-  @surface_ids ["data_sources", "data_source_registration", "data_source_settings"]
-  @surface_version 1
+  # What a write's records name as their source (event payloads, source and credential metadata).
+  @write_source "data_sources_write"
 
-  @registration_action_ids ["register-source"]
-  @legacy_action_ids [
-    "register-source",
-    "change-binding",
+  @source_actions [
     "disable-source",
     "enable-source",
     "reconcile-tsdb-backend",
     "deprovision-tsdb-backend",
     "provision-tsdb-backend",
-    "probe-source",
-    "rotate-source-credential",
-    "retry-deployment-run",
-    "requeue-deployment-run"
+    "probe-source"
   ]
-  @settings_action_ids [
-    "change-binding",
-    "disable-source",
-    "enable-source",
-    "reconcile-tsdb-backend",
-    "deprovision-tsdb-backend",
-    "provision-tsdb-backend",
-    "probe-source",
-    "rotate-source-credential",
-    "retry-deployment-run",
-    "requeue-deployment-run"
-  ]
+  @deployment_actions ["retry-deployment-run", "requeue-deployment-run"]
+  @actions ["register-source", "change-binding", "rotate-source-credential"] ++
+             @source_actions ++ @deployment_actions
 
   @shared_switch_keys ["reason", "expected_affected_missions", "expected_live_passes_total"]
 
@@ -61,31 +51,25 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
     "storage"
   ]
 
-  @spec execute(Scope.t(), HostContext.t(), binary(), ActionRequest.t()) ::
-          {:ok, term()} | {:error, term()}
-  def execute(%Scope{} = scope, %HostContext{} = host_context, %ActionRequest{} = request) do
-    execute(scope, host_context, request.surface_id, request)
-  end
-
-  def execute(
-        %Scope{organization_id: organization_id} = scope,
-        %HostContext{placement: :mission, mission_id: mission_id} = host_context,
-        surface_id,
-        %ActionRequest{} = request
-      )
+  @doc """
+  Makes the data-source write `action_id` in the mission, for the scope's organization.
+  `{:error, :unsupported_action}` for an action it doesn't know, `{:error, :malformed_action_input}`
+  for params that aren't exactly the action's, `{:error, :scope_mismatch}` for a record outside
+  the mission, before any domain call.
+  """
+  @spec execute(Scope.t(), binary(), binary(), map()) :: {:ok, term()} | {:error, term()}
+  def execute(%Scope{organization_id: organization_id} = scope, mission_id, action_id, params)
       when is_binary(organization_id) and organization_id != "" and is_binary(mission_id) and
-             mission_id != "" do
-    with :ok <- validate_request(surface_id, host_context, request),
-         :ok <- validate_json_params(request.params),
-         :ok <- validate_mission_param(mission_id, request.params),
-         {:ok, params} <- normalize_params(request.action_id, request.params),
+             mission_id != "" and action_id in @actions and is_map(params) do
+    with :ok <- validate_json_params(params),
+         :ok <- validate_mission_param(mission_id, params),
+         {:ok, normalized} <- normalize_params(action_id, params),
          :ok <- authorize(scope, organization_id, mission_id) do
-      dispatch(scope, host_context, request, params)
+      dispatch(scope, mission_id, action_id, normalized)
     end
   end
 
-  def execute(_scope, _host_context, _surface_id, _request),
-    do: {:error, :unsupported_application_action}
+  def execute(_scope, _mission_id, _action_id, _params), do: {:error, :unsupported_action}
 
   @doc """
   Whether `scope` may make a data-source write in the mission: the very check `execute/4` makes
@@ -95,127 +79,6 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
   @spec may_manage?(Scope.t(), binary(), binary()) :: boolean()
   def may_manage?(%Scope{} = scope, organization_id, mission_id),
     do: authorize(scope, organization_id, mission_id) == :ok
-
-  @spec result(term()) :: term()
-  def result(%DataSource{} = source) do
-    %{
-      "dataSourceId" => source.data_source_id,
-      "organizationId" => source.organization_id,
-      "missionId" => source.mission_id,
-      "status" => text(source.status),
-      "kind" => text(source.kind),
-      "isolationLevel" => text(source.isolation_level)
-    }
-  end
-
-  def result(%DataBinding{} = binding) do
-    %{
-      "bindingId" => binding.binding_id,
-      "dataSourceId" => binding.data_source_id,
-      "organizationId" => binding.organization_id,
-      "missionId" => binding.mission_id,
-      "status" => text(binding.status),
-      "bindingVersion" => binding.binding_version
-    }
-  end
-
-  def result(%{source: source, job: job}) do
-    %{"source" => result(source), "job" => result(job)}
-  end
-
-  def result(%{reference: reference, event: event}) do
-    %{"reference" => result(reference), "eventId" => event_id(event)}
-  end
-
-  def result(%Cadence.DataSources.SourceCredentialReference{} = reference) do
-    %{
-      "credentialsRef" => reference.credentials_ref,
-      "organizationId" => reference.organization_id,
-      "missionId" => reference.mission_id,
-      "dataSourceId" => reference.data_source_id,
-      "status" => text(reference.status),
-      "credentialVersion" => reference.credential_version
-    }
-  end
-
-  def result(%Job{} = job) do
-    %{
-      "jobId" => job.job_id,
-      "runId" => job.run_id,
-      "missionId" => job.mission_id,
-      "status" => text(job.status),
-      "attemptCount" => job.attempt_count
-    }
-  end
-
-  def result(%{run_id: run_id, job_id: job_id} = run) do
-    %{
-      "jobId" => job_id,
-      "runId" => run_id,
-      "status" => text(Map.get(run, :status)),
-      "statusText" => text(Map.get(run, :status_text)),
-      "missionId" => text_or_nil(Map.get(run, :mission_id))
-    }
-  end
-
-  def result(%{event: event, status: status}) do
-    %{"event" => probe_event_result(event), "status" => probe_status_result(status)}
-  end
-
-  def result(value) when is_map(value) do
-    case JSONBoundary.safe(value) do
-      {:ok, safe_value} -> safe_value
-      {:error, _reason} -> nil
-    end
-  end
-
-  def result(_value), do: nil
-
-  @doc "Validates the exact action payload without performing a source operation."
-  def validate_input(action_id, params) do
-    with :ok <- validate_json_params(params) do
-      normalize_params(action_id, params)
-    end
-  end
-
-  def validate_registration(organization_id, mission_id, params) do
-    with {:ok, %{source: attrs}} <- validate_input("register-source", params) do
-      attrs |> data_source(organization_id, mission_id) |> DataSource.validate_configuration()
-    end
-  end
-
-  defp validate_request(
-         surface_id,
-         %HostContext{placement: :mission} = host_context,
-         %ActionRequest{
-           application_key: "ops_console",
-           application_version: 1,
-           surface_id: surface_id,
-           surface_version: @surface_version,
-           action_id: action_id,
-           params: params
-         }
-       )
-       when is_binary(surface_id) and is_binary(action_id) and is_map(params) do
-    if HostContext.valid?(host_context) and valid_binding?(surface_id, action_id) do
-      :ok
-    else
-      {:error, :unsupported_application_action}
-    end
-  end
-
-  defp validate_request(_surface_id, _host_context, _request),
-    do: {:error, :unsupported_application_action}
-
-  defp valid_binding?(surface_id, action_id) when surface_id in @surface_ids do
-    case surface_id do
-      "data_sources" -> action_id in @legacy_action_ids
-      "data_source_registration" -> action_id in @registration_action_ids
-      "data_source_settings" -> action_id in @settings_action_ids
-    end
-  end
-
-  defp valid_binding?(_surface_id, _action_id), do: false
 
   defp validate_json_params(params) do
     if JSONBoundary.validate(params) == :ok and string_keyed?(params),
@@ -274,7 +137,7 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
         normalize_deployment_action(params)
 
       _unknown ->
-        {:error, :unsupported_application_action}
+        {:error, :unsupported_action}
     end
   end
 
@@ -461,22 +324,19 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
 
   defp validate_kind_isolation(:managed_tsdb, _isolation_level), do: :ok
 
-  defp dispatch(scope, host_context, %ActionRequest{action_id: "register-source"} = request, %{
-         source: attrs
-       }) do
-    register_source(scope, host_context, request, attrs)
-  end
+  defp dispatch(scope, mission_id, "register-source" = action_id, %{source: attrs}),
+    do: register_source(scope, mission_id, action_id, attrs)
 
   defp dispatch(
          scope,
-         host_context,
-         %ActionRequest{action_id: "change-binding"} = request,
+         mission_id,
+         "change-binding" = action_id,
          %{binding_id: binding_id, data_source_id: data_source_id} = params
        ) do
     change_binding(
       scope,
-      host_context,
-      request,
+      mission_id,
+      action_id,
       binding_id,
       {params.expected_data_source_id, data_source_id},
       Map.get(params, :shared_switch, %{})
@@ -485,47 +345,25 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
 
   defp dispatch(
          scope,
-         host_context,
-         %ActionRequest{action_id: action_id} = request,
-         %{data_source_id: data_source_id}
-       )
-       when action_id in [
-              "disable-source",
-              "enable-source",
-              "reconcile-tsdb-backend",
-              "deprovision-tsdb-backend",
-              "provision-tsdb-backend",
-              "probe-source"
-            ] do
-    source_action(scope, host_context, request, data_source_id)
-  end
-
-  defp dispatch(
-         scope,
-         host_context,
-         %ActionRequest{action_id: "rotate-source-credential"} = request,
+         mission_id,
+         "rotate-source-credential" = action_id,
          %{data_source_id: data_source_id, credentials_ref: credentials_ref}
        ) do
-    rotate_source_credential(scope, host_context, request, data_source_id, credentials_ref)
+    rotate_source_credential(scope, mission_id, action_id, data_source_id, credentials_ref)
   end
 
-  defp dispatch(
-         scope,
-         host_context,
-         %ActionRequest{action_id: action_id} = request,
-         %{job_id: job_id}
-       )
-       when action_id in ["retry-deployment-run", "requeue-deployment-run"] do
-    deployment_action(scope, host_context, request, job_id)
-  end
+  defp dispatch(scope, mission_id, action_id, %{data_source_id: data_source_id})
+       when action_id in @source_actions,
+       do: source_action(scope, mission_id, action_id, data_source_id)
 
-  defp dispatch(_scope, _host_context, _request, _params),
-    do: {:error, :unsupported_application_action}
+  defp dispatch(scope, mission_id, action_id, %{job_id: job_id})
+       when action_id in @deployment_actions,
+       do: deployment_action(scope, mission_id, action_id, job_id)
 
-  defp register_source(scope, %HostContext{mission_id: mission_id}, request, attrs) do
+  defp register_source(scope, mission_id, action_id, attrs) do
     organization_id = scope.organization_id
     source = data_source(attrs, organization_id, mission_id)
-    payload = action_payload(request)
+    payload = action_payload(action_id)
 
     # persist_data_source upserts by id: registering an existing id (a platform-shared source's,
     # or another organization's) would overwrite it.
@@ -582,7 +420,7 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
           metadata:
             compact(%{
               storage: attrs.storage,
-              registered_by: "ops_console_data_sources_action",
+              registered_by: @write_source,
               endpoint_ref: attrs.endpoint_ref,
               material_env_profile: attrs.material_env_profile,
               http_endpoint_env: attrs.http_endpoint_env
@@ -601,8 +439,8 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
 
   defp change_binding(
          scope,
-         %HostContext{mission_id: mission_id},
-         request,
+         mission_id,
+         action_id,
          binding_id,
          {expected, data_source_id},
          shared_switch
@@ -617,22 +455,22 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
          :ok <- compatible_source?(source, binding),
          :ok <- shared_target?(source, binding) do
       if PlatformBindings.shared?(binding),
-        do: switch_shared_binding(scope, request, binding, source, shared_switch),
-        else: persist_switch(scope, request, binding, data_source_id, %{})
+        do: switch_shared_binding(scope, action_id, binding, source, shared_switch),
+        else: persist_switch(scope, action_id, binding, data_source_id, %{})
     end
   end
 
   # DECISIONS #90 / ux U53: a platform-wide binding moves every mission that reads it. The
   # server recounts the blast radius, requires the reason, records both in the binding's event
   # and the platform audit, and refuses when the radius changed under the confirmation.
-  defp switch_shared_binding(scope, request, binding, source, shared_switch) do
+  defp switch_shared_binding(scope, action_id, binding, source, shared_switch) do
     with {:ok, checked} <- PlatformBindings.check_switch(binding, shared_switch) do
       from = PlatformBindings.source_ref(binding.data_source_id)
       to = PlatformBindings.source_ref(source)
       extra = PlatformBindings.payload(from, to, checked.reason, checked.radius)
 
       with {:ok, persisted} <-
-             persist_switch(scope, request, binding, source.data_source_id, extra) do
+             persist_switch(scope, action_id, binding, source.data_source_id, extra) do
         :ok = PlatformBindings.audit(persisted, from, to, checked, actor_id(scope))
 
         {:ok,
@@ -649,13 +487,13 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
 
   # The write re-checks the binding still points where this switch was read (expected_data_source_id,
   # under a row lock), so a switch made between the read and the write is refused, not overwritten.
-  defp persist_switch(scope, request, %DataBinding{} = binding, data_source_id, extra) do
+  defp persist_switch(scope, action_id, %DataBinding{} = binding, data_source_id, extra) do
     DataSources.persist_data_binding(
       %DataBinding{binding | data_source_id: data_source_id},
       expected_data_source_id: binding.data_source_id,
       actor_id: actor_id(scope),
       payload:
-        request
+        action_id
         |> action_payload()
         |> Map.merge(%{
           "previous_data_source_id" => binding.data_source_id,
@@ -665,55 +503,55 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
     )
   end
 
-  defp source_action(scope, %HostContext{mission_id: mission_id}, request, data_source_id) do
+  defp source_action(scope, mission_id, action_id, data_source_id) do
     with {:ok, source} <- scoped_source(scope.organization_id, mission_id, data_source_id),
          :ok <- writable(scope, source) do
-      execute_source_action(scope, mission_id, request, source)
+      execute_source_action(scope, mission_id, action_id, source)
     end
   end
 
   defp execute_source_action(
          scope,
          _mission_id,
-         %ActionRequest{action_id: "disable-source"} = request,
+         "disable-source" = action_id,
          source
        ) do
-    DataSources.disable_data_source(source.data_source_id, %{}, write_opts(scope, request))
+    DataSources.disable_data_source(source.data_source_id, %{}, write_opts(scope, action_id))
   end
 
   defp execute_source_action(
          scope,
          _mission_id,
-         %ActionRequest{action_id: "enable-source"} = request,
+         "enable-source" = action_id,
          source
        ) do
-    DataSources.enable_data_source(source.data_source_id, %{}, write_opts(scope, request))
+    DataSources.enable_data_source(source.data_source_id, %{}, write_opts(scope, action_id))
   end
 
   defp execute_source_action(
          scope,
          _mission_id,
-         %ActionRequest{action_id: "reconcile-tsdb-backend"} = request,
+         "reconcile-tsdb-backend" = action_id,
          source
        ) do
     ManagedResources.reconcile_tsdb_backend(
       source.data_source_id,
       %{},
-      write_opts(scope, request)
+      write_opts(scope, action_id)
     )
   end
 
   defp execute_source_action(
          scope,
          _mission_id,
-         %ActionRequest{action_id: "deprovision-tsdb-backend"} = request,
+         "deprovision-tsdb-backend" = action_id,
          source
        ) do
     case ManagedResources.request_tsdb_backend(
            source.data_source_id,
            :deprovision,
            %{},
-           write_opts(scope, request)
+           write_opts(scope, action_id)
          ) do
       {:ok, persisted_source, job} -> {:ok, %{source: persisted_source, job: job}}
       other -> other
@@ -723,14 +561,14 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
   defp execute_source_action(
          scope,
          _mission_id,
-         %ActionRequest{action_id: "provision-tsdb-backend"} = request,
+         "provision-tsdb-backend" = action_id,
          source
        ) do
     case ManagedResources.request_tsdb_backend(
            source.data_source_id,
            :provision,
            %{},
-           write_opts(scope, request)
+           write_opts(scope, action_id)
          ) do
       {:ok, persisted_source, job} -> {:ok, %{source: persisted_source, job: job}}
       other -> other
@@ -740,7 +578,7 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
   defp execute_source_action(
          scope,
          mission_id,
-         %ActionRequest{action_id: "probe-source"} = request,
+         "probe-source" = action_id,
          source
        ) do
     case DataSourceControl.probe(
@@ -749,7 +587,7 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
            [
              actor_id: actor_id(scope),
              materialize_adapter_capabilities?: true,
-             payload: action_payload(request)
+             payload: action_payload(action_id)
            ] ++ source_probe_opts(source)
          ) do
       {:ok, event, status} -> {:ok, %{event: event, status: status}}
@@ -759,21 +597,21 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
 
   defp rotate_source_credential(
          scope,
-         %HostContext{mission_id: mission_id},
-         request,
+         mission_id,
+         action_id,
          data_source_id,
          credentials_ref
        ) do
     with {:ok, source} <- scoped_source(scope.organization_id, mission_id, data_source_id),
          :ok <- writable(scope, source) do
       if source.credentials_ref == credentials_ref,
-        do: rotate_current_reference(scope, mission_id, request, source),
-        else: rotate_to_new_reference(scope, mission_id, request, source, credentials_ref)
+        do: rotate_current_reference(scope, mission_id, action_id, source),
+        else: rotate_to_new_reference(scope, mission_id, action_id, source, credentials_ref)
     end
   end
 
   # The same reference: its material was rotated behind it, so it gets a new version.
-  defp rotate_current_reference(scope, mission_id, request, source) do
+  defp rotate_current_reference(scope, mission_id, action_id, source) do
     with {:ok, reference, event} <-
            DataSources.rotate_credential_reference(
              source.credentials_ref,
@@ -781,7 +619,7 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
                data_source_id: source.data_source_id,
                organization_id: scope.organization_id,
                mission_id: mission_id,
-               payload: action_payload(request)
+               payload: action_payload(action_id)
              },
              actor_id: actor_id(scope)
            ) do
@@ -792,9 +630,9 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
   # A new reference (L11 W5, 'rotates to that reference'; qa (B)): registered like a source's
   # first one, from the current reference's provider and material metadata, then the source
   # points at it. The old reference stays as it was.
-  defp rotate_to_new_reference(scope, mission_id, request, source, credentials_ref) do
+  defp rotate_to_new_reference(scope, mission_id, action_id, source, credentials_ref) do
     attrs = rotation_attrs(source, credentials_ref)
-    payload = action_payload(request)
+    payload = action_payload(action_id)
 
     with :ok <-
            maybe_register_credentials(attrs, scope.organization_id, mission_id, payload, scope),
@@ -845,11 +683,11 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
        else: {:error, :credential_reference_in_use}
   end
 
-  defp deployment_action(scope, %HostContext{mission_id: mission_id}, request, job_id) do
+  defp deployment_action(scope, mission_id, action_id, job_id) do
     with {:ok, %Job{} = job} <- Jobs.fetch_job(job_id),
          :ok <- scoped_job?(scope.organization_id, mission_id, job),
          :ok <- writable_job_source(scope, mission_id, job) do
-      case request.action_id do
+      case action_id do
         "retry-deployment-run" ->
           ManagedResources.retry_deployment_run(job_id)
 
@@ -982,7 +820,7 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
       metadata:
         compact(%{
           storage: attrs.storage,
-          registered_by: "ops_console_data_sources_action",
+          registered_by: @write_source,
           logical_source: attrs.logical_source,
           endpoint_ref: attrs.endpoint_ref,
           material_env_profile: attrs.material_env_profile,
@@ -1002,18 +840,12 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
     end
   end
 
-  defp write_opts(scope, request) do
-    [actor_id: actor_id(scope), payload: action_payload(request)]
+  defp write_opts(scope, action_id) do
+    [actor_id: actor_id(scope), payload: action_payload(action_id)]
   end
 
-  defp action_payload(%ActionRequest{action_id: action_id, idempotency_key: idempotency_key}) do
-    %{"source" => "ops_console_data_sources_action", "action_id" => action_id}
-    |> maybe_put("idempotency_key", idempotency_key)
-  end
-
-  defp maybe_put(map, _key, nil), do: map
-  defp maybe_put(map, key, value) when is_binary(value), do: Map.put(map, key, value)
-  defp maybe_put(map, _key, _value), do: map
+  defp action_payload(action_id),
+    do: %{"source" => @write_source, "action_id" => action_id}
 
   defp actor_id(%Scope{user: %{user_id: user_id}}) when is_binary(user_id), do: user_id
 
@@ -1051,43 +883,4 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSources do
       trimmed -> trimmed
     end
   end
-
-  defp event_id(%SourceHealthEvent{source_health_event_id: event_id}), do: event_id
-  defp event_id(%{source_health_event_id: event_id}), do: event_id
-  defp event_id(_event), do: nil
-
-  defp probe_event_result(:unchanged), do: "unchanged"
-
-  defp probe_event_result(%SourceHealthEvent{} = event) do
-    %{
-      "eventId" => event.source_health_event_id,
-      "dataSourceId" => event.data_source_id,
-      "missionId" => event.mission_id,
-      "health" => text(event.source_health),
-      "reason" => text_or_nil(event.reason)
-    }
-  end
-
-  defp probe_event_result(_event), do: nil
-
-  defp probe_status_result(status) when is_map(status) do
-    %{
-      "health" => text_or_nil(payload_value(status, :source_health)),
-      "reason" => text_or_nil(payload_value(status, :reason)),
-      "observedAt" => text_or_nil(payload_value(status, :observed_at))
-    }
-  end
-
-  defp probe_status_result(_status), do: nil
-
-  defp text_or_nil(nil), do: nil
-  defp text_or_nil(value), do: text(value)
-
-  defp text(nil), do: "none"
-  defp text(%DateTime{} = value), do: DateTime.to_iso8601(value)
-  defp text(value) when is_atom(value), do: Atom.to_string(value)
-  defp text(value) when is_binary(value), do: value
-  defp text(value) when is_integer(value), do: Integer.to_string(value)
-  defp text(value) when is_float(value), do: Float.to_string(value)
-  defp text(value), do: inspect(value)
 end

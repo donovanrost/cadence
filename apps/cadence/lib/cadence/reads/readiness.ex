@@ -9,7 +9,6 @@ defmodule Cadence.Reads.Readiness do
   authorizes first.
   """
 
-  alias Cadence.Applications.ApplicationDefinition
   alias Cadence.Applications.ApplicationInstallations
   alias Cadence.Applications.SpacecraftConfiguration.{CatalogAuthority, Drafts}
   alias Cadence.Applications.TelemetryDecom
@@ -175,18 +174,13 @@ defmodule Cadence.Reads.Readiness do
       |> ApplicationInstallations.settings_application_keys(mission_id)
       |> MapSet.new()
 
-    optional =
-      :mission
-      |> Cadence.ExtensionCatalog.available_applications_for_scope()
-      |> Enum.filter(fn %ApplicationDefinition{} = app ->
-        app.installation_policy == :optional and :mission in app.installable_scopes
-      end)
+    available = Cadence.ExtensionCatalog.available_applications_for_scope(:mission)
 
     %{
-      installed_count: Enum.count(optional, &MapSet.member?(installed, &1.application_key)),
-      available_count: length(optional),
+      installed_count: Enum.count(available, &MapSet.member?(installed, &1.application_key)),
+      available_count: length(available),
       missing:
-        optional
+        available
         |> Enum.reject(&MapSet.member?(installed, &1.application_key))
         |> Enum.map(
           &%{key: &1.application_key, name: &1.display_name, description: &1.description}

@@ -9,11 +9,7 @@ defmodule Cadence.Applications.Registry do
   alias Cadence.Applications.{
     ApplicationDefinition,
     ResourceClaimDefinition,
-    ResourceContract
-  }
-
-  alias Cadence.Applications.{
-    OpsConsole,
+    ResourceContract,
     TelemetryDecom
   }
 
@@ -23,7 +19,7 @@ defmodule Cadence.Applications.Registry do
           | :invalid_application_definition
 
   @spec all() :: [ApplicationDefinition.t()]
-  def all, do: [TelemetryDecom.definition(), OpsConsole.definition(), cfdp()]
+  def all, do: [TelemetryDecom.definition(), cfdp()]
 
   @spec available() :: [ApplicationDefinition.t()]
   def available do
@@ -40,15 +36,6 @@ defmodule Cadence.Applications.Registry do
 
   @spec known_keys() :: [binary()]
   def known_keys, do: Enum.map(all(), & &1.application_key)
-
-  @doc "Resolves platform access from a validated, available server-owned definition."
-  @spec platform?(binary(), ApplicationDefinition.scope()) :: boolean()
-  def platform?(application_key, scope) do
-    case fetch_available(application_key) do
-      {:ok, definition} -> ApplicationDefinition.platform?(definition, scope)
-      {:error, _reason} -> false
-    end
-  end
 
   @spec fetch(binary(), pos_integer() | :latest | nil) ::
           {:ok, ApplicationDefinition.t()} | {:error, fetch_error()}

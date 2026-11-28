@@ -1259,14 +1259,14 @@ sources come first, then by name.
     - `credentials_ref`: the reference with its middle elided, never material, or `null`.
   - `kind` is a closed set: `managed_tsdb | byo_tsdb | postgres | object_archive | projection`.
   - `permissions: ["data_sources.manage"]` (top level) when the caller passes the check the
-    writes use (`Actions.may_manage?/3`: `operate_mission` and an organization admin, #1160), else `[]`. A
+    writes use (`Writes.may_manage?/3`: `operate_mission` and an organization admin, #1160), else `[]`. A
     member who can operate the mission but isn't an organization admin gets `[]`, and their writes
     are `403`.
 
 ### Data sources (L11): writes, and the reads behind them
 
-All under `/missions/:mission_id`. They wrap the legacy page's `OpsConsole.Actions.DataSources`,
-so the validation and authorization are the same. Only the organization's own sources and
+All under `/missions/:mission_id`. They go through `Cadence.Management.DataSources.Writes`, which
+validates and authorizes every write. Only the organization's own sources and
 bindings can be written. A platform-shared one needs a platform admin in admin mode, otherwise
 `403 platform_source`. Each write answers with the source's D1 row as `source`.
 
@@ -1351,12 +1351,14 @@ bindings can be written. A platform-shared one needs a platform admin in admin m
 
 ### `GET /missions/:mission_id/apps` (A1)
 
-`{apps: [{key, name, description, platform, installed, state: "installed" | "disabled" |
-"not_installed", version, available_version, update_available, consequence_if_missing}],
-spacecraft_count, permissions: ["apps.install"]}`. These are the
-applications installable on a mission, platform ones first, then by name.
+`{apps: [{key, name, description, installed, state: "installed" | "disabled" | "not_installed",
+version, available_version, update_available, consequence_if_missing}], spacecraft_count,
+permissions: ["apps.install"]}`. These are the applications installable on a mission, by name.
 
-- `platform: true` apps are always on and can't be changed.
+- No application installs on the whole mission today (Telemetry Decom works per spacecraft, CFDP
+  is on the roadmap), so `apps` is `[]` and the console shows an empty state.
+- Every app is installed, disabled and uninstalled with the verbs below; none is always on (the
+  platform installation policy went with the Ops Console, #1176).
 - `version` is the installed version, an integer (application versions are integers), or `null`
   when the app isn't installed.
 - `available_version` is the version this deployment ships (an integer), set on every row.
@@ -1379,8 +1381,7 @@ audited lifecycle events.
 - Errors: `404 app_not_found`, `403 forbidden`, `422` with the domain's code (for example
   `application_dependency_missing`). Refetch on `invalidate` with `configuration`.
 - Rows also carry (§11 L9) `status: {state: "active" | "not_installed" | "disabled" |
-  "activation_pending" | "failed", label, version}`. `active`: a platform app, or installed and its
-  status loads; `activation_pending`: an approval-pending activation request for its binding set
+  "activation_pending" | "failed", label, version}`. `active`: installed and its status loads; `activation_pending`: an approval-pending activation request for its binding set
   (telemetry decom only today); `failed`: installed but its status can't be loaded. `label` is the
   app's own status words ("Monitoring") or `null`. While `activation_pending`, status adds
   `activation_request: {requested_by: {name} | null, requested_at}` (the open request; ux #77).

@@ -3,9 +3,9 @@ import { decoders as d, request, type ApiResult, type Decoded, type Reader } fro
 import { healthReader, sourceReader, storages, isolationLevels, registerKinds } from "./api.ts";
 
 /**
- * L11 data-source writes (api-ops' proposal, fe-setup's 8 changes accepted 11-13). They wrap the
- * LiveView's OpsConsole.Actions.DataSources (operate_mission); platform-shared sources answer
- * 403 platform_source. Writes return the source's D1 row so a page replaces it in place.
+ * L11 data-source writes (api-ops' proposal, fe-setup's 8 changes accepted 11-13). They go through
+ * the server's Management.DataSources.Writes (operate_mission and organization admin);
+ * platform-shared sources answer 403 platform_source. Writes return the source's D1 row so a page replaces it in place.
  */
 const base = (missionId: MissionId) => `/missions/${encodeURIComponent(missionId)}`;
 const option = <T extends readonly string[]>(keys: T) =>
