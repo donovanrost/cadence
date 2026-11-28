@@ -21,7 +21,7 @@ defmodule Cadence.Reads.AlarmEvents do
 
   alias Cadence.Limits.Event
   alias Cadence.Missions
-  alias Cadence.Ops.PointCatalog
+  alias Cadence.Reads.PointParameters
   alias Cadence.Repo
   alias Cadence.SemanticObservations.{AlarmTransitionRow, LatestAlarmStateRow}
   alias Cadence.SemanticRuntime.AlarmLevel
@@ -70,9 +70,11 @@ defmodule Cadence.Reads.AlarmEvents do
 
   # The catalog point of a parameter; the parameter itself when the catalog does not map it.
   defp point_for(organization_id, mission_id, parameter_id) do
-    organization_id
-    |> PointCatalog.list_points(mission_id)
-    |> Enum.find_value(parameter_id, &(&1.parameter_id == parameter_id && &1.point_id))
+    Map.get(
+      PointParameters.mapping(organization_id, mission_id).by_parameter,
+      parameter_id,
+      parameter_id
+    )
   end
 
   @doc "The point's transitions, `:order` `:asc | :desc` (default newest first), `:limit` (default #{@default_limit})."
@@ -144,11 +146,8 @@ defmodule Cadence.Reads.AlarmEvents do
 
   # The parameters a point's samples are evaluated as: its catalog parameter, or itself.
   defp parameter_ids(organization_id, mission_id, point_id) do
-    case Enum.find(
-           PointCatalog.list_points(organization_id, mission_id),
-           &(&1.point_id == point_id)
-         ) do
-      %{parameter_id: parameter} when is_binary(parameter) -> [parameter, point_id]
+    case Map.get(PointParameters.mapping(organization_id, mission_id).by_point, point_id) do
+      parameter when is_binary(parameter) -> Enum.uniq([parameter, point_id])
       _unmapped -> [point_id]
     end
   end

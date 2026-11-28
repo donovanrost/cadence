@@ -4,7 +4,7 @@ defmodule Cadence.Projections.TelemetryLatestLimitStatesTest do
   alias Cadence.Control.DerivedTelemetry, as: DerivedTelemetryService
   alias Cadence.Jobs
   alias Cadence.Projections.TelemetryLatestLimitStates
-  alias Cadence.Reads.Limits, as: LimitReads
+  alias Cadence.Limits.Store
   use Cadence.DataCase, async: false
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
@@ -45,11 +45,11 @@ defmodule Cadence.Projections.TelemetryLatestLimitStatesTest do
     assert {:ok, limit_run} = Cadence.Limits.evaluate("mission-alpha")
     assert limit_run.status == :completed
 
-    assert LimitReads.latest_state("mission-alpha", "HK.counter").limit_state ==
+    assert ground_state("HK.counter").limit_state ==
              :yellow_high
 
     Repo.delete_all(TelemetryLatestLimitStateRow)
-    assert LimitReads.latest_state("mission-alpha", "HK.counter") == nil
+    assert ground_state("HK.counter") == nil
 
     assert {:ok, rebuild_run} =
              TelemetryLatestLimitStates.start_rebuild("mission-alpha")
@@ -79,7 +79,7 @@ defmodule Cadence.Projections.TelemetryLatestLimitStatesTest do
     assert completed_run.status == :completed
     assert completed_run.rebuilt_state_count == 1
 
-    latest_state = LimitReads.latest_state("mission-alpha", "HK.counter")
+    latest_state = ground_state("HK.counter")
     assert latest_state.limit_state == :yellow_high
     assert latest_state.normalized_state == :yellow
     assert latest_state.evaluated_value == 15
@@ -171,15 +171,12 @@ defmodule Cadence.Projections.TelemetryLatestLimitStatesTest do
     assert completed_run.rebuilt_state_count == 2
     assert Repo.aggregate(TelemetryLimitEventRow, :count, :limit_event_id) == 0
 
-    assert LimitReads.latest_state("mission-alpha", "HK.counter").limit_state ==
+    assert ground_state("HK.counter").limit_state ==
              :yellow_high
 
-    assert LimitReads.latest_state(
-             "mission-alpha",
-             "DERIVED.counter_double"
-           ).limit_state == :yellow_high
+    assert ground_state("DERIVED.counter_double").limit_state == :yellow_high
 
-    assert LimitReads.latest_states_for_mission("mission-alpha")
+    assert Store.list_latest_states("mission-alpha")
            |> Enum.map(fn state ->
              {state.point_id, state.limit_state, state.provenance["evaluation_mode"]}
            end) == [
@@ -239,4 +236,9 @@ defmodule Cadence.Projections.TelemetryLatestLimitStatesTest do
       packet_data::binary
     >>
   end
+
+  # The ground projection these jobs write (the runtime's alarm states are read through
+  # `Reads.AlarmEvents`, #451 T3e).
+  defp ground_state(point_id),
+    do: "mission-alpha" |> Store.list_latest_states(point_id: point_id) |> List.first()
 end
