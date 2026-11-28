@@ -1,11 +1,13 @@
 import type { StageOp } from "@/features/changes/index.ts";
 import type { ProviderChoice, ProviderOptions } from "./provider-options.ts";
+import { effectiveListener, storedListener, type ListenerChoice } from "./provider-listener.ts";
 
 /**
  * A provider-managed transport through the change set (comms parity 2; domain's document shape):
  * the console stages origin, name, the provider with its version, and the service and delivery
  * profiles as exact {id, version} refs. Configuration and direction are derived by the kind (the
- * same derive/3 the preview shows), so they're never staged.
+ * same derive/3 the preview shows), so they're never staged, except the Listener, which Cadence
+ * owns (#202): `configuration.listener` on create, its path on edit (changes.md).
  */
 
 export type ProviderForm = Readonly<{
@@ -13,6 +15,7 @@ export type ProviderForm = Readonly<{
   providerId: string;
   serviceId: string;
   deliveryId: string;
+  listener: ListenerChoice;
 }>;
 
 type Doc = Readonly<Record<string, unknown>>;
@@ -34,6 +37,7 @@ export function formFromDocument(doc: Doc): ProviderForm {
     providerId: text(doc, "mission_provider_id"),
     serviceId: refId(doc, "service_profile_ref"),
     deliveryId: refId(doc, "delivery_profile_ref"),
+    listener: storedListener(doc),
   };
 }
 
@@ -68,9 +72,25 @@ export function providerOp(
     service_profile_ref: { id: service.id, version: service.version },
     delivery_profile_ref: { id: delivery.id, version: delivery.version },
   };
-  if (entityId === null) return { kind: "transport", action: "create", document };
+  const listener = effectiveListener(form.listener, options.preview?.listener_eligible === true);
+  if (entityId === null) {
+    // Own is the default: a new transport carries the key only when it shares (api).
+    const created =
+      listener === "shared" ? { ...document, configuration: { listener: "shared" } } : document;
+    return { kind: "transport", action: "create", document: created };
+  }
   const changes = Object.entries(document)
     .filter(([path, value]) => JSON.stringify(stored[path]) !== JSON.stringify(value))
     .map(([path, value]) => ({ path, value }));
-  return { kind: "transport", action: "update", entity_id: entityId, changes };
+  // Own over a missing key is no change; a stored Shared that can't share goes back to Own.
+  const listenerChange =
+    listener === storedListener(stored)
+      ? []
+      : [{ path: "configuration.listener", value: listener }];
+  return {
+    kind: "transport",
+    action: "update",
+    entity_id: entityId,
+    changes: [...changes, ...listenerChange],
+  };
 }
