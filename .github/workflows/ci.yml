@@ -497,14 +497,6 @@ jobs:
       - name: Tune Postgres for throwaway test data
         run: scripts/ci/tune_postgres.sh
       - uses: ./.github/actions/setup-cadence
-      - name: Restore npm cache (LiveView assets)
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.npm
-          key: npm-v1-${{ runner.os }}-${{ hashFiles('apps/cadence_web/package-lock.json') }}
-          restore-keys: npm-v1-${{ runner.os }}-
-      - run: npm ci --prefer-offline --no-audit --no-fund
-        working-directory: apps/cadence_web
       - name: Download the browser assets (built once by browser-assets)
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -616,14 +608,6 @@ jobs:
       - name: Tune Postgres for throwaway test data
         run: scripts/ci/tune_postgres.sh
       - uses: ./.github/actions/setup-cadence
-      - name: Restore npm cache (LiveView assets)
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.npm
-          key: npm-v1-${{ runner.os }}-${{ hashFiles('apps/cadence_web/package-lock.json') }}
-          restore-keys: npm-v1-${{ runner.os }}-
-      - run: npm ci --prefer-offline --no-audit --no-fund
-        working-directory: apps/cadence_web
       - name: Download the browser assets (with the built console)
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
