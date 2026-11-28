@@ -1486,8 +1486,10 @@ section refuses), `409 version_conflict` (with `details.expected_version`, the s
 version; also when another save lands between the read and the write), `409
 settings_enforced_by_organization`, `404 settings_section_not_found`, `403 forbidden`, and
 `422 settings_write_unconfirmed` / `422 settings_unavailable` when the section's owner fails or
-can't be read (retry). Edit needs `settings.edit` (any mission operator
-today, from the enforcing check).
+can't be read (retry). Edit needs `settings.edit`, derived from the enforcing check
+(`:manage_settings`, #1159): a mission operator for a mission's settings, an **organization admin**
+for the organization's (`GET /organizations/:id/settings` sends `permissions: []` to a member, whose
+`PUT` is `403 forbidden`). Reading is any active member's.
 
 The approval setting adds two 403s (#233; ux U96 words, by the level saved). A refused change
 writes nothing:

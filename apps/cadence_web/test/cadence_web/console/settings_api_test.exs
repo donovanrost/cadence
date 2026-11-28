@@ -203,4 +203,34 @@ defmodule CadenceWeb.Console.SettingsAPITest do
 
     assert json_response(put_json(c.admin, c.org_base <> "/no.such", %{"values" => %{}}), 404)
   end
+
+  describe "who may write settings (#1159)" do
+    test "the organization's settings are an organization admin's to write, a member can only read",
+         c do
+      assert read(c.admin, c.org_base)["permissions"] == ["settings.edit"]
+      assert read(c.member, c.org_base)["permissions"] == []
+
+      body = %{"values" => %{"profile_framing_generations" => false}, "expected_version" => 0}
+
+      assert put_json(c.member, c.org_base <> "/cadence.configuration", body)
+             |> json_response(403)
+
+      assert %{"state" => "active"} =
+               put_json(c.admin, c.org_base <> "/cadence.configuration", body)
+               |> json_response(201)
+               |> Map.fetch!("data")
+    end
+
+    test "a mission's settings stay a mission operator's: a member reads, is advertised and writes",
+         c do
+      assert read(c.member, c.mission_base)["permissions"] == ["settings.edit"]
+
+      body = %{"values" => %{"profile_framing_generations" => false}, "expected_version" => 0}
+
+      assert %{"state" => "active"} =
+               put_json(c.member, c.mission_base <> "/cadence.configuration", body)
+               |> json_response(201)
+               |> Map.fetch!("data")
+    end
+  end
 end
