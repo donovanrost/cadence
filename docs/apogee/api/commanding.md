@@ -363,7 +363,7 @@ Body: the draft plus `preflight_digest` (from the preflight the operator saw) an
     `unnamed=true` keeps the targets with no name (nil or empty): the ones the console's GO check
     counts, so it can list them; `targets_page.unnamed` on show is that count for the whole group,
     whatever the page (#1064). `needs_you` and `unnamed` are strictly `true` or `false`, else 422
-    `invalid_params`. Filters combine. `meta.total` counts the filtered targets.
+    `invalid_params`; `false` (like leaving it out) means don't filter, not "only the named". Filters combine. `meta.total` counts the filtered targets.
   - `GET /command-groups/:id/events?limit=&cursor=&kind=`: a page of `events[]`, chronological, the
     latest first; the cursor reads back to older ones. `limit` 1..200 (default 50). `kind` is a comma
     list of event kinds (the vocabulary under Timeline events); `meta.total` and the cursor count
