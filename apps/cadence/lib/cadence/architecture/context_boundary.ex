@@ -429,7 +429,14 @@ defmodule Cadence.Architecture.ContextBoundary do
                                 {"lib/cadence/control/providers.ex",
                                  "lib/cadence/control/contacts/provider_grants.ex"},
                                 {"lib/cadence/governance.ex",
-                                 "lib/cadence/management/comms/source_endpoint_references.ex"}
+                                 "lib/cadence/management/comms/source_endpoint_references.ex"},
+                                # E2 (#546): a GO records, and an unattended release compares,
+                                # which withdrawn model approvals its craft ran on, through the
+                                # composition context's one read of them.
+                                {"lib/cadence/commanding.ex",
+                                 "lib/cadence/control/withdrawn_pins.ex"},
+                                {"lib/cadence/control/commanding/withdrawn_at_go.ex",
+                                 "lib/cadence/control/withdrawn_pins.ex"}
                               ])
 
   @type context ::

@@ -67,6 +67,25 @@ defmodule Cadence.Control.WithdrawnPins do
     end
   end
 
+  @doc """
+  The basis of commanding's `model_approval_withdrawn` HOLD over `pins` (this module's
+  `for_spacecraft/3` answer for the held craft): a hash of each craft with its own decision's
+  `hold_basis`. The preflight shows it, and a GO or a submit that carries an acknowledgement
+  recomputes it under its lock, so an acknowledgement covers exactly those craft on exactly those
+  decisions (E2c, #546).
+  """
+  @spec basis(%{binary() => pin()}) :: binary()
+  def basis(pins) do
+    pins
+    |> Enum.map(fn {spacecraft_id, pin} -> {spacecraft_id, pin.hold_basis} end)
+    |> Enum.sort()
+    |> then(&{:model_approval_withdrawn, &1})
+    |> :erlang.term_to_binary()
+    |> then(&:crypto.hash(:sha256, &1))
+    |> Base.encode16(case: :lower)
+    |> binary_part(0, 32)
+  end
+
   @doc "Every withdrawn revision any craft of the mission runs, with its craft: `%{revision_id => [spacecraft_id]}`."
   @spec affected(binary(), binary()) :: %{binary() => [binary()]}
   def affected(organization_id, mission_id) do
