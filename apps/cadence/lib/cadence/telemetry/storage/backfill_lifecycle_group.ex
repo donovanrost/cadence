@@ -1,10 +1,9 @@
 defmodule Cadence.Telemetry.Storage.BackfillLifecycleGroup do
   @moduledoc """
-  Shared lifecycle rules for grouped historical telemetry workflow requests.
-
-  Dashboard actions and inspectors both need to answer which request-group items
-  are still effective after correction workflows. This module keeps those rules
-  out of presentation code.
+  Lifecycle rules for grouped historical telemetry workflow requests, as the data-link
+  resolver's inspector reads them: which request-group items are still effective after
+  correction workflows, and the group's summary. This module keeps those rules out of
+  presentation code.
   """
 
   alias Cadence.Telemetry.Storage.BackfillLifecycleEvent
@@ -45,8 +44,6 @@ defmodule Cadence.Telemetry.Storage.BackfillLifecycleGroup do
           failed_items: binary() | nil,
           failed_item_events: binary() | nil
         }
-
-  @type transition_error :: {:no_eligible_items, term()}
 
   @spec summary([BackfillLifecycleEvent.t()], [BackfillLifecycleEvent.t()], keyword()) ::
           summary()
@@ -124,58 +121,6 @@ defmodule Cadence.Telemetry.Storage.BackfillLifecycleGroup do
       failed_items: failed_items(active_failed_events),
       failed_item_events: failed_item_events(active_failed_events)
     }
-  end
-
-  @spec transition_candidates([BackfillLifecycleEvent.t()], term()) ::
-          {:ok, [BackfillLifecycleEvent.t()]} | {:error, transition_error()}
-  def transition_candidates(events, stage) when is_list(events) do
-    case stage_candidates(events, stage) do
-      [_event | _events] = candidates -> {:ok, candidates}
-      [] -> {:error, {:no_eligible_items, stage}}
-    end
-  end
-
-  @spec transition_sources([BackfillLifecycleEvent.t()], term()) ::
-          {:ok, [BackfillLifecycleEvent.t()]} | {:error, transition_error()}
-  def transition_sources(events, stage) when is_list(events) do
-    case stage_sources(events, stage) do
-      [_event | _events] = sources -> {:ok, sources}
-      [] -> {:error, {:no_eligible_items, stage}}
-    end
-  end
-
-  @spec stage_candidates([BackfillLifecycleEvent.t()], term()) :: [BackfillLifecycleEvent.t()]
-  def stage_candidates(events, stage) when is_list(events) do
-    requested_events = effective_requested_events(events)
-    effective_events = effective_events_for_requested(events, requested_events)
-    latest_stage_by_item = latest_stage_by_item(effective_events)
-
-    requested_events
-    |> Enum.filter(fn requested_event ->
-      item_key = item_key(requested_event)
-      latest_stage = Map.get(latest_stage_by_item, item_key)
-      stage_eligible?(stage, latest_stage)
-    end)
-    |> Enum.sort_by(&event_sort_key/1)
-  end
-
-  @spec stage_sources([BackfillLifecycleEvent.t()], term()) :: [BackfillLifecycleEvent.t()]
-  def stage_sources(events, stage) when is_list(events) do
-    requested_events = effective_requested_events(events)
-    effective_events = effective_events_for_requested(events, requested_events)
-    latest_stage_by_item = latest_stage_by_item(effective_events)
-    latest_event_by_item = latest_event_by_item(effective_events)
-
-    requested_events
-    |> Enum.filter(fn requested_event ->
-      item_key = item_key(requested_event)
-      latest_stage = Map.get(latest_stage_by_item, item_key)
-      stage_eligible?(stage, latest_stage)
-    end)
-    |> Enum.map(fn requested_event ->
-      Map.fetch!(latest_event_by_item, item_key(requested_event))
-    end)
-    |> Enum.sort_by(&event_sort_key/1)
   end
 
   @spec action_eligibility([BackfillLifecycleEvent.t()]) :: action_eligibility()

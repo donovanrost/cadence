@@ -193,12 +193,12 @@ defmodule Cadence.Applications.ProviderRegistryTest do
       "telemetry_decom" => 2,
       "derived_telemetry" => 1,
       "limits" => 2,
-      "ops_console" => 17,
+      "ops_console" => 15,
       "organization_admin" => 1
     }
 
-    assert length(SurfaceProviderRegistry.contributions()) == 48
-    assert map_size(providers) == 48
+    assert length(SurfaceProviderRegistry.contributions()) == 46
+    assert map_size(providers) == 46
 
     assert providers
            |> Map.keys()

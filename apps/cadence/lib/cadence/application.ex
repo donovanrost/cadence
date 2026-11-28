@@ -14,7 +14,6 @@ defmodule Cadence.Application do
   alias Cadence.Management.DataSources
   alias Cadence.Platform.Drain
   alias Cadence.Platform.RootComposition
-  alias Cadence.Telemetry.DataManagement
 
   @impl true
   def start(_type, _args) do
@@ -46,7 +45,7 @@ defmodule Cadence.Application do
         {Cadence.Control.Supervisor, control_supervisor_opts},
         {Cadence.Projections.Supervisor, root_composition: root_composition}
       ] ++
-        background_job_children(root_composition) ++
+        background_job_children() ++
         retention_children() ++
         questdb_retention_children() ++
         pass_prediction_children() ++
@@ -154,13 +153,12 @@ defmodule Cadence.Application do
       else: []
   end
 
-  defp background_job_children(%RootComposition{} = root_composition) do
+  defp background_job_children do
     if Application.get_env(:cadence, :start_background_jobs, true) do
       job_runner =
         :cadence
         |> Application.get_env(:job_handlers, %{})
         |> capture_data_source_job_policies()
-        |> capture_telemetry_data_management_policy(root_composition.data_management_policy)
         |> JobRunner.new()
 
       background_job_opts =
@@ -197,20 +195,6 @@ defmodule Cadence.Application do
           |> module.policy()
 
         Map.put(handlers, job_type, module.handler(policy))
-
-      _custom_or_missing_handler ->
-        handlers
-    end
-  end
-
-  defp capture_telemetry_data_management_policy(handlers, policy) do
-    case Map.get(handlers, :telemetry_historical_data_workflow) do
-      {DataManagement, :execute_enqueued_historical_data_workflow} ->
-        Map.put(
-          handlers,
-          :telemetry_historical_data_workflow,
-          DataManagement.handler(policy)
-        )
 
       _custom_or_missing_handler ->
         handlers

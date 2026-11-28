@@ -55,33 +55,7 @@ defmodule Cadence.Telemetry.Storage.BackfillLifecycleGroupTest do
            }
   end
 
-  test "returns explicit transition candidates or domain rejection" do
-    events = [
-      event("request-1", "run-1", "requested", 1),
-      event("request-2", "run-2", "requested", 2)
-    ]
-
-    assert {:ok, candidates} = BackfillLifecycleGroup.transition_candidates(events, "approved")
-    assert Enum.map(candidates, & &1.backfill_run_id) == ["run-1", "run-2"]
-
-    assert BackfillLifecycleGroup.transition_candidates(events, "started") ==
-             {:error, {:no_eligible_items, "started"}}
-
-    approved_events =
-      events ++
-        [
-          event("approved-1", "run-1", "approved", 1),
-          event("approved-2", "run-2", "approved", 2)
-        ]
-
-    assert BackfillLifecycleGroup.transition_candidates(approved_events, "approved") ==
-             {:error, {:no_eligible_items, "approved"}}
-
-    assert BackfillLifecycleGroup.transition_candidates(events, nil) ==
-             {:error, {:no_eligible_items, nil}}
-  end
-
-  test "corrected request replaces the original item for group stage candidates" do
+  test "a corrected request replaces the original item among effective events" do
     events = [
       event("request-1", "run-1", "requested", 1),
       event("request-2", "run-2", "requested", 2),
@@ -94,48 +68,13 @@ defmodule Cadence.Telemetry.Storage.BackfillLifecycleGroupTest do
     ]
 
     assert events
-           |> BackfillLifecycleGroup.stage_candidates("approved")
+           |> BackfillLifecycleGroup.effective_requested_events()
            |> Enum.map(& &1.backfill_run_id) == ["run-1", "run-2", "run-3-corrected"]
 
     refute Enum.any?(
              BackfillLifecycleGroup.effective_events(events),
              &(&1.backfill_run_id == "run-3")
            )
-  end
-
-  test "transition sources use the latest eligible event for corrected items" do
-    events = [
-      event("request-1", "run-1", "requested", 1),
-      event("approved-1", "run-1", "approved", 1),
-      event("request-2", "run-2", "requested", 2),
-      event("failed-2", "run-2", "failed", 2),
-      event("correction-request-2", "run-2-corrected", "requested", 2,
-        corrects_event_id: "failed-2",
-        corrects_run_id: "run-2"
-      ),
-      event("correction-approved-2", "run-2-corrected", "approved", 2,
-        corrects_event_id: "failed-2",
-        corrects_run_id: "run-2"
-      )
-    ]
-
-    assert events
-           |> BackfillLifecycleGroup.stage_candidates("started")
-           |> Enum.map(& &1.backfill_lifecycle_event_id) == ["request-1", "correction-request-2"]
-
-    assert events
-           |> BackfillLifecycleGroup.stage_sources("started")
-           |> Enum.map(& &1.backfill_lifecycle_event_id) == [
-             "approved-1",
-             "correction-approved-2"
-           ]
-
-    assert {:ok, sources} = BackfillLifecycleGroup.transition_sources(events, "started")
-
-    assert Enum.map(sources, & &1.backfill_lifecycle_event_id) == [
-             "approved-1",
-             "correction-approved-2"
-           ]
   end
 
   test "summarizes active, resolved, retryable, and correction failure state" do

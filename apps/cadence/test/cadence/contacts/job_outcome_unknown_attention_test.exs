@@ -44,12 +44,9 @@ defmodule Cadence.Contacts.JobOutcomeUnknownAttentionTest do
   end
 
   test "a job's carried facts name it", c do
-    cut_off!(c.mission, :telemetry_historical_data_workflow, %{
-      "workflow" => "backfill",
-      "attrs" => %{
-        "receipt_from" => "2026-11-13T02:00:00Z",
-        "receipt_to" => "2026-11-13T04:00:00Z"
-      }
+    cut_off!(c.mission, :replay_telemetry_scope, %{
+      "span_from" => "2026-11-13T02:00:00Z",
+      "span_to" => "2026-11-13T04:00:00Z"
     })
 
     cut_off!(c.mission, :telemetry_limit_evaluation, %{
@@ -58,7 +55,7 @@ defmodule Cadence.Contacts.JobOutcomeUnknownAttentionTest do
     })
 
     nouns = c.org |> JobOutcomeUnknownAttention.items(c.mission) |> Enum.map(& &1.words.noun)
-    assert "Backfill 11-13 02:00Z–04:00Z" in nouns
+    assert "Replay 11-13 02:00Z–04:00Z" in nouns
     assert "Limit check of 3 definitions" in nouns
   end
 
@@ -167,21 +164,15 @@ defmodule Cadence.Contacts.JobOutcomeUnknownAttentionTest do
     assert %{noun: "Limit check of 3 definitions"} =
              JobOutcomeWords.words(:telemetry_limit_evaluation, %{definition_count: 3})
 
-    assert %{noun: "Backfill 11-13 02:00Z–04:00Z"} =
-             JobOutcomeWords.words(:telemetry_historical_data_workflow, %{
-               workflow: "backfill",
-               span_from: "2026-11-13T02:00:00Z",
-               span_to: "2026-11-13T04:00:00Z"
-             })
-
     assert %{noun: "Replay 11-13 23:00Z–11-14 01:00Z"} =
              JobOutcomeWords.words(:replay_telemetry_scope, %{
                span_from: "2026-11-13T23:00:00Z",
                span_to: "2026-11-14T01:00:00Z"
              })
 
-    assert %{noun: "Telemetry import"} =
-             JobOutcomeWords.words(:telemetry_historical_data_workflow, %{workflow: "import"})
+    # #702 retired historical workflows: a leftover job of that type reads as any Cadence job.
+    assert %{noun: "A Cadence job"} =
+             JobOutcomeWords.words(:telemetry_historical_data_workflow, %{})
 
     assert %{
              noun: "A Cadence job",

@@ -95,8 +95,9 @@ From a read-side survey of every QuestDB read path (file:line evidence in the re
 - **External telemetry API** (`GET /api/organizations/:org/missions/:mission/telemetry/points/:id/
   {latest,history}`, `TelemetryJSON.telemetry_sample/1`) returns the whole map as
   `data[].provenance`. No frontend calls these routes; external clients might.
-- **Historical backfill / import and late-data accept** read samples from QuestDB and write them
-  back (`DataManagement.HistoricalSourceSamples` → `Storage.persist_samples`). The envelope copies
+- **Historical backfill / import and late-data accept** (deleted in #702; this paragraph is
+  history) read samples from QuestDB and wrote them back (`DataManagement.HistoricalSourceSamples`
+  → `Storage.persist_samples`). The envelope copies
   `sample.provenance` verbatim (`L/telemetry/storage/observation_envelope.ex:117`), so the new row
   gets all ten keys **plus the reader's `"storage"` sub-map** (a growth bug of its own: fix it in
   any option). `to_sample` then reads six keys to fill the struct handed to the current-value store.
@@ -366,8 +367,8 @@ provenance contract in the mission model), qa (the slot for D).
   would re-persist that reduced map. So if a rollback ever happens: **no Data operations writes**
   (legacy `/ops/data-operations` requests, backfill, late-data accept) until rolled forward, and qa
   checks that no such job is queued or running before the rollback restart. Why roll forward: dev
-  only, no production, the rows keep their provenance in the columns, and the one harmful path is
-  the parked legacy page.
+  only, no production, the rows keep their provenance in the columns, and the one harmful path was
+  the parked legacy page (deleted in #702, with its write-back).
 - **For L16** (domain's assessment; director's wording, corrected 11-17): any write-back goes
   through B's writer, which promotes from the rebuilt provenance map; nothing writes
   `provenance_json` directly or bypasses that writer. The round-trip contract test (read, write

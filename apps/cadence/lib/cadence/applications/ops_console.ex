@@ -109,21 +109,6 @@ defmodule Cadence.Applications.OpsConsole do
       actions: ["apply_filters", "apply_question"]
     },
     %{
-      id: "data_operations",
-      purpose: :operations,
-      label: "Data Operations",
-      path: "/missions/:mission_id/ops/data-operations",
-      actions: []
-    },
-    %{
-      id: "data_operations_manage",
-      purpose: :operations,
-      label: "Manage Data Operations",
-      path: "/missions/:mission_id/ops/data-operations/manage",
-      query_params: ["group"],
-      actions: []
-    },
-    %{
       id: "data_sources",
       purpose: :configuration,
       label: "Data Sources",
@@ -201,8 +186,6 @@ defmodule Cadence.Applications.OpsConsole do
     "fleet_planning_run" => [],
     "commands" => [],
     "telemetry_explore" => [],
-    "data_operations" => [],
-    "data_operations_manage" => [],
     "data_sources" => [],
     "data_source_registration" => [],
     "data_source_settings" => [],
@@ -230,11 +213,6 @@ defmodule Cadence.Applications.OpsConsole do
         "requeue-deployment-run"
       ],
       navigation: ["open_data_sources", "open_data_source_settings"],
-      phoenix_events: []
-    },
-    "data_operations_manage" => %{
-      host_actions: [],
-      navigation: ["open_data_operations"],
       phoenix_events: []
     }
   }

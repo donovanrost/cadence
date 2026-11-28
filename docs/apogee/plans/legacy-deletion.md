@@ -527,7 +527,7 @@ Both need a console target (`setup.changes`). **Unblocks:** api lands `plans/act
 `OpsDataSourcesPage` (HPL:98-142, :1322).
 
 **Delete:** `ops_data_sources_page.ex`, `applications/ops_console/actions/source_inventory_actions.ex` and
-`reads/application_surfaces/data_operations/sources.ex`. Its sibling `historical_workflows.ex` is L16 and stays.
+`reads/application_surfaces/data_operations/sources.ex`. Its sibling `historical_workflows.ex` was L16 (deleted in #702).
 
 **Keep:**
 - `OpsConsole.Actions.DataSources`: the console writes controller wraps it (`data_source_writes_controller.ex:17`).
@@ -669,7 +669,7 @@ admits a section only if its metadata equals the server definition, so a copy ch
 | 505-543 | `…/ops/commands[…]` (workspace, new, stages, requests, history, queue) | OpsCommand*Page | `ops.commands[.new\|.request]` | covered (stages not needed, §11c) |
 | 147, 149 | `…/ops/contact-workspace[/records/:id]` | ContactWorkspaceController (HTML) | `ops.contacts`, `ops.contact` | covered |
 | 547 | `…/ops/explore` | OpsExplorationPage | `ops.telemetry` | **parked (L20)** |
-| 445, 578 | `…/ops/data-operations[/manage]` | OpsHistoricalWorkflowsPage | none | **parked (L16)** |
+| 445, 578 | `…/ops/data-operations[/manage]` | OpsHistoricalWorkflowsPage | none | **deleted (L16, #702: dropped, no console rebuild)** |
 
 **§11c (B) built (fe-setup/legacy-11c-b, on the combined L10-L13 + (A) branch).** api's B1-B11 redirects
 (LegacyMissionSetupRedirectController) take over rows 245/249 (mission settings), 265 (mission home), 267/271
