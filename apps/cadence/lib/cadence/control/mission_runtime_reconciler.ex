@@ -357,7 +357,8 @@ defmodule Cadence.Control.MissionRuntimeReconciler do
                activation.mission_id,
                Enum.uniq(live),
                activation.activation_id,
-               applied_at
+               applied_at,
+               activation.generation
              ) do
           {:ok, _counts} ->
             :ok
