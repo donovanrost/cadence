@@ -68,12 +68,16 @@ defmodule Cadence.MonitoringPlanFixtures do
   @doc """
   One latest alarm state of the runtime (`semantic_latest_alarm_states`), as a transition writes it:
   `parameter` in `state` (`"warning"`, `"critical"`, `"normal"`, ...) on `spacecraft_id`, entered
-  `seconds_ago` seconds ago (default 60).
+  `seconds_ago` seconds ago (default 60) or at `at:`; the spacecraft's fleet summary is refreshed.
   """
   @spec alarm_state!(binary(), binary(), binary(), binary(), binary(), keyword()) :: :ok
   def alarm_state!(organization_id, mission_id, spacecraft_id, parameter, state, opts \\ []) do
     now = DateTime.utc_now()
-    at = DateTime.add(now, -Keyword.get(opts, :seconds_ago, 60), :second)
+
+    at =
+      Keyword.get_lazy(opts, :at, fn ->
+        DateTime.add(now, -Keyword.get(opts, :seconds_ago, 60), :second)
+      end)
 
     {1, _} =
       Repo.insert_all(LatestAlarmStateRow, [
@@ -95,7 +99,10 @@ defmodule Cadence.MonitoringPlanFixtures do
         }
       ])
 
-    :ok
+    :ok =
+      Cadence.SemanticObservations.FleetAlarms.refresh(Repo, organization_id, mission_id, [
+        spacecraft_id
+      ])
   end
 
   defp imported_layer(organization_id, mission_id, catalog) do

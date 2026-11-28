@@ -1,6 +1,7 @@
 defmodule CadenceWeb.Console.PointConditionAPITest do
   use CadenceWeb.ConnCase, async: false
 
+  alias Cadence.MonitoringPlanFixtures
   alias Cadence.Repo
   alias Cadence.SemanticObservations.LatestAlarmStateRow
   alias CadenceWeb.MissionReadModelFixtures
@@ -25,30 +26,58 @@ defmodule CadenceWeb.Console.PointConditionAPITest do
     )
   end
 
-  test "lists a spacecraft's points from the ground-limit store, with the wire fields", c do
+  test "lists a spacecraft's points from the alarm states and the plan, with the wire fields",
+       c do
+    # The mission's plan monitors both points (the seeded packet's catalog points carry no
+    # parameter id, so a point is its own parameter); the runtime has HK.counter in a warning.
+    MonitoringPlanFixtures.activate!(
+      c.org.organization_id,
+      c.mission.mission_id,
+      {"read-models", 1},
+      for(
+        {name, point} <- [{"limit-counter", "HK.counter"}, {"limit-voltage", "HK.voltage"}],
+        do:
+          {name, "/parameters/" <> String.replace(point, ".", "-"),
+           above: 10, parameter_id: point}
+      )
+    )
+
+    MonitoringPlanFixtures.alarm_state!(
+      c.org.organization_id,
+      c.mission.mission_id,
+      "spacecraft-001",
+      "HK.counter",
+      "warning",
+      at: ~U[2023-11-15 23:15:00.000000Z]
+    )
+
     body = c |> get_json("") |> json_response(200)
 
-    # The fixture's two evaluated points: one in caution, one nominal, both last sampled in 2023.
+    # One in caution (the runtime's state), one the plan monitors that has no state yet; both last
+    # sampled in 2023.
     assert [row, nominal] = body["data"]
 
     assert %{
              "point_id" => "HK.counter",
-             "source" => "ground_limit",
+             "source" => "catalog_monitoring",
              "condition" => "caution",
-             "raw_limit_state" => "yellow_high",
+             "raw_limit_state" => nil,
              "evaluated" => true,
-             "policy_id" => nil,
-             "value" => 30,
+             "policy_id" => "policy-HK.counter",
+             "value" => nil,
              "freshness" => "stale",
              "last_sample_at" => "2023-11-15T23:15:00.000000Z",
              "entered_at" => "2023-11-15T23:15:00.000000Z",
-             "entered_at_is_lower_bound" => false
+             "entered_at_is_lower_bound" => false,
+             "evaluated_at" => nil
            } = row
 
-    assert is_binary(row["evaluated_at"])
-
-    assert %{"point_id" => "HK.voltage", "condition" => "nominal", "freshness" => "stale"} =
-             nominal
+    assert %{
+             "point_id" => "HK.voltage",
+             "condition" => "nominal",
+             "evaluated" => false,
+             "freshness" => "stale"
+           } = nominal
 
     assert %{
              "counts" => %{"caution" => 1, "critical" => 0, "stale" => 2, "total" => 2},
@@ -60,7 +89,7 @@ defmodule CadenceWeb.Console.PointConditionAPITest do
     assert body["meta"]["next_cursor"] == nil
   end
 
-  test "a live alarm shows with no ground job, labelled by its source", c do
+  test "a live alarm shows, labelled by its source", c do
     %{
       organization_id: c.org.organization_id,
       mission_id: c.mission.mission_id,
@@ -86,9 +115,7 @@ defmodule CadenceWeb.Console.PointConditionAPITest do
                "policy_id" => "pol-1",
                "evaluated_at" => nil,
                "entered_at" => "2026-11-27T12:00:00.000000Z"
-             },
-             %{"point_id" => "HK.counter", "source" => "ground_limit"},
-             %{"point_id" => "HK.voltage", "source" => "ground_limit"}
+             }
            ] = rows
   end
 
