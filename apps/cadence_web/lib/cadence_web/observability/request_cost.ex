@@ -35,7 +35,7 @@ defmodule CadenceWeb.Observability.RequestCost do
   end
 
   def measure(conn, mode, dispatch) do
-    counters = :atomics.new(2, signed: false)
+    counters = :atomics.new(3, signed: false)
     previous = Process.put(@key, counters)
     started_at = System.monotonic_time()
 
@@ -44,6 +44,7 @@ defmodule CadenceWeb.Observability.RequestCost do
         cost = %{
           queries: :atomics.get(counters, 1),
           db_ms: milliseconds(:atomics.get(counters, 2)),
+          queue_ms: milliseconds(:atomics.get(counters, 3)),
           wall_ms: milliseconds(System.monotonic_time() - started_at)
         }
 
@@ -62,12 +63,11 @@ defmodule CadenceWeb.Observability.RequestCost do
     counters = Process.get(@key) || caller_counters(Process.get(:"$callers", []))
 
     if counters do
-      db_time =
-        (measurements[:query_time] || 0) + (measurements[:decode_time] || 0) +
-          (measurements[:queue_time] || 0)
+      db_time = (measurements[:query_time] || 0) + (measurements[:decode_time] || 0)
 
       :atomics.add(counters, 1, 1)
       :atomics.add(counters, 2, db_time)
+      :atomics.add(counters, 3, measurements[:queue_time] || 0)
     end
   end
 
@@ -91,7 +91,8 @@ defmodule CadenceWeb.Observability.RequestCost do
     put_resp_header(
       conn,
       "x-cadence-db",
-      "queries=#{cost.queries}; db_ms=#{cost.db_ms}; wall_ms=#{cost.wall_ms}"
+      "queries=#{cost.queries}; db_ms=#{cost.db_ms}; " <>
+        "queue_ms=#{cost.queue_ms}; wall_ms=#{cost.wall_ms}"
     )
   end
 
