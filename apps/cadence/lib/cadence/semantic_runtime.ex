@@ -246,7 +246,9 @@ defmodule Cadence.SemanticRuntime do
          {:ok, output_values, next_state} when is_map(output_values) and is_map(next_state) <-
            module.evaluate(bindings, current_state, %{
              algorithm_id: algorithm.algorithm_id,
-             at: at
+             at: at,
+             input_parameter_ids: algorithm.input_parameter_ids,
+             inputs_in_order: Enum.map(algorithm.input_parameter_ids, &Map.fetch!(bindings, &1))
            }),
          {:ok, outputs} <- match_registered_outputs(algorithm.outputs, output_values) do
       {:ok, outputs, next_state}
