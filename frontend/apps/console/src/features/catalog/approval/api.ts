@@ -1,12 +1,28 @@
 import type { MissionId } from "@/api/index.ts";
 import { actor, decoders as d, request, type ApiResult, type Decoded } from "@/api/index.ts";
 import { compositionActor, compositionKey } from "../composition.ts";
+import { groupStates } from "@/features/commands/groups/api.ts";
 
 /**
  * ux U65 · catalog revision approval (domain's model approval gate, DECISIONS #92 a; api's wire
  * 11-15). A catalog revision's compiled mission model must be approved, against a comparison
  * report, before a change set can move spacecraft onto it.
  */
+
+/** E2c (#1054): one GO'd group still waiting to release on craft that run a withdrawn revision. */
+export const affectedGroupReader = d.object({
+  group_id: d.token,
+  // free-text: the request's title as its author wrote it.
+  name: d.string,
+  state: d.known(groupStates),
+  go_at: d.timestamp,
+  spacecraft: d.array(
+    d.object({ id: d.token, name: d.nullable(d.string), scid: d.nullable(d.integer) }),
+    5,
+  ),
+  spacecraft_count: d.integer,
+});
+export type AffectedGroup = Decoded<typeof affectedGroupReader>;
 
 /** The declaration kinds a report groups its changes by (ux's section words). */
 export const declarationKinds = [
@@ -100,6 +116,14 @@ export const modelRevisionReader = d.object({
   viewer_can_decide: d.boolean,
   /** E2 (#546): shows `Withdraw approval…` on an approved revision. Optional until E2 ships. */
   viewer_can_withdraw: d.optional(d.boolean),
+  /**
+   * E2c (#546, #1054): on a withdrawn revision (and the withdraw answer), the GO'd command groups
+   * still waiting to release on craft that run it, newest GO first, at most 50; null when the
+   * revision isn't withdrawn. Each names at most 5 of its affected craft, with their count.
+   */
+  affected_groups: d.nullable(d.array(affectedGroupReader, 50)),
+  /** How many groups there are in all (the list stops at 50); null when not withdrawn. */
+  affected_groups_count: d.nullable(d.integer),
   viewer_is_importer: d.boolean,
   cannot_decide_because: d.nullable(
     d.knownText([

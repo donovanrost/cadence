@@ -70,20 +70,12 @@ defmodule CadenceWeb.Console.PassController do
 
   defp decorate(conn, result) do
     items =
-      case Attention.load(conn.assigns.current_scope, mission_id(conn)) do
-        # A pass keeps its provider changes after it ends (Now drops them; domain fb09ac755).
-        {:ok, %{items: items}} ->
-          Enum.reject(items, &(&1.source == "provider_change")) ++
-            ProviderChangeAttention.pass_items(org_id(conn), mission_id(conn))
-
-        _forbidden ->
-          []
+      case Attention.for_passes(conn.assigns.current_scope, mission_id(conn), result.passes) do
+        {:ok, items} -> items
+        _forbidden -> []
       end
 
-    # A pass row carries every open item of its booking (resolution, failed release, provider
-    # change, a contact that didn't start, ingest pressure #83, archive quarantine #88, …): items
-    # with no booking never match a row. A blocked uplink shows through uplink_readiness instead,
-    # so only that source feeds the readiness map (any other could shadow command_groups_queued).
+    # Blocked uplinks feed the readiness map. Other items appear as the pass's attentions.
     {blocked, resolutions} = Enum.split_with(items, &(&1.source == "uplink_blocked"))
 
     conn
@@ -272,6 +264,10 @@ defmodule CadenceWeb.Console.PassController do
 
   # ux U45: every open item of the pass in Now's order (priority, the soonest due, then a
   # contact that didn't start), each with its priority and due_at; `attention` is the first.
+  defp with_attention(%{passes: passes} = result, _conn, []) do
+    %{result | passes: Enum.map(passes, &Map.merge(&1, %{attention: nil, attentions: []}))}
+  end
+
   defp with_attention(%{passes: passes} = result, conn, items) do
     now = DateTime.utc_now()
     names = AttentionItems.lookups(org_id(conn), mission_id(conn), items)

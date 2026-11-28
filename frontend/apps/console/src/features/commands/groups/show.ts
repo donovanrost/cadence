@@ -14,6 +14,7 @@ import {
   type Unrecognized,
 } from "@/api/index.ts";
 import { groupUplinkReader } from "@/features/contacts/readiness.ts";
+import { groupWithdrawnAfterGoReader, withdrawnAfterGoReader } from "./withdrawn.ts";
 import { catalogRevisionReader, significance } from "../api.ts";
 import { raw, releaseCode, releaseRefusalReader } from "./release.ts";
 import {
@@ -44,6 +45,8 @@ export const endReasons = [
   "catalog_changed",
   // L22 (api, ux U40): released never; the spacecraft was archived after preview.
   "spacecraft_archived",
+  // E2 (#546, #1019): an unattended release refused it; the model's approval was withdrawn after GO.
+  "model_approval_withdrawn_after_go",
   "excluded_at_review",
   "canceled",
   "rejected",
@@ -100,6 +103,8 @@ export const targetReader = d.object({
   stage,
   members: d.array(member, 16),
   last_event_at: d.nullable(d.timestamp),
+  /** E2 (#1042): its craft's model approval was withdrawn after the GO its waiting uplinks had. */
+  withdrawn_after_go: d.nullable(withdrawnAfterGoReader),
   /** Waiting on its contact behind a release whose outcome is unknown: "Needs you" shows it. */
   blocked: d.optional(
     d.nullable(
@@ -283,6 +288,8 @@ const groupShape = {
   aborted_at: d.nullable(d.timestamp),
   // free-text: the operator's own sentence
   abort_reason: d.nullable(d.string),
+  /** E2 (#1042): the targets flagged across the whole group, and the newest decision; null with none. */
+  withdrawn_after_go: groupWithdrawnAfterGoReader,
   progress,
   finished: d.optional(d.boolean),
   uplink: d.optional(d.nullable(groupUplinkReader)),

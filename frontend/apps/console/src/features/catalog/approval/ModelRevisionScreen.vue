@@ -5,6 +5,7 @@ import { useMissionScope } from "@/shell";
 import { ApBreadcrumb, ApKeyValue, ApPageHeader, ApPanel, ApRemote, type ApCrumb } from "@/ui";
 import { fetchCatalogIndex } from "../api.ts";
 import { fetchModelRevision, type ModelRevision } from "./api.ts";
+import AffectedGroupsPanel from "./AffectedGroupsPanel.vue";
 import ApprovalPanel from "./ApprovalPanel.vue";
 import RevisionRollout from "./RevisionRollout.vue";
 import ComposedHeader from "./ComposedHeader.vue";
@@ -118,6 +119,8 @@ const details = (r: ModelRevision) => [
           :model-key="key"
           @changed="page.refetch"
         />
+        <!-- E2c (#546): a withdrawn revision's requests still waiting to go out. -->
+        <AffectedGroupsPanel :revision="value" />
         <!-- U102 "Where": C3 under the Approval panel (or its decided line). -->
         <RevisionRollout :revision="value" />
         <!-- #678: where it came from, and which spacecraft use it (one catalog revision only). -->

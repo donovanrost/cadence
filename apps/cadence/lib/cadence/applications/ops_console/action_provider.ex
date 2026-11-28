@@ -7,9 +7,7 @@ defmodule Cadence.Applications.OpsConsole.ActionProvider do
   alias Cadence.Auth.Scope
 
   alias Cadence.Applications.OpsConsole.Actions.{
-    ContactPlanning,
     DataSources,
-    FleetPlanning,
     TelemetryExplore,
     UiInteractions
   }
@@ -20,8 +18,6 @@ defmodule Cadence.Applications.OpsConsole.ActionProvider do
 
   @cohort_adapters [
     UiInteractions,
-    ContactPlanning,
-    FleetPlanning,
     DataSources,
     TelemetryExplore
   ]
@@ -73,11 +69,6 @@ defmodule Cadence.Applications.OpsConsole.ActionProvider do
   end
 
   @impl true
-  def result(
-        %{"contract_version" => 1, "opportunities" => _, "search" => _, "route" => _} = value
-      ),
-      do: ContactPlanning.result(value)
-
   def result(value) do
     case JSONBoundary.safe(value) do
       {:ok, safe_value} -> safe_value
