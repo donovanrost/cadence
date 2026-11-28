@@ -282,13 +282,40 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Drafts do
       saved: saved,
       application_basis: application_basis,
       external_changes: changed == true,
-      token:
-        ContentHash.term_sha256(
-          {1, mission.organization_id, mission.mission_id, spacecraft.spacecraft_id,
-           row && row.configuration_revision_id, application_basis, spacecraft.scid,
-           spacecraft.spacecraft_type_id, spacecraft.spacecraft_type_version}
-        )
+      token: token(mission, spacecraft, row, application_basis)
     }
+  end
+
+  @doc """
+  The token of a spacecraft's configuration: what a client holds while it edits or reviews, so a
+  change underneath refuses as stale. The one formula `snapshot/2` and `tokens/2` share.
+  """
+  @spec token(map(), map(), struct() | nil, binary()) :: binary()
+  def token(mission, spacecraft, row, application_basis) do
+    ContentHash.term_sha256(
+      {1, mission.organization_id, mission.mission_id, spacecraft.spacecraft_id,
+       row && row.configuration_revision_id, application_basis, spacecraft.scid,
+       spacecraft.spacecraft_type_id, spacecraft.spacecraft_type_version}
+    )
+  end
+
+  @doc """
+  The tokens (`spacecraft_id => token`) of many spacecraft, equal to each `snapshot/2` token, in a
+  fixed number of queries: the application basis is read for all of them at once, and nothing
+  else a snapshot loads (document, profile, telemetry config) is part of a token. `entries` is
+  `[{spacecraft, latest_row_or_nil}]`.
+  """
+  @spec tokens(map(), [{map(), struct() | nil}]) :: %{binary() => binary()}
+  def tokens(_mission, []), do: %{}
+
+  def tokens(mission, entries) do
+    bases =
+      ConfigurationApplications.bases(mission, Enum.map(entries, &elem(&1, 0).spacecraft_id))
+
+    Map.new(entries, fn {spacecraft, row} ->
+      {spacecraft.spacecraft_id,
+       token(mission, spacecraft, row, Map.fetch!(bases, spacecraft.spacecraft_id))}
+    end)
   end
 
   def save(scope, mission_id, spacecraft_id, expected_token, input) do

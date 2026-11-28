@@ -7,7 +7,6 @@ defmodule Cadence.Activations.FleetConfigurationTest do
   alias Cadence.Catalog.SpacecraftConfigurationInput
   alias Cadence.Control.ActivationRequests
   alias Cadence.Control.Activations, as: ControlActivations
-  alias Cadence.Control.SpacecraftConfiguration, as: SpacecraftConfigurationControl
   alias Cadence.Control.SpacecraftModelBindings
   alias Cadence.Governance.ActivationPolicy
   alias Cadence.Management.Activations
@@ -136,6 +135,73 @@ defmodule Cadence.Activations.FleetConfigurationTest do
     assert map_size(active.entries) == 1_000
 
     assert {:error, :nothing_to_review} = Review.saved_tokens(c.scope, c.mission.mission_id)
+  end
+
+  test "tokens/2 equals each snapshot token: saved, unsaved, and one whose application basis moved (#885)",
+       c do
+    second = Fixtures.persist_spacecraft!(c.org, c.mission.mission_id, display_name: "Fleet 2")
+    third = Fixtures.persist_spacecraft!(c.org, c.mission.mission_id, display_name: "Fleet 3")
+    save(c, c.first)
+    save(c, second)
+    # `third` has no saved revision: its token has no revision id.
+
+    entries = [
+      {c.first, Drafts.latest(c.org, c.mission.mission_id, c.first.spacecraft_id)},
+      {second, Drafts.latest(c.org, c.mission.mission_id, second.spacecraft_id)},
+      {third, nil}
+    ]
+
+    tokens = Drafts.tokens(c.mission, entries)
+    assert map_size(tokens) == 3
+
+    for {craft, _row} <- entries do
+      assert tokens[craft.spacecraft_id] == Drafts.snapshot(c.mission, craft).token
+    end
+
+    assert Drafts.tokens(c.mission, []) == %{}
+  end
+
+  # #885: all_saved resolves its tokens in a number of queries that does not grow with the fleet
+  # (the spacecraft rows come in batches of 100, one more query per hundred; nothing is read per
+  # craft). 1,000 craft cost 3 queries per 1,000 more than 100 do, not ~10 per craft.
+  @tag timeout: 600_000
+  test "saved_tokens reads the fleet in a fixed number of queries, not per spacecraft (#885)",
+       c do
+    first_hundred = [
+      c.first
+      | Enum.map(2..100, fn i ->
+          Fixtures.persist_spacecraft!(c.org, c.mission.mission_id, display_name: "Fleet #{i}")
+        end)
+    ]
+
+    for craft <- first_hundred, do: save(c, craft)
+
+    {{:ok, small}, small_queries, _rows} =
+      count_queries(fn -> Review.saved_tokens(c.scope, c.mission.mission_id) end)
+
+    assert map_size(small) == 100
+
+    more =
+      Enum.map(101..1_000, fn i ->
+        Fixtures.persist_spacecraft!(c.org, c.mission.mission_id, display_name: "Fleet #{i}")
+      end)
+
+    for craft <- more, do: save(c, craft)
+
+    {{:ok, large}, large_queries, _rows} =
+      count_queries(fn -> Review.saved_tokens(c.scope, c.mission.mission_id) end)
+
+    assert map_size(large) == 1_000
+    # One more spacecraft-row query per extra hundred (9), and nothing per craft.
+    assert large_queries - small_queries <= 12,
+           "#{small_queries} queries for 100 craft, #{large_queries} for 1,000"
+
+    assert large_queries < 60, "#{large_queries} queries for 1,000 craft"
+    IO.puts("saved_tokens: #{small_queries} queries for 100 craft, #{large_queries} for 1,000")
+    # The same tokens a per-craft snapshot gives, for a sample.
+    for craft <- Enum.take_every(first_hundred, 25) do
+      assert large[craft.spacecraft_id] == Drafts.snapshot(c.mission, craft).token
+    end
   end
 
   @tag timeout: 300_000
