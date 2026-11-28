@@ -9,13 +9,14 @@ defmodule Cadence.Applications.ActionDispatcherProviderIsolationTest do
     HostContext
   }
 
+  alias Cadence.Applications.TelemetryDecomFixtures
   alias Cadence.Auth.Scope
 
   @organization_id "org-action-dispatcher-provider-isolation"
   @mission_id "mission-action-dispatcher-provider-isolation"
 
   setup do
-    persist_mission_scope(@organization_id, @mission_id)
+    spacecraft = TelemetryDecomFixtures.setup_spacecraft!(@organization_id, @mission_id)
 
     scope = %Scope{
       actor_kind: :user,
@@ -24,19 +25,19 @@ defmodule Cadence.Applications.ActionDispatcherProviderIsolationTest do
       organization_membership: %{lifecycle_state: :active}
     }
 
-    host_context = HostContext.mission(@mission_id)
+    host_context = HostContext.spacecraft(@mission_id, spacecraft.spacecraft_id)
 
     assert {:ok, _installation} =
-             ApplicationInstallations.install(scope, host_context, "derived_telemetry")
+             ApplicationInstallations.install(scope, host_context, "telemetry_decom")
 
     %{scope: scope, host_context: host_context}
   end
 
   test "converts provider raises, throws, and exits to the typed action failure", context do
     request = %ActionRequest{
-      application_key: "derived_telemetry",
+      application_key: "telemetry_decom",
       application_version: 1,
-      action_id: "save_definition"
+      action_id: "save_packet_bindings"
     }
 
     providers_by_outcome = [
@@ -52,7 +53,7 @@ defmodule Cadence.Applications.ActionDispatcherProviderIsolationTest do
                 message: "The application could not complete this action."
               }} =
                ActionDispatcher.dispatch(context.scope, context.host_context, request, %{
-                 "derived_telemetry" => provider
+                 "telemetry_decom" => provider
                })
 
       assert Process.alive?(self())
@@ -62,9 +63,9 @@ defmodule Cadence.Applications.ActionDispatcherProviderIsolationTest do
   test "converts configuration reference raises, throws, and exits to the same typed failure",
        context do
     request = %ActionRequest{
-      application_key: "derived_telemetry",
+      application_key: "telemetry_decom",
       application_version: 1,
-      action_id: "save_definition"
+      action_id: "save_packet_bindings"
     }
 
     providers_by_outcome = [
@@ -80,7 +81,7 @@ defmodule Cadence.Applications.ActionDispatcherProviderIsolationTest do
                 message: "The application could not complete this action."
               }} =
                ActionDispatcher.dispatch(context.scope, context.host_context, request, %{
-                 "derived_telemetry" => provider
+                 "telemetry_decom" => provider
                })
 
       assert Process.alive?(self())

@@ -12,17 +12,13 @@ defmodule CadenceWeb.CatalogRegistryValidityTest do
   alias Cadence.Applications.{
     ApplicationDefinition,
     CatalogRegistry,
-    DerivedTelemetry,
-    Limits,
     OpsConsole,
     TelemetryDecomCatalogContribution
   }
 
   @contributors [
-    Limits,
     TelemetryDecomCatalogContribution,
-    OpsConsole,
-    DerivedTelemetry
+    OpsConsole
   ]
 
   test "every contributed application definition is valid on its own" do

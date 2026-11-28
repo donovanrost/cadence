@@ -4,7 +4,7 @@ import { hostRefusal, setupSurfaces } from "./surfaces.ts";
 
 describe("L9 save-outcome seam (DECISIONS #77)", () => {
   it("says what each app's own save did, never 'staged'", () => {
-    expect(saveOutcome("limits", "save_limit_definition")).toEqual({
+    expect(saveOutcome("telemetry_decom", "save_packet_bindings")).toEqual({
       kind: "saved",
       text: "Saved. It applies now.",
     });
@@ -74,11 +74,7 @@ describe("L9 status line (ux #77)", () => {
       "Waiting for activation approval",
     );
     expect(pendingLine({ ...base, state: "active", activation_request: null }, at)).toBeNull();
-    expect([saveMode("limits"), saveMode("telemetry_decom"), saveMode("x")]).toEqual([
-      "immediate",
-      "activation",
-      null,
-    ]);
+    expect([saveMode("telemetry_decom"), saveMode("x")]).toEqual(["activation", null]);
     expect(lostText(true)).toContain("Changes you haven't saved here will be lost.");
   });
 });

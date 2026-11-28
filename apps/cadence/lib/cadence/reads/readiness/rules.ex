@@ -284,26 +284,16 @@ defmodule Cadence.Reads.Readiness.Rules do
 
   defp endpoint_findings(_facts), do: []
 
-  # Apps whose absence turns off a safety function are `not_set_up`; the rest
-  # are optional (domain decision, Setup.md).
-  @essential_apps %{
-    "limits" => "Ground limit checks are off. Alarms come only from flight events."
-  }
-
+  # A missing app is optional: no installable app turns off a safety function (the Limits app,
+  # the one that did, is gone; #669).
   defp app_findings(%{apps: %{missing: missing}}) do
     Enum.map(missing, fn app ->
-      {severity, body} =
-        case Map.fetch(@essential_apps, app.key) do
-          {:ok, consequence} -> {:not_set_up, consequence}
-          :error -> {:optional, app.description || "Install it to enable its features."}
-        end
-
       finding(
         :apps,
-        severity,
+        :optional,
         :"app_not_installed:#{app.key}",
         "#{app.name} not installed",
-        body,
+        app.description || "Install it to enable its features.",
         0,
         fix(:app, app.key)
       )

@@ -1,17 +1,17 @@
 defmodule Cadence.Reads.PointSearch do
   @moduledoc """
   M23 point search (Telemetry explore T1, ⌘K Telemetry): the mission's
-  canonical points (active decom fields and governed derived telemetry, the
-  same set as the LiveView `CanonicalTelemetryPoints` provider), filtered by a
-  substring of id, name or description. With a `spacecraft_id`, each point
-  also carries its latest value and limit state for that spacecraft: live from
+  operator point catalog (`Cadence.Ops.PointCatalog`: the active binding set's
+  packet fields and the active revision's derived points, the algorithm outputs
+  of #451 T4b), filtered by a substring of id, name or description. With a
+  `spacecraft_id`, each point also carries its latest value and limit state for
+  that spacecraft: live from
   the current-value store, or (`source: :history`) the newest stored sample when
   the live store has none since a restart. The limit state comes from the limit
   projection either way (`no_data` when it has none for the point).
   Callers authorize first.
   """
 
-  alias Cadence.Governance
   alias Cadence.Limits.Event
   alias Cadence.Ops.PointCatalog
   alias Cadence.Reads.{Limits, Telemetry}
@@ -26,7 +26,9 @@ defmodule Cadence.Reads.PointSearch do
     limit = opts |> Map.get(:limit, 50) |> min(@max_limit)
 
     points =
-      (raw(organization_id, mission_id) ++ derived(organization_id, mission_id))
+      organization_id
+      |> PointCatalog.list_points(mission_id)
+      |> Enum.map(&point/1)
       |> Enum.uniq_by(& &1.id)
       |> Enum.sort_by(& &1.id)
       |> Enum.filter(&matches?(&1, query))
@@ -47,34 +49,26 @@ defmodule Cadence.Reads.PointSearch do
     Enum.map(points, &Map.put(&1, :has_limits, MapSet.member?(limited, &1.id)))
   end
 
-  defp raw(organization_id, mission_id) do
-    organization_id
-    |> PointCatalog.list_points(mission_id)
-    |> Enum.map(fn point ->
-      %{
-        id: point.point_id,
-        name: point.field_name || point.point_id,
-        description: point.description,
-        unit: point.unit,
-        subsystem: point.packet_name,
-        type: type(point[:data_type])
-      }
-    end)
+  defp point(%{source: :derived} = point) do
+    %{
+      id: point.point_id,
+      name: point.name,
+      description: point.description,
+      unit: point.unit,
+      subsystem: "Derived",
+      type: type(point.data_type)
+    }
   end
 
-  defp derived(organization_id, mission_id) do
-    organization_id
-    |> Governance.list_derived_definitions(mission_id)
-    |> Enum.map(fn definition ->
-      %{
-        id: definition.point_id,
-        name: Map.get(definition, :point_name) || definition.point_id,
-        description: Map.get(definition, :description) || "Derived telemetry",
-        unit: Map.get(definition, :unit),
-        subsystem: "Derived",
-        type: "numeric"
-      }
-    end)
+  defp point(point) do
+    %{
+      id: point.point_id,
+      name: point.field_name || point.point_id,
+      description: point.description,
+      unit: point.unit,
+      subsystem: point.packet_name,
+      type: type(point[:data_type])
+    }
   end
 
   defp with_latest(organization_id, mission_id, spacecraft_id, points) do

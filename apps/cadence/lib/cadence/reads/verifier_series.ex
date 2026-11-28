@@ -248,7 +248,7 @@ defmodule Cadence.Reads.VerifierSeries do
   # A verifier's subject is a point id (`telemetry:THERM.setpoint`) or, from the mission model, the
   # parameter's semantic id (`semantic:parameter:…`) or qualified name (#73,
   # `PointCatalog.resolve/2`). Samples, units and types are keyed by the catalog point
-  # (`PACKET.field`), so resolve to it first. A subject no active point has stays as is, with unit
+  # (`PACKET.field`, or a derived point's semantic id), so resolve to it first. A subject no active point has stays as is, with unit
   # and type null. `:catalog_fun` (tests): `(-> [point catalog entry])`.
   defp point(org, mission, subject, opts) do
     catalog =
@@ -264,11 +264,17 @@ defmodule Cadence.Reads.VerifierSeries do
 
     %{
       id: id,
-      name: (entry && (entry.field_name || entry.point_id)) || subject,
+      name: entry_name(entry, subject),
       unit: described.unit || (entry && entry.unit),
       type: described.type
     }
   end
+
+  # A packet point is named by its field, a derived one (#451 T4b) by its parameter.
+  defp entry_name(nil, subject), do: subject
+
+  defp entry_name(entry, _subject),
+    do: entry.field_name || Map.get(entry, :name) || entry.point_id
 
   defp telemetry_instance(instances), do: Enum.find(instances, &telemetry_point/1)
 

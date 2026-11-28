@@ -268,6 +268,16 @@ defmodule Cadence.Management.ConfigKinds.Transport do
   defp stored({:error, {:listen_endpoint_claimed, _endpoint}}),
     do: {:error, [F.error("configuration.port", ListenClaims.message())]}
 
+  defp stored({:error, {:listen_endpoint_mode_mismatch, _endpoint}}),
+    do:
+      {:error,
+       [
+         F.error(
+           "configuration.port",
+           "Listeners on one endpoint must use the same authentication mode."
+         )
+       ]}
+
   defp stored({:error, reason}), do: {:error, reason}
 
   defp document(%Transport{} = transport) do

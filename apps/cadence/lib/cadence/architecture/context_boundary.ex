@@ -116,8 +116,6 @@ defmodule Cadence.Architecture.ContextBoundary do
     "lib/cadence/extensions/registry.ex" => :composition,
     "lib/cadence/applications/registry.ex" => :composition,
     "lib/cadence/applications/ops_console.ex" => :composition,
-    "lib/cadence/applications/limits.ex" => :composition,
-    "lib/cadence/applications/derived_telemetry.ex" => :composition,
     "lib/cadence/applications/ops_dock.ex" => :read_models,
     "lib/cadence/runtime/process_namespace.ex" => :composition,
     "lib/cadence/runtime/supervisor.ex" => :composition,

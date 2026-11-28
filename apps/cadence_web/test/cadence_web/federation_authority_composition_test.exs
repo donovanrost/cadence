@@ -6,15 +6,11 @@ defmodule CadenceWeb.FederationAuthorityCompositionTest do
 
   @provider_ledger [
     Cadence.Applications.TelemetryDecom,
-    Cadence.Applications.DerivedTelemetry,
-    Cadence.Applications.Limits,
     Cadence.Applications.OpsConsole
   ]
 
   @canonical_keys ~w(
     telemetry_decom
-    derived_telemetry
-    limits
     ops_console
   )
 
@@ -43,15 +39,12 @@ defmodule CadenceWeb.FederationAuthorityCompositionTest do
     assert Enum.uniq(release_keys) == release_keys
     assert Enum.sort(release_keys) == Enum.sort(catalog_surface_ids)
 
-    assert [
-             %ReleaseContribution{
-               application_version: 1,
-               surface_id: "manage",
-               surface_version: 1,
-               remote_name: "cadence_ops_console",
-               exposed_module: "./DerivedTelemetry"
-             }
-           ] = Enum.filter(releases, &(&1.application_key == "derived_telemetry"))
+    # The ops-console remote exposes only its own application (#669 retired ./Limits and
+    # ./DerivedTelemetry).
+    assert releases
+           |> Enum.filter(&(&1.remote_name == "cadence_ops_console"))
+           |> Enum.map(& &1.exposed_module)
+           |> Enum.uniq() == ["./Application"]
   end
 
   test "composes the exact core and optional web query contribution ledger" do
@@ -66,8 +59,6 @@ defmodule CadenceWeb.FederationAuthorityCompositionTest do
     assert contributions
            |> Enum.frequencies_by(& &1.application_key) == %{
              "telemetry_decom" => 2,
-             "derived_telemetry" => 1,
-             "limits" => 2,
              "ops_console" => 7
            }
   end

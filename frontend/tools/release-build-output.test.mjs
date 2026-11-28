@@ -7,7 +7,7 @@ import { resolveConfig } from "vite-plus";
 import { releaseBuildOutput, releaseOutputGuard } from "./release-build-output.mjs";
 
 const repository = resolve(import.meta.dirname, "../..");
-const apps = ["organization-admin", "telemetry-decom", "ops-console"];
+const apps = ["telemetry-decom", "ops-console"];
 
 void test("all remotes reject unsafe release paths before output cleanup", async () => {
   const directory = await mkdtemp(join(tmpdir(), "cadence-release-preflight-"));

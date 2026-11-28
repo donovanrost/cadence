@@ -37,7 +37,7 @@ planning-policy versions, and the K1 submit race (a template version plus, if ne
 
 ## Personas
 
-Sessions are saved per persona by `e2e/auth.setup.ts` (users seeded by `dev/apogee_qa_personas.exs`).
+Sessions are saved per persona by `e2e/auth.setup.ts` (users seeded by `dev/seed/qa.exs`).
 The default is `admin`; switch with `test.use({ storageState: storageStateFor("operator") })`.
 
 | Key | User | Use for |

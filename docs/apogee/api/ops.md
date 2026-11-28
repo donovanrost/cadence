@@ -109,7 +109,8 @@ freshness to the second; at 1 Hz feeds, throttle that to about 10 s client-side)
   many members it has. `awaiting_viewer` is the viewer's share ("await your GO", U11): requests
   they didn't make, and groups where they're an eligible approver (not the requester, and the
   named approver if one was picked).
-- `limits.configured`: `false` when the mission has no limit definitions. Show the P3 "Limits &
+- `limits.configured`: `false` when the mission's active monitoring plan evaluates nothing (no
+  enabled policy on any spacecraft; #451 T3a, it was the limit definitions). Show the P3 "Limits &
   Alarming not configured" item and treat `limit_state` as `no_data`.
 - **Contact facts** (M7) come from **booked provider reservations** (see contacts.md), judged at
   `observed_at`:
@@ -236,9 +237,12 @@ Each row is one point from one source, so a point in both stores has two adjacen
   was evaluated. `catalog_monitoring` rows are live: `policy_id` names the rule, `entered_at` is
   when the parameter entered the state (a state is written on a transition), `evaluated_at`,
   `raw_limit_state` and `value` are null.
-- **`evaluated: false`** is a point with an active ground limit and a sample on this spacecraft that
-  no job has evaluated yet: `nominal`, with no `evaluated_at` or `entered_at`. Monitoring rules that
-  have never changed state are not listed (the rule inventory waits for #451).
+- **`evaluated: false`** is a point the active mission model's compiled monitoring plan evaluates on
+  this spacecraft (its own entry, else the mission's; a disabled one doesn't count) that has a sample
+  here and no state yet: it never left normal, or the runtime has not evaluated it since the rule
+  was added. It is `nominal`, labelled `catalog_monitoring` (it comes from the plan, with no
+  `policy_id`), with no `evaluated_at` or `entered_at`. The inventory is the plan's
+  (#451 T3a), so a point appears as soon as a rule for it is applied, with no limit job.
 - **Freshness.** `last_sample_at` is the newer of this node's current-value store (node-local: it
   holds the spacecraft only on the node that owns its partition) and the durable history's
   per-point receipt (cached up to `durable_receipts_ttl_ms`, 60 s). `stale` means older than
@@ -277,8 +281,8 @@ about 10 s (`posture.stale` changes with time).
 
 - `alarms`: from **alarm episodes** (both sources, DECISIONS #17); `unacknowledged` = active
   episodes with status `new`. `limits_configured` is the same as `GET /fleet` `limits.configured`.
-  Per U13, show a real `0` only when something can raise alarms (ground limits configured, or
-  catalog monitoring). The whole object is `null` if episodes can't be read.
+  Per U13, show a real `0` only when something can raise alarms (limits configured: the active monitoring plan
+  has an enabled policy). The whole object is `null` if episodes can't be read.
 - `commands.open`: queued + release pending + in flight + approval pending. `awaiting_viewer`:
   approval-pending requests the viewer didn't request (the same number as `GET /fleet`).
 - `contacts.in_contact`: spacecraft in a booked contact now (same rule as `GET /fleet`). `contacts` is
@@ -913,9 +917,10 @@ must be a mission spacecraft), and `limit` 1–200 (default 50).
 }]}}
 ```
 
-- The points are the mission's canonical set: fields of the active binding set's packet
-  definitions (`subsystem` is the packet name) plus governed derived telemetry (`subsystem:
-  "Derived"`). It's the same set the LiveView point picker offers, sorted by id.
+- The points are the mission's operator point catalog, sorted by id: fields of the active binding
+  set's packet definitions (`subsystem` is the packet name) plus the active revision's derived
+  parameters, the outputs of its algorithms (#451 T4b; `subsystem: "Derived"`, `id` is the output
+  parameter's semantic id, `name` its qualified name, `unit` and `type` from its declaration).
 - `type`: `numeric | enum | text`, from the field's data type.
 - `latest` appears only with `spacecraft_id`. `source` is `live | history`:
   - `live`: from the current-value store. On :4011 that store is in memory, and every server

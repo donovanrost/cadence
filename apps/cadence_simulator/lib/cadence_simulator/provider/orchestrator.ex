@@ -16,6 +16,7 @@ defmodule CadenceSimulator.Provider.Orchestrator do
     ContactLifecycle,
     ContactResults,
     Contacts,
+    DeliveryTLS,
     Schedule,
     SpacecraftFrames,
     Store,
@@ -399,7 +400,15 @@ defmodule CadenceSimulator.Provider.Orchestrator do
           "target_id" => contact["spacecraft_ref"]
         }
 
-        maybe_start_stream(state, contact, run, data_plane, :contact)
+        with {:ok, identity} <- DeliveryTLS.identity(run["id"], profile) do
+          maybe_start_stream(
+            state,
+            contact,
+            run,
+            Map.put(data_plane, :delivery_tls, identity),
+            :contact
+          )
+        end
     end
   end
 
@@ -595,6 +604,7 @@ defmodule CadenceSimulator.Provider.Orchestrator do
          provider: DatabaseDynamics,
          provider_opts: [noise_amplitude: Map.get(telemetry_profile, "noise_amplitude", 1.0)],
          output: {:tcp, host, port},
+         delivery_tls: Map.get(data_plane, :delivery_tls),
          rate_hz: Map.get(telemetry_profile, "rate_hz", 1.0),
          frame: %{
            format: :tm,
@@ -698,7 +708,7 @@ defmodule CadenceSimulator.Provider.Orchestrator do
         delivery =
           contact["delivery"]
           |> Map.put("status", "failed")
-          |> Map.put("reason", "telemetry_stream_stopped:#{inspect(reason)}")
+          |> Map.put("reason", delivery_failure_reason(reason))
 
         ContactLifecycle.update(contact, %{"delivery" => delivery})
 
@@ -706,6 +716,12 @@ defmodule CadenceSimulator.Provider.Orchestrator do
         :ok
     end
   end
+
+  defp delivery_failure_reason({:shutdown, reason})
+       when reason in [:delivery_tls_credential_unavailable, :delivery_tls_handshake_failed],
+       do: Atom.to_string(reason)
+
+  defp delivery_failure_reason(reason), do: "telemetry_stream_stopped:#{inspect(reason)}"
 
   defp parse_time(value) do
     case DateTime.from_iso8601(value) do

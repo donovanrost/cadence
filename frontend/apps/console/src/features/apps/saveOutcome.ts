@@ -14,14 +14,12 @@ export type SaveOutcome =
 
 export type SaveAdapter = (actionId: string) => SaveOutcome | null;
 
-/** Saves the app reports as done: definitions are versioned by the app itself (limits, derived). */
+/** Saves the app reports as done (telemetry_decom's packet bindings). */
 const savesNow: SaveAdapter = (actionId) =>
   actionId.startsWith("save") ? { kind: "saved", text: "Saved. It applies now." } : null;
 
 // Keyed by the application keys the console knows (rule A); unknown apps get null.
 const adapters = {
-  limits: savesNow,
-  derived_telemetry: savesNow,
   telemetry_decom: (actionId) =>
     actionId === "request_activation"
       ? {
@@ -43,8 +41,6 @@ export function saveOutcome(appKey: string, actionId: string): SaveOutcome | nul
 export type SaveMode = "immediate" | "activation";
 // Keyed by the application keys the console knows (rule A), as above.
 const modes = {
-  limits: "immediate",
-  derived_telemetry: "immediate",
   telemetry_decom: "activation",
 } as const satisfies Readonly<Record<string, SaveMode>>;
 export const saveMode = (appKey: string): SaveMode | null =>

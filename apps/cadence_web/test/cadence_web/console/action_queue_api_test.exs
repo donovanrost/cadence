@@ -93,6 +93,14 @@ defmodule CadenceWeb.Console.ActionQueueAPITest do
   test "a caution alarm is a P2 item naming the spacecraft and point", c do
     MissionReadModelFixtures.seed_mission_read_models(c.org.organization_id, c.mission.mission_id)
 
+    # "Limits configured" follows the active compiled plan (#451 T3a).
+    Cadence.MonitoringPlanFixtures.activate!(
+      c.org.organization_id,
+      c.mission.mission_id,
+      {"read-models", 1},
+      [{"counter", "/parameters/counter", above: 10}]
+    )
+
     data = c |> get_queue() |> json_response(200) |> Map.fetch!("data")
 
     assert %{"priority" => 2, "state" => "caution", "count" => 1} =
