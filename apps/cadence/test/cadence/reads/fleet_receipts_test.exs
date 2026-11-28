@@ -134,7 +134,7 @@ defmodule Cadence.Reads.FleetReceiptsTest do
       mission = "mission-fleet-receipts-cache-#{suffix}"
       persist_mission_scope(org, mission)
       saved = Application.get_env(:cadence, :fleet_durable_receipts_ttl_ms)
-      key = {FleetStatus, :durable, org, mission}
+      key = {Cadence.Reads.DurableReceiptCache, {FleetStatus, :durable, org, mission}}
 
       on_exit(fn ->
         :persistent_term.erase(key)

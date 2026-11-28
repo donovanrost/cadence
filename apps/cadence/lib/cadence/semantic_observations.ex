@@ -117,6 +117,22 @@ defmodule Cadence.SemanticObservations do
     |> Repo.all()
   end
 
+  @doc """
+  One spacecraft's latest live alarm states: a row per (parameter, policy) that has changed state
+  (a state is written on a transition only, so a parameter that never left normal has none).
+  """
+  @spec list_for_spacecraft(binary(), binary(), binary()) :: [struct()]
+  def list_for_spacecraft(organization_id, mission_id, spacecraft_id)
+      when is_binary(organization_id) and is_binary(mission_id) and is_binary(spacecraft_id) do
+    LatestAlarmStateRow
+    |> where(
+      [row],
+      row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+        row.spacecraft_scope_id == ^spacecraft_id
+    )
+    |> Repo.all()
+  end
+
   defp add_result(%{semantic_result: %Result{} = result} = prepared, accumulator) do
     transitions = Enum.reject(result.monitoring_results, &is_nil(&1.transition))
     add_transitions(prepared, transitions, accumulator)

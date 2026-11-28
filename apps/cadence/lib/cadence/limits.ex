@@ -66,6 +66,18 @@ defmodule Cadence.Limits do
     do: DefinitionLifecycle.list_active_definitions(org, mission, [])
 
   @doc """
+  The ids of the points with an active limit definition: the active statuses only, without
+  loading each definition (`active_limit_definitions/2` reads every definition's document).
+  """
+  @spec active_limit_point_ids(binary(), binary()) :: [binary()]
+  def active_limit_point_ids(org, mission) do
+    org
+    |> DefinitionLifecycle.list_active_statuses(mission, [])
+    |> Enum.map(& &1.point_id)
+    |> Enum.uniq()
+  end
+
+  @doc """
   Retires a definition's limits (#77): evaluation stops, its versions stay. `publish_facts?:
   false` defers the announcement (a change set announces after its commit).
   """
