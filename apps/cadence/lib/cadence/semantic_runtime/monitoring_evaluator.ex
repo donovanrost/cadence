@@ -90,6 +90,18 @@ defmodule Cadence.SemanticRuntime.MonitoringEvaluator do
     end
   end
 
+  @doc """
+  The rule that matches `value` with the highest severity (the first of equals), or `nil`. Pure:
+  the rule selection `evaluate/4` and `matched_rule/3` share, without a plan or a state, for a
+  caller that holds a rule list (threshold limits, `ThresholdLimits`).
+  """
+  @spec best_rule([map()], term()) :: map() | nil
+  def best_rule(rules, value) do
+    rules
+    |> Enum.filter(&rule_matches?(&1, value))
+    |> Enum.max_by(&Map.get(@severity_rank, severity(&1), 0), fn -> nil end)
+  end
+
   defp best_match(rules, update, context_name) do
     rules
     |> Enum.with_index()

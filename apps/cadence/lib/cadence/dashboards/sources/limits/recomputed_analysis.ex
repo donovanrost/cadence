@@ -8,7 +8,8 @@ defmodule Cadence.Dashboards.Sources.Limits.RecomputedAnalysis do
   """
 
   alias Cadence.Dashboards.{DataLinks, PlannedSourceRequest, ResolveWarning}
-  alias Cadence.Limits.{DefinitionInterval, Evaluator, Event}
+  alias Cadence.Limits.{DefinitionInterval, Event}
+  alias Cadence.SemanticRuntime.ThresholdLimits
   alias Cadence.Telemetry.Sample
 
   @spec analysis_basis(atom()) :: atom()
@@ -192,7 +193,7 @@ defmodule Cadence.Dashboards.Sources.Limits.RecomputedAnalysis do
       sorted_events =
         Enum.sort_by(bucket_events, &DateTime.to_unix(&1.receipt_time, :millisecond))
 
-      worst_event = Enum.max_by(sorted_events, &Evaluator.severity(&1.limit_state))
+      worst_event = Enum.max_by(sorted_events, &ThresholdLimits.severity(&1.limit_state))
 
       %{
         bucket_start: bucket_start,
@@ -319,8 +320,10 @@ defmodule Cadence.Dashboards.Sources.Limits.RecomputedAnalysis do
          observed_event,
          semantics_mode
        ) do
-    limit_state = Evaluator.evaluate(sample.engineering_value, interval.thresholds || %{})
-    normalized_state = Evaluator.normalize_state(limit_state)
+    limit_state =
+      ThresholdLimits.limit_state(sample.engineering_value, interval.thresholds || %{})
+
+    normalized_state = ThresholdLimits.normalize_state(limit_state)
     observed_normalized_state = observed_event && observed_event.normalized_state
 
     diverged? =
@@ -346,7 +349,7 @@ defmodule Cadence.Dashboards.Sources.Limits.RecomputedAnalysis do
       evaluated_value: sample.engineering_value,
       limit_state: limit_state,
       normalized_state: normalized_state,
-      violation: Evaluator.violation?(limit_state),
+      violation: ThresholdLimits.violation?(limit_state),
       generation_time: sample.generation_time,
       receipt_time: sample.receipt_time,
       provenance:

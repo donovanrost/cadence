@@ -103,6 +103,7 @@ defmodule Cadence.Architecture.ContextBoundary do
     "lib/cadence/semantic_runtime/result.ex" => :catalog,
     "lib/cadence/semantic_runtime/scope.ex" => :catalog,
     "lib/cadence/semantic_runtime/state.ex" => :catalog,
+    "lib/cadence/semantic_runtime/threshold_limits.ex" => :catalog,
     "lib/cadence/semantic_runtime/update.ex" => :catalog,
     "lib/cadence/runtime/mission_model_plan_decoder.ex" => :catalog,
     "lib/cadence/semantic_runtime/store.ex" => :runtime,

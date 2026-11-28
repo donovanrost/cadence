@@ -17,7 +17,6 @@ defmodule Cadence.Limits do
     DefinitionLifecycle,
     DefinitionLifecycleEvent,
     Definitions,
-    Evaluator,
     Event,
     GovernedLimitDefinitionRow,
     LimitDefinitionLifecycleEventRow,
@@ -30,6 +29,7 @@ defmodule Cadence.Limits do
   alias Cadence.DerivedTelemetry.Store, as: DerivedTelemetryStore
   alias Cadence.Limits.Store
   alias Cadence.Platform.EventBus
+  alias Cadence.SemanticRuntime.ThresholdLimits
 
   alias Cadence.Repo
   alias Cadence.Telemetry.SampleRecords
@@ -470,7 +470,7 @@ defmodule Cadence.Limits do
 
   defp build_events_for_sample(source_sample, definitions, mode) do
     Enum.reduce_while(definitions, {:ok, []}, fn %Definition{} = definition, {:ok, acc} ->
-      limit_state = Evaluator.evaluate(source_sample.value, definition.thresholds)
+      limit_state = ThresholdLimits.limit_state(source_sample.value, definition.thresholds)
 
       event =
         %Event{
@@ -486,8 +486,8 @@ defmodule Cadence.Limits do
           limit_set_name: definition.limit_set_name,
           evaluated_value: source_sample.value,
           limit_state: limit_state,
-          normalized_state: Evaluator.normalize_state(limit_state),
-          violation: Evaluator.violation?(limit_state),
+          normalized_state: ThresholdLimits.normalize_state(limit_state),
+          violation: ThresholdLimits.violation?(limit_state),
           generation_time: source_sample.generation_time,
           receipt_time: source_sample.receipt_time,
           provenance: build_event_provenance(source_sample, definition, mode)
