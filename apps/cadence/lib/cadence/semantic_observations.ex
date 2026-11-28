@@ -21,6 +21,7 @@ defmodule Cadence.SemanticObservations do
   alias Cadence.SemanticObservations.{
     AlarmAcknowledgementRow,
     AlarmTransitionRow,
+    FleetAlarms,
     LatestAlarmStateRow,
     MonitoringEvaluationRow
   }
@@ -37,6 +38,9 @@ defmodule Cadence.SemanticObservations do
   defp persist_transitions({operations, evaluations, transition_changesets}) do
     evaluations
     |> evaluation_multi(transition_changesets, operations)
+    |> Multi.run(:fleet_alarm_summaries, fn repo, _changes ->
+      refresh_fleet_alarms(repo, evaluations)
+    end)
     |> Repo.transaction()
     |> case do
       {:ok, changes} ->
@@ -46,6 +50,18 @@ defmodule Cadence.SemanticObservations do
       {:error, _operation, reason, _changes} ->
         {:error, reason}
     end
+  end
+
+  # The fleet summary of every spacecraft this batch transitioned, once each (#871).
+  defp refresh_fleet_alarms(repo, evaluations) do
+    evaluations
+    |> Enum.map(
+      &{Ecto.Changeset.get_field(&1, :organization_id), Ecto.Changeset.get_field(&1, :mission_id),
+       Ecto.Changeset.get_field(&1, :spacecraft_id)}
+    )
+    |> then(&FleetAlarms.refresh_batch(repo, &1))
+
+    {:ok, :refreshed}
   end
 
   defp notify_alarm_changes(changes) do

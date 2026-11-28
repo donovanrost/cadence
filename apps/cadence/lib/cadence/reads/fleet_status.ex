@@ -29,6 +29,7 @@ defmodule Cadence.Reads.FleetStatus do
   alias Cadence.Limits.Store.FleetSummary
   alias Cadence.Reads.SpacecraftMetadata
   alias Cadence.Reads.Telemetry, as: TelemetryReads
+  alias Cadence.SemanticObservations.FleetAlarms
   alias Cadence.Spacecraft
   alias Cadence.SpacecraftType
   alias Cadence.Telemetry.{Sample, SpacecraftReceipts}
@@ -88,22 +89,60 @@ defmodule Cadence.Reads.FleetStatus do
   # however large the fleet is.
   defp live_inputs(organization_id, mission_id) do
     summaries = FleetSummary.load(organization_id, mission_id)
+    alarms = FleetAlarms.load(organization_id, mission_id)
     durable = durable(organization_id, mission_id)
 
     limits =
-      Map.new(summaries, fn {id, summary} ->
-        {id,
-         %{limit_state: summary.limit_state, violating: summary.violating, worst: summary.worst}}
-      end)
+      (Map.keys(summaries) ++ Map.keys(alarms))
+      |> Enum.uniq()
+      |> Map.new(fn id -> {id, combine(Map.get(summaries, id), Map.get(alarms, id))} end)
 
     received =
       merge_newest([
         Map.new(summaries, fn {id, summary} -> {id, summary.last_received_at} end),
+        Map.new(alarms, fn {id, alarm} -> {id, alarm.last_received_at} end),
         TelemetryReads.last_receipts(organization_id, mission_id),
         durable.receipts
       ])
 
     {limits, received, durable.telemetry}
+  end
+
+  # A spacecraft's limit facts from both sources, the worst wins (DECISIONS #17, #871): the ground
+  # limits the batch evaluations wrote and the live catalog monitoring alarms the runtime keeps. On a
+  # tie the live alarm is the worst point (it is the current one); violating counts both.
+  defp combine(ground, nil), do: ground_facts(ground)
+
+  defp combine(nil, alarm), do: alarm_facts(alarm)
+
+  defp combine(ground, alarm) do
+    ground = ground_facts(ground)
+    alarm = alarm_facts(alarm)
+
+    winner =
+      if Map.fetch!(@limit_rank, alarm.limit_state) >= Map.fetch!(@limit_rank, ground.limit_state),
+        do: alarm,
+        else: ground
+
+    %{winner | violating: ground.violating + alarm.violating}
+  end
+
+  defp ground_facts(summary) do
+    %{
+      limit_state: summary.limit_state,
+      violating: summary.violating,
+      worst: summary.worst,
+      worst_evaluated_at: summary.worst_evaluated_at
+    }
+  end
+
+  defp alarm_facts(alarm) do
+    %{
+      limit_state: alarm.limit_state,
+      violating: alarm.active,
+      worst: Map.put(alarm.worst, :source, :catalog_monitoring),
+      worst_evaluated_at: nil
+    }
   end
 
   defp merge_newest(maps) do
@@ -368,7 +407,7 @@ defmodule Cadence.Reads.FleetStatus do
       state: condition.state,
       limit_state: condition.limit_state,
       violating_points: if(limits, do: limits.violating, else: 0),
-      worst_point: worst_point(limits && limits.worst),
+      worst_point: worst_point(limits),
       last_received_at: condition.last_received_at,
       stale: condition.stale
     }
@@ -410,17 +449,39 @@ defmodule Cadence.Reads.FleetStatus do
   defp severity(%Event{}), do: :nominal
 
   defp worst_point(nil), do: nil
+  defp worst_point(%{worst: nil}), do: nil
 
-  defp worst_point(%Event{} = event) do
+  # A live monitoring alarm: the latest state row carries the parameter and its state, not the value
+  # that raised it (that is on the alarm episode), so `value` is null and `raw_limit_state` (the
+  # ground-limit vocabulary) is too.
+  defp worst_point(%{worst: %{source: :catalog_monitoring} = alarm}) do
     %{
+      source: :catalog_monitoring,
+      point_id: alarm.parameter_id,
+      point_name: alarm.parameter_id,
+      value: nil,
+      limit_state: alarm_severity(alarm.effective_state),
+      raw_limit_state: nil,
+      received_at: alarm.receipt_time,
+      evaluated_at: nil
+    }
+  end
+
+  defp worst_point(%{worst: %Event{} = event} = limits) do
+    %{
+      source: :ground_limit,
       point_id: event.point_id,
       point_name: event.point_name,
       value: event.evaluated_value,
       limit_state: severity(event),
       raw_limit_state: event.limit_state && to_string(event.limit_state),
-      received_at: event.receipt_time
+      received_at: event.receipt_time,
+      evaluated_at: Map.get(limits, :worst_evaluated_at)
     }
   end
+
+  defp alarm_severity(state) when state in ~w(distress critical severe), do: :critical
+  defp alarm_severity(_watch_or_warning), do: :caution
 
   defp latest_receipts(samples, limit_states, durable) do
     sample_times = Enum.map(samples, fn %Sample{} = s -> {s.spacecraft_id, s.receipt_time} end)
