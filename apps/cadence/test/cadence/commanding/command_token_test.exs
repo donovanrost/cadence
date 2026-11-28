@@ -12,6 +12,8 @@ defmodule Cadence.Commanding.CommandTokenTest do
 
   alias Cadence.Activations.ActiveBindingSetRow
   alias Cadence.Catalog.FleetSnapshot
+  alias Cadence.Commanding.Groups.GroupStore
+  alias Cadence.Commanding.RequestValidation
   alias Cadence.Control.Commanding.{GroupDecision, GroupSubmission}
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Reads.CommandPreflight
@@ -83,6 +85,19 @@ defmodule Cadence.Commanding.CommandTokenTest do
     test "a monitoring-only generation leaves it equal", c do
       before = token(c)
       new_generation!(c, all_on(c, c.manifests.head))
+      assert token(c) == before
+    end
+
+    test "and so does one that renames the craft's telemetry bindings (their ids embed the revision)",
+         c do
+      before = token(c)
+
+      new_generation!(c, all_on(c, c.manifests.head), fn id, entry ->
+        Map.put(entry, "telemetry_capability_ids", [
+          "telemetry:#{c.manifests.head["revision_id"]}:#{id}"
+        ])
+      end)
+
       assert token(c) == before
     end
 
@@ -189,6 +204,52 @@ defmodule Cadence.Commanding.CommandTokenTest do
                  kind: :go,
                  expected_review: GroupDecision.review_token(group)
                })
+    end
+  end
+
+  describe "a queued request's release basis" do
+    setup c do
+      draft = draft(c.spacecraft, [command(c, "SET_SIGNED", %{"counter" => 1})])
+
+      {:ok, group} =
+        GroupSubmission.submit(c.scope, c.mission, draft, preflight_digest: digest(c, draft))
+
+      members = GroupStore.members(c.org, c.mission, group.command_group_id)
+      Map.put(c, :member, hd(members))
+    end
+
+    test "still resolves once its craft runs the head (the command plan is exactly the same)",
+         c do
+      assert {:ok, %{runtime_plan_id: plan_id}} =
+               RequestValidation.resolve_basis_of(c.org, c.mission, c.member)
+
+      assert plan_id == RequestValidation.pinned_plan_id(c.member)
+      before_revision = c.member.mission_model_revision_id
+      assert before_revision == c.manifests.base["revision_id"]
+
+      new_generation!(c, all_on(c, c.manifests.head))
+
+      # The craft runs the head revision now, and the request still pins the base's.
+      assert {:ok, %{runtime_plan_id: ^plan_id}} =
+               RequestValidation.resolve_basis_of(c.org, c.mission, c.member)
+    end
+
+    test "is refused when the command plan it pinned isn't the one its craft runs", c do
+      new_generation!(c, all_on(c, c.manifests.head))
+
+      other =
+        put_in(
+          c.member.metadata,
+          ["validation_basis", "runtime_plan_id"],
+          "mission_model_plan:old"
+        )
+
+      assert {:error, {:mission_model_revision_mismatch, _requested, _active}} =
+               RequestValidation.resolve_basis_of(c.org, c.mission, %{c.member | metadata: other})
+
+      # A request that pinned no plan can't be shown to have the same one: refused as well.
+      assert {:error, {:mission_model_revision_mismatch, _, _}} =
+               RequestValidation.resolve_basis_of(c.org, c.mission, %{c.member | metadata: %{}})
     end
   end
 end
