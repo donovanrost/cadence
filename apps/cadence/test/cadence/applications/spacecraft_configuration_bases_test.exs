@@ -6,7 +6,13 @@ defmodule Cadence.Applications.SpacecraftConfigurationBasesTest do
   """
   use Cadence.RuntimeCase, async: false
 
-  alias Cadence.Applications.{ApplicationInstallations, HostContext, PacketBindings}
+  alias Cadence.Applications.{
+    ApplicationBindingStore,
+    ApplicationInstallations,
+    HostContext,
+    PacketBindings
+  }
+
   alias Cadence.Applications.SpacecraftConfiguration.ApplicationInputs
   alias Cadence.Applications.SpacecraftConfiguration.Drafts
   alias Cadence.Applications.TelemetryDecomFixtures, as: Fixtures
@@ -54,6 +60,26 @@ defmodule Cadence.Applications.SpacecraftConfigurationBasesTest do
              batched[c.crafts.telemetry_only.spacecraft_id]
 
     assert ApplicationInputs.bases(c.mission, []) == %{}
+  end
+
+  test "a float in configuration-input metadata changes the stored basis", c do
+    spacecraft_id = c.crafts.telemetry_only.spacecraft_id
+    original_basis = ApplicationInputs.basis(c.mission, spacecraft_id)
+
+    assert {:ok, binding} =
+             ApplicationBindingStore.fetch(@org, @mid, spacecraft_id, "telemetry_decom")
+
+    assert {:ok, _updated} =
+             ApplicationBindingStore.upsert(%{binding | metadata: %{"gain" => 1.5}})
+
+    float_basis = ApplicationInputs.basis(c.mission, spacecraft_id)
+    assert String.starts_with?(float_basis, "configuration_inputs:v1:")
+    refute float_basis == original_basis
+
+    assert {:ok, _updated} =
+             ApplicationBindingStore.upsert(%{binding | metadata: %{"gain" => 1}})
+
+    refute ApplicationInputs.basis(c.mission, spacecraft_id) == float_basis
   end
 
   test "scoped packet reads match the mission-wide read, one configuration at a time", c do

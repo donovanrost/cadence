@@ -285,8 +285,31 @@ defmodule Cadence.Platform.StoredHashGuardTest do
       assert BindingSet.content_sha256(named) == @golden_binding_set, golden_message()
     end
 
+    test "a float in the binding set's packet config is part of its basis" do
+      float_config = binding_set(%{"packet" => "HEALTH", "gain" => 1.5})
+      integer_config = binding_set(%{"packet" => "HEALTH", "gain" => 1})
+
+      assert String.starts_with?(BindingSet.content_sha256(float_config), "binding_set:v1:")
+      refute BindingSet.content_sha256(float_config) == BindingSet.content_sha256(integer_config)
+    end
+
     test "Declaration.fingerprint of a fixed declaration" do
       assert Declaration.fingerprint(declaration()) == @golden_declaration, golden_message()
+    end
+
+    test "a polynomial calibrator's float coefficients are part of its fingerprint" do
+      calibrator =
+        Declaration.new(%{
+          kind: :calibrator,
+          qualified_name: "/BUS/HK/temperature_cal",
+          definition: %{algorithm_type: :polynomial, coefficients: [0.0, 1.5], required: false}
+        })
+
+      integer_coefficients =
+        %{calibrator | definition: %{calibrator.definition | coefficients: [0, 1]}}
+
+      assert String.starts_with?(Declaration.fingerprint(calibrator), "override_fingerprint:v1:")
+      refute Declaration.fingerprint(calibrator) == Declaration.fingerprint(integer_coefficients)
     end
   end
 
@@ -295,7 +318,7 @@ defmodule Cadence.Platform.StoredHashGuardTest do
       "encoding before updating the pin: " <> @rule
   end
 
-  defp binding_set do
+  defp binding_set(packet_config \\ %{"packet" => "HEALTH"}) do
     packet = %PacketDefinition{
       packet_definition_id: "packet-golden",
       organization_id: "org-golden",
@@ -325,7 +348,7 @@ defmodule Cadence.Platform.StoredHashGuardTest do
       ]
     }
 
-    config = %CapabilityConfig{config_type: :telemetry_decom, document: %{"packet" => "HEALTH"}}
+    config = %CapabilityConfig{config_type: :telemetry_decom, document: packet_config}
 
     %BindingSet{
       binding_set_id: "binding-set-golden",

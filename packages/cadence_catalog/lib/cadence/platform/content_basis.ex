@@ -5,7 +5,9 @@ defmodule Cadence.Platform.ContentBasis do
   The hashed bytes are `name:vN:` followed by compact JSON. Object keys are UTF-8
   strings sorted by their bytes. Values are nil, booleans, integers, UTF-8 strings,
   lists, and objects; atoms other than booleans and nil have a distinct tagged form.
-  Floats and Erlang terms have no implicit encoding. Call `raw_bytes/1` to explicitly
+  Floats have a distinct `$cadence_float` tag with the shortest decimal representation;
+  negative zero is encoded as positive zero. Other Erlang terms have no implicit encoding.
+  Call `raw_bytes/1` to explicitly
   tag a non-text binary as base64. User object keys beginning with `$` gain a
   second `$`, so they cannot collide with the unescaped scalar tags.
   """
@@ -102,6 +104,13 @@ defmodule Cadence.Platform.ContentBasis do
   defp encode(true), do: "true"
   defp encode(false), do: "false"
   defp encode(value) when is_integer(value), do: Integer.to_string(value)
+
+  defp encode(value) when is_float(value) do
+    value = if value == 0.0, do: 0.0, else: value
+
+    "{\"$cadence_float\":" <>
+      Jason.encode!(:erlang.float_to_binary(value, [:short])) <> "}"
+  end
 
   defp encode(value) when is_binary(value) do
     if String.valid?(value),
