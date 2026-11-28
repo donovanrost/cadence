@@ -38,7 +38,7 @@ defmodule Cadence.SemanticRuntime.MonitoringEvaluator do
   # in `metadata`, never a struct field: partition replay verifies results by equality.
   defp apply_rule_digest(%MonitoringPlan{rule_digest: nil}, prior), do: {prior, nil}
 
-  defp apply_rule_digest(%MonitoringPlan{rule_digest: digest}, prior) do
+  defp apply_rule_digest(%MonitoringPlan{rule_digest: digest} = plan, prior) do
     case Map.get(prior, :rule_digest) do
       nil ->
         {prior, nil}
@@ -50,9 +50,13 @@ defmodule Cadence.SemanticRuntime.MonitoringEvaluator do
         reset =
           Map.merge(prior, %{violation_count: 0, conformance_count: 0, candidate_state: nil})
 
-        {reset, %{from: previous, to: digest}}
+        {reset, %{from: previous, to: digest, rule_ids: rule_ids(plan)}}
     end
   end
+
+  # The compiled policy's `rule_id`, so the episode event says which rule's digest changed.
+  defp rule_ids(%MonitoringPlan{rule_id: nil}), do: []
+  defp rule_ids(%MonitoringPlan{rule_id: rule_id}), do: [rule_id]
 
   defp put_rule_digest(next, %MonitoringPlan{rule_digest: nil}), do: next
 

@@ -10,6 +10,7 @@ defmodule Cadence.Comms.TransportStore do
   alias Cadence.Comms.{
     ListenClaims,
     PeerAddresses,
+    ProviderDeliveryListenerRead,
     ProviderTransportBasis,
     Transport,
     TransportKind,
@@ -22,7 +23,9 @@ defmodule Cadence.Comms.TransportStore do
   alias Cadence.Missions
   alias Cadence.Persistence.BulkLookup
   alias Cadence.Platform.RedactedJson
+  alias Cadence.Platform.ScopedReadUpdates
   alias Cadence.Repo
+  alias Cadence.Secrets.ProviderDeliveryListenerIdentity, as: ServerIdentity
 
   @max_batch_size 100
 
@@ -39,13 +42,26 @@ defmodule Cadence.Comms.TransportStore do
       ListenClaims.guard(
         normalized_transport.mission_id,
         claimed_configuration(normalized_transport),
-        fn -> store_version(normalized_transport, opts) end
+        fn -> store_version(normalized_transport, opts) end,
+        {:transport, normalized_transport.transport_id}
       )
+      |> publish_mtls_transport(normalized_transport)
     else
       {:error, %Changeset{} = changeset} -> {:error, changeset}
       {:error, reason} -> {:error, reason}
     end
   end
+
+  defp publish_mtls_transport(result, %{configuration: %{"delivery_auth" => "mtls"}} = transport) do
+    ScopedReadUpdates.publish_result(
+      result,
+      :configuration_changed,
+      transport.organization_id,
+      transport.mission_id
+    )
+  end
+
+  defp publish_mtls_transport(result, _transport), do: result
 
   defp store_version(%Transport{version: 1} = transport, _opts), do: insert_transport(transport)
 
@@ -73,8 +89,7 @@ defmodule Cadence.Comms.TransportStore do
     ])
   end
 
-  # TLS delivery is provisionable only after the inbound TLS gate lands. In particular, a raw
-  # transport carrying the new mode must never be materialized as a plaintext listener.
+  # Only a provider-managed transport may bind a provider delivery credential.
   defp allow_delivery_auth(%Transport{
          origin: :direct,
          lifecycle_state: :active,
@@ -83,7 +98,7 @@ defmodule Cadence.Comms.TransportStore do
        when is_map(config) do
     case Map.get(config, "delivery_auth", Map.get(config, :delivery_auth)) do
       mode when mode in [nil, "plaintext", :plaintext] -> :ok
-      mode when mode in ["mtls", :mtls] -> {:error, :provider_delivery_mtls_unavailable}
+      mode when mode in ["mtls", :mtls] -> {:error, :delivery_binding_unavailable}
       _unknown -> {:error, :provider_delivery_auth_unsupported}
     end
   end
@@ -132,7 +147,8 @@ defmodule Cadence.Comms.TransportStore do
     do: {:error, :delivery_auth_downgrade_required}
 
   defp insert_transport(normalized_transport) do
-    with {:ok, transport_with_provider} <- materialize_provider_profile(normalized_transport),
+    with :ok <- validate_delivery_binding(normalized_transport),
+         {:ok, transport_with_provider} <- materialize_provider_profile(normalized_transport),
          {:ok, _row} <-
            Repo.insert(TransportRow.changeset(transport_with_provider),
              on_conflict: :nothing,
@@ -149,6 +165,23 @@ defmodule Cadence.Comms.TransportStore do
       {:error, reason} -> {:error, reason}
     end
   end
+
+  defp validate_delivery_binding(
+         %Transport{
+           lifecycle_state: :active,
+           configuration: %{"delivery_auth" => "mtls"} = config
+         } = transport
+       ) do
+    ProviderDeliveryListenerRead.check_binding(
+      transport.organization_id,
+      transport.mission_id,
+      transport.mission_provider_id,
+      transport.transport_id,
+      config["delivery_credential_ref"]
+    )
+  end
+
+  defp validate_delivery_binding(_transport), do: :ok
 
   # Only an active transport claims its listen endpoint; an archived one releases it.
   defp claimed_configuration(%Transport{lifecycle_state: :active, configuration: config}),
@@ -505,7 +538,9 @@ defmodule Cadence.Comms.TransportStore do
     with {:ok, entry} <- TransportKind.fetch(transport.transport_kind),
          {:ok, provider_profile} <- entry.module.materialize_provider_profile(transport),
          {:ok, provider_profile} <-
-           ProfileStore.persist_provider_profile(transport.organization_id, provider_profile) do
+           ProfileStore.persist_provider_profile(transport.organization_id, provider_profile,
+             projecting_transport: transport.transport_id
+           ) do
       {:ok,
        %Transport{
          transport
@@ -580,7 +615,9 @@ defmodule Cadence.Comms.TransportStore do
          "direction" => "downlink",
          "egress" => %{"delivery_credential_ref" => "delivery_credential_" <> id}
        })
-       when byte_size(id) in 1..255, do: {:error, :provider_delivery_mtls_unavailable}
+       when byte_size(id) in 1..255 do
+    if ServerIdentity.configured?(), do: :ok, else: {:error, :delivery_tls_identity_unavailable}
+  end
 
   defp require_delivery_auth(_provider, profile) do
     case profile["delivery_auth"] do

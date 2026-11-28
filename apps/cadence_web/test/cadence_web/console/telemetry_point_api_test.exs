@@ -3,14 +3,14 @@ defmodule CadenceWeb.Console.TelemetryPointAPITest do
   use CadenceWeb.ConnCase, async: false
 
   alias Cadence.Telemetry.CurrentValueStore
-  alias CadenceWeb.{ControlPlaneApiFixtures, TestFixtures}
+  alias CadenceWeb.{MissionReadModelFixtures, TestFixtures}
 
   setup do
     org = TestFixtures.persist_org!()
     user = TestFixtures.persist_user!()
     TestFixtures.grant_membership!(user, org)
     mission = TestFixtures.persist_mission!(org)
-    ControlPlaneApiFixtures.seed_mission_read_models(org.organization_id, mission.mission_id)
+    MissionReadModelFixtures.seed_mission_read_models(org.organization_id, mission.mission_id)
 
     {:ok, _activation} =
       Cadence.Activations.record_binding_set_activation(

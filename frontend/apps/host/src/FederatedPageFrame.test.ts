@@ -44,15 +44,15 @@ test("a surface standing in for a host page gets that page's host-drawn header",
     props: {
       application: {
         ...application,
-        hostRoute: "/missions/:mission_id/ops/data-operations/manage",
+        hostRoute: "/missions/:mission_id/ops/planning/new",
       },
       context,
     },
     slots: { default: () => h("p", { id: "surface" }) },
   });
-  expect(wrapper.get("#host-page-heading h1").text()).toBe("Data Operations");
+  expect(wrapper.get("#host-page-heading h1").text()).toBe("Plan Fleet Horizon");
   expect(wrapper.get(".cd-page-breadcrumbs").text()).toContain("Kestrel");
-  expect(wrapper.get('a[href="/missions/m1/ops/data-operations"]').text()).toBe("Data Operations");
+  expect(wrapper.get('a[href="/missions/m1/ops/planning"]').text()).toBe("Fleet Planning");
   expect(wrapper.find("#surface").exists()).toBe(true);
   wrapper.unmount();
 });

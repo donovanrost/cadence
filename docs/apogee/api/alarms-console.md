@@ -82,7 +82,9 @@ One episode in the same shape plus `events`, oldest first:
 monitoring, `at` and `receipt_time` as in `trigger`); `null` for people's actions.
 
 `kind`: `raised | escalated | deescalated | acknowledged | assigned | unassigned | note |
-handed_off | cleared`. `escalated` payload has `from`, `to`, `acknowledgement_cleared`; `cleared`
+handed_off | cleared | rule_changed` (`rule_changed`, #451: the rules in force on the alarm's
+parameter changed while it was open; payload `from` and `to` digests, `rule_ids`, `policy_id`; the
+episode itself is unchanged; a decoder that does not know it shows the server's text). `escalated` payload has `from`, `to`, `acknowledgement_cleared`; `cleared`
 has `cause`, `unacknowledged`; notes carry the text in the payload.
 
 Errors: `404 episode_not_found`.

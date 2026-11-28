@@ -1,13 +1,11 @@
 <script setup lang="ts">
-import {
-  OpsDataSources,
-  type DataSourcesPresentation,
-} from "@cadence/data-operations/data-sources";
+import DataSourcesWorkspaceLink from "./DataSourcesWorkspaceLink.vue";
+import type { DataSourcesPresentation } from "./data-sources-presentation";
 
 defineOptions({ inheritAttrs: false });
 const props = defineProps<{ page: DataSourcesPresentation }>();
 </script>
 
 <template>
-  <OpsDataSources :page="props.page" v-bind="$attrs" />
+  <DataSourcesWorkspaceLink :page="props.page" v-bind="$attrs" />
 </template>

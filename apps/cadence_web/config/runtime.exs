@@ -1,5 +1,21 @@
 import Config
 
+if config_env() == :dev do
+  if directory = System.get_env("CADENCE_DEV_DELIVERY_TLS_DIRECTORY") do
+    backend = {Cadence.Secrets.DevelopmentDeliveryTLS, :resolve}
+
+    config :cadence, :provider_delivery_listener,
+      secret_reference: "dev-delivery-listener",
+      secret_backend: backend,
+      development_directory: directory
+
+    config :cadence, :provider_delivery_issuer,
+      issuer_reference: "dev-delivery-issuer",
+      secret_backend: backend,
+      development_directory: directory
+  end
+end
+
 config :cadence_web, :drain_file, System.get_env("CADENCE_DRAIN_FILE")
 
 case System.get_env("CADENCE_STORAGE_PATH") do

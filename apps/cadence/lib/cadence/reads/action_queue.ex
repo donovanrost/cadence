@@ -282,10 +282,8 @@ defmodule Cadence.Reads.ActionQueue do
       |> Map.get(:findings, [])
       |> Enum.filter(&(&1.severity in @setup_severities))
 
-    limits_app_missing? = Enum.any?(findings, &(&1.cause == :"app_not_installed:limits"))
-
     limits =
-      if Map.get(input, :limits_configured?, true) or limits_app_missing? do
+      if Map.get(input, :limits_configured?, true) do
         []
       else
         [

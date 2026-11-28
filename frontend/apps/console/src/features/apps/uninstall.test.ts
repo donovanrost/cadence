@@ -13,8 +13,8 @@ vi.mock("./api.ts", async (original) => ({
 }));
 afterEach(() => call.fn.mockReset());
 const app = (state: App["state"]): App => ({
-  key: "limits",
-  name: "Limits",
+  key: "comms",
+  name: "Communications",
   platform: false,
   description: null,
   installed: state === "installed",
@@ -53,15 +53,15 @@ describe("Uninstall on a mission app (#679)", () => {
       ?.trigger("click");
     expect(call.fn).not.toHaveBeenCalled();
     const text = w.find("dialog").text();
-    expect(text).toContain("Uninstall Limits?");
+    expect(text).toContain("Uninstall Communications?");
     expect(text).toContain("It stops on 3 spacecraft in EARENDIL.");
     expect(text).toContain("Its configuration is kept.");
     await w
       .findAll("dialog button")
-      .find((b) => b.text() === "Uninstall Limits")
+      .find((b) => b.text() === "Uninstall Communications")
       ?.trigger("click");
     await flushPromises();
-    expect(call.fn).toHaveBeenCalledWith(missionId("m-1"), "limits", "uninstall", null);
+    expect(call.fn).toHaveBeenCalledWith(missionId("m-1"), "comms", "uninstall", null);
     expect(w.emitted("changed")).toHaveLength(1);
   });
 
@@ -77,7 +77,7 @@ describe("Uninstall on a mission app (#679)", () => {
       ?.trigger("click");
     await w
       .findAll("dialog button")
-      .find((b) => b.text() === "Uninstall Limits")
+      .find((b) => b.text() === "Uninstall Communications")
       ?.trigger("click");
     await flushPromises();
     expect(w.find('[role="alert"]').exists()).toBe(true);
@@ -90,7 +90,7 @@ describe("Uninstall on a mission app (#679)", () => {
     await open?.trigger("click");
     await w
       .findAll("dialog button")
-      .find((b) => b.text() === "Uninstall Limits")
+      .find((b) => b.text() === "Uninstall Communications")
       ?.trigger("click");
     await flushPromises();
     // The screen refetches and hands the row its new state: the Uninstall button leaves.

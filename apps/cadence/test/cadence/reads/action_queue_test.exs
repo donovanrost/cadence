@@ -327,24 +327,6 @@ defmodule Cadence.Reads.ActionQueueTest do
       assert result.counts.p3 == 3
     end
 
-    test "a missing limits app replaces the limits-not-configured item" do
-      result =
-        build(%{
-          limits_configured?: false,
-          findings: [
-            %{
-              id: "apps.app_not_installed:limits",
-              area: :apps,
-              severity: :not_set_up,
-              cause: :"app_not_installed:limits",
-              affected_count: 0
-            }
-          ]
-        })
-
-      assert ids(result) == ["setup:apps.app_not_installed:limits"]
-    end
-
     test "an empty mission has an empty queue" do
       assert %{items: [], counts: %{p1: 0, p2: 0, p3: 0}} = build(%{})
     end

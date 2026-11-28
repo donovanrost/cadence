@@ -60,14 +60,6 @@ const routeSurfaces = [
     "cadence.ops.telemetry_explore",
     ["apply_filters", "apply_question"],
   ],
-  ["data_operations", "operations", "Data Operations", "cadence.ops.data_operations", []],
-  [
-    "data_operations_manage",
-    "operations",
-    "Manage Data Operations",
-    "cadence.ops.data_operations_manage",
-    [],
-  ],
   [
     "data_sources",
     "configuration",
@@ -125,7 +117,6 @@ const routeSurfaces = [
 export const routeQueryContracts = {
   data_source_registration: { subjectParam: null, queryParams: [] },
   data_source_settings: { subjectParam: "data_source_id", queryParams: ["data_source_id"] },
-  data_operations_manage: { subjectParam: null, queryParams: ["group"] },
 } as const;
 
 const makeSurface = (

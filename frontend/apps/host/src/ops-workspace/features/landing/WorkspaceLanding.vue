@@ -25,7 +25,7 @@ const descriptions: Record<string, string> = {
   observe: "Follow telemetry, investigate changes and inspect mission events.",
   act: "Prepare commands and review operations that need a decision.",
   plan: "Coordinate requirements, contact plans and scheduled passes.",
-  system: "Inspect source health and manage historical data workflows.",
+  system: "Inspect source health and configure data sources.",
 };
 </script>
 

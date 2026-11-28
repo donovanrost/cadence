@@ -28,19 +28,32 @@ defmodule Cadence.SemanticObservations do
 
   @spec persist_many([map()]) :: :ok | {:error, term()}
   def persist_many(prepared_results) when is_list(prepared_results) do
+    rule_changes = Enum.flat_map(prepared_results, &rule_changes/1)
+
     prepared_results
     |> Enum.reduce({Multi.new(), [], []}, &add_result/2)
-    |> persist_transitions()
+    |> persist_transitions(rule_changes)
   end
 
-  defp persist_transitions({_operations, [], []}), do: :ok
+  defp persist_transitions({_operations, [], []}, []), do: :ok
 
-  defp persist_transitions({operations, evaluations, transition_changesets}) do
+  # A batch with a change of rules but no transition: only the episode events.
+  defp persist_transitions({_operations, [], []}, rule_changes) do
+    Multi.new() |> add_rule_changes(rule_changes) |> run_transaction()
+  end
+
+  defp persist_transitions({operations, evaluations, transition_changesets}, rule_changes) do
     evaluations
     |> evaluation_multi(transition_changesets, operations)
     |> Multi.run(:fleet_alarm_summaries, fn repo, _changes ->
       refresh_fleet_alarms(repo, evaluations)
     end)
+    |> add_rule_changes(rule_changes)
+    |> run_transaction()
+  end
+
+  defp run_transaction(multi) do
+    multi
     |> Repo.transaction()
     |> case do
       {:ok, changes} ->
@@ -62,6 +75,36 @@ defmodule Cadence.SemanticObservations do
     |> then(&FleetAlarms.refresh_batch(repo, &1))
 
     {:ok, :refreshed}
+  end
+
+  # The `rule_changed` of every monitoring result (the rules in force on its parameter changed,
+  # #451 T2) as an episode observation, in the batch's order. A result that opened an alarm from
+  # normal is left out: its episode ran under the new rules from its first sample.
+  defp rule_changes(%{semantic_result: %Result{} = result} = prepared) do
+    updates = Map.new(result.parameter_updates, &{&1.update_id, &1})
+    context = semantic_context(prepared)
+    evidence_id = prepared.raw_evidence.evidence_id
+
+    for {monitoring, index} <- Enum.with_index(result.monitoring_results),
+        %{} = change <- [Map.get(monitoring.metadata || %{}, :rule_changed)],
+        not opened_here?(monitoring),
+        update = Map.fetch!(updates, monitoring.update_id) do
+      attrs = MonitoringEvaluationRow.attrs(monitoring, update, context)
+      {{:alarm_rule_changed, evidence_id, index}, Sources.rule_changed(attrs, update, change)}
+    end
+  end
+
+  defp rule_changes(_prepared), do: []
+
+  defp opened_here?(%{transition: %{from: :normal}}), do: true
+  defp opened_here?(_monitoring), do: false
+
+  defp add_rule_changes(multi, rule_changes) do
+    Enum.reduce(rule_changes, multi, fn {key, observation}, acc ->
+      Multi.run(acc, {:alarm_episode, key, observation.ref}, fn repo, _changes ->
+        Episodes.rule_changed(repo, observation)
+      end)
+    end)
   end
 
   defp notify_alarm_changes(changes) do

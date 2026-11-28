@@ -7,11 +7,11 @@ defmodule Cadence.Reads.PointConditionsTest do
   """
   use Cadence.DataCase, async: false
 
-  alias Cadence.Limits.{Evaluator, Event, Store}
+  alias Cadence.Limits.{Event, Store}
   alias Cadence.MonitoringPlanFixtures
   alias Cadence.Reads.PointConditions
   alias Cadence.SemanticObservations.LatestAlarmStateRow
-  alias Cadence.SemanticRuntime.PlanDecoder
+  alias Cadence.SemanticRuntime.{PlanDecoder, ThresholdLimits}
   alias Cadence.Spacecraft
   alias Cadence.SpacecraftStore
   alias Cadence.Telemetry.{CurrentValueStore, Sample, SampleRecords}
@@ -82,8 +82,8 @@ defmodule Cadence.Reads.PointConditionsTest do
       limit_set_name: "d",
       evaluated_value: 5,
       limit_state: state,
-      normalized_state: Evaluator.normalize_state(state),
-      violation: Evaluator.violation?(state),
+      normalized_state: ThresholdLimits.normalize_state(state),
+      violation: ThresholdLimits.violation?(state),
       generation_time: nil,
       receipt_time: at,
       provenance: %{}

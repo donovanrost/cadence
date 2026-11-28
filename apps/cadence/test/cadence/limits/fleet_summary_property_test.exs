@@ -9,8 +9,9 @@ defmodule Cadence.Limits.FleetSummaryPropertyTest do
   """
   use Cadence.DataCase, async: false
 
-  alias Cadence.Limits.{Evaluator, Event, Store}
+  alias Cadence.Limits.{Event, Store}
   alias Cadence.Limits.Store.{FleetSummary, LatestStateRow}
+  alias Cadence.SemanticRuntime.ThresholdLimits
 
   @org "org-summary-prop"
   @mission "mission-summary-prop"
@@ -140,8 +141,8 @@ defmodule Cadence.Limits.FleetSummaryPropertyTest do
       limit_set_name: "d",
       evaluated_value: id,
       limit_state: state,
-      normalized_state: Evaluator.normalize_state(state),
-      violation: Evaluator.violation?(state),
+      normalized_state: ThresholdLimits.normalize_state(state),
+      violation: ThresholdLimits.violation?(state),
       generation_time: nil,
       # Some older than what is stored (an upsert ignores those), some equal, some newer.
       receipt_time: DateTime.add(~U[2026-11-26 12:00:00.000000Z], :rand.uniform(50), :second),

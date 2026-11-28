@@ -3,7 +3,7 @@ defmodule CadenceWeb.Console.PointConditionAPITest do
 
   alias Cadence.Repo
   alias Cadence.SemanticObservations.LatestAlarmStateRow
-  alias CadenceWeb.ControlPlaneApiFixtures
+  alias CadenceWeb.MissionReadModelFixtures
   alias CadenceWeb.TestFixtures
 
   setup do
@@ -11,7 +11,7 @@ defmodule CadenceWeb.Console.PointConditionAPITest do
     user = TestFixtures.persist_user!()
     TestFixtures.grant_membership!(user, org)
     mission = TestFixtures.persist_mission!(org)
-    ControlPlaneApiFixtures.seed_mission_read_models(org.organization_id, mission.mission_id)
+    MissionReadModelFixtures.seed_mission_read_models(org.organization_id, mission.mission_id)
 
     %{user: user, org: org, mission: mission}
   end

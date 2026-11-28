@@ -19,3 +19,4 @@ export {
   windowQuery,
   type WindowSel,
 } from "./window.ts";
+export { MONITORING_EDITS_PENDING } from "./monitoring-words.ts";

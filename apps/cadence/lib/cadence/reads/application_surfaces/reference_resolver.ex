@@ -17,18 +17,14 @@ defmodule Cadence.Reads.ApplicationSurfaces.ReferenceResolver do
     ReferencePage
   }
 
-  alias Cadence.Reads.ApplicationSurfaces.ReferenceProviders.{
-    CanonicalTelemetryPoints,
-    TelemetryCatalogRevisions
-  }
+  alias Cadence.Reads.ApplicationSurfaces.ReferenceProviders.TelemetryCatalogRevisions
 
   @max_select_options 500
   @max_search_options 50
   @max_query_length 120
 
   @providers %{
-    "cadence.catalog.telemetry_revisions" => %{1 => TelemetryCatalogRevisions},
-    "cadence.telemetry.canonical_points" => %{1 => CanonicalTelemetryPoints}
+    "cadence.catalog.telemetry_revisions" => %{1 => TelemetryCatalogRevisions}
   }
 
   @spec validate_providers() ::

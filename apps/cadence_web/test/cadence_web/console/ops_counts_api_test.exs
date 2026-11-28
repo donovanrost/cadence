@@ -3,7 +3,7 @@ defmodule CadenceWeb.Console.OpsCountsAPITest do
 
   alias Cadence.Control.MissionRuntimeStatus
   alias Cadence.MonitoringPlanFixtures
-  alias CadenceWeb.ControlPlaneApiFixtures
+  alias CadenceWeb.MissionReadModelFixtures
   alias CadenceWeb.TestFixtures
 
   setup do
@@ -84,7 +84,7 @@ defmodule CadenceWeb.Console.OpsCountsAPITest do
   end
 
   test "counts an active alarm episode and the fleet", c do
-    ControlPlaneApiFixtures.seed_mission_read_models(c.org.organization_id, c.mission.mission_id)
+    MissionReadModelFixtures.seed_mission_read_models(c.org.organization_id, c.mission.mission_id)
     activate_monitoring(c, above: 10)
     data = c |> counts() |> json_response(200) |> Map.fetch!("data")
 
@@ -113,7 +113,7 @@ defmodule CadenceWeb.Console.OpsCountsAPITest do
   # #481, now from the plan (#451 T3a): "limits configured" follows the ACTIVE monitoring plan, so a
   # generation whose plan evaluates nothing turns it off everywhere it's shown.
   test "limits aren't configured once the active plan evaluates nothing", c do
-    ControlPlaneApiFixtures.seed_mission_read_models(c.org.organization_id, c.mission.mission_id)
+    MissionReadModelFixtures.seed_mission_read_models(c.org.organization_id, c.mission.mission_id)
     assert configured(c) == {false, false, false}
 
     activate_monitoring(c, above: 10)

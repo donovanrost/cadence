@@ -1,7 +1,7 @@
 defmodule CadenceWeb.Console.AlarmAPITest do
   use CadenceWeb.ConnCase, async: false
 
-  alias CadenceWeb.ControlPlaneApiFixtures
+  alias CadenceWeb.MissionReadModelFixtures
   alias CadenceWeb.TestFixtures
 
   setup do
@@ -21,7 +21,7 @@ defmodule CadenceWeb.Console.AlarmAPITest do
 
   describe "with limit evaluations" do
     setup c do
-      ControlPlaneApiFixtures.seed_mission_read_models(
+      MissionReadModelFixtures.seed_mission_read_models(
         c.org.organization_id,
         c.mission.mission_id
       )

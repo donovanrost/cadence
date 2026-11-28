@@ -82,9 +82,9 @@ defmodule Cadence.Applications.RegistryTest do
     assert {:error, :unsupported_application_version} =
              Registry.fetch("telemetry_decom", 99)
 
-    assert {:ok, derived} = Registry.fetch_available("derived_telemetry")
-    assert derived.availability == :available
-    assert derived.installable_scopes == [:mission]
+    assert {:ok, decom} = Registry.fetch_available("telemetry_decom")
+    assert decom.availability == :available
+    assert decom.installable_scopes == [:spacecraft]
 
     assert {:ok, cfdp} = Registry.fetch("cfdp")
     assert cfdp.availability == :roadmap
@@ -107,51 +107,45 @@ defmodule Cadence.Applications.RegistryTest do
            ]
 
     assert Enum.map(Registry.available_for_scope(:mission), & &1.application_key) == [
-             "derived_telemetry",
-             "limits",
              "ops_console"
            ]
 
     assert Enum.sort(Registry.known_keys()) == [
              "cfdp",
-             "derived_telemetry",
-             "limits",
              "ops_console",
              "telemetry_decom"
            ]
   end
 
   test "resolves ordered workspace surfaces by stable id" do
-    assert {:ok, definition} = Registry.fetch_available("limits")
+    assert {:ok, definition} = Registry.fetch_available("telemetry_decom")
 
     assert {:ok, %SurfaceDefinition{} = manage} =
-             Registry.fetch_surface(definition, :mission, "manage")
+             Registry.fetch_surface(definition, :spacecraft, "manage")
 
     assert manage.references == %{
-             "point_id" => %ReferenceDefinition{
-               provider_id: "cadence.telemetry.canonical_points",
-               version: 1,
-               mode: :search,
-               result_limit: 20
+             "catalog_revision_id" => %ReferenceDefinition{
+               provider_id: "cadence.catalog.telemetry_revisions",
+               version: 1
              }
            }
 
-    assert Enum.map(Registry.workspace_surfaces(definition, :mission), & &1.surface_id) == [
-             "manage",
-             "activity"
+    # Ordered by navigation order (20, 30), not by declaration order.
+    assert Enum.map(Registry.workspace_surfaces(definition, :spacecraft), & &1.surface_id) == [
+             "packet_bindings",
+             "manage"
            ]
 
-    assert {:ok, %SurfaceDefinition{} = activity} =
-             Registry.fetch_surface(definition, :mission, "activity")
+    assert {:ok, %SurfaceDefinition{} = bindings} =
+             Registry.fetch_surface(definition, :spacecraft, "packet_bindings")
 
-    assert activity.purpose == :activity
-    assert activity.navigation.label == "Current posture"
-    assert activity.actions == []
-
-    assert {:error, :unknown_surface} =
-             Registry.fetch_surface(definition, :mission, "not-declared")
+    assert bindings.navigation.label == "Packet bindings"
+    assert bindings.actions == ["save_packet_bindings"]
 
     assert {:error, :unknown_surface} =
-             Registry.fetch_surface(definition, :spacecraft, "activity")
+             Registry.fetch_surface(definition, :spacecraft, "not-declared")
+
+    assert {:error, :unknown_surface} =
+             Registry.fetch_surface(definition, :mission, "manage")
   end
 end

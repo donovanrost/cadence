@@ -29,8 +29,10 @@ episode = %{id, source: :catalog_monitoring | :ground_limit,
   acknowledged_at, acknowledged_by: actor | nil, assignee: %{id, name} | nil, assigned_at}
 
 event = %{id, kind: :raised | :escalated | :deescalated | :acknowledged | :assigned | :unassigned
-                    | :note | :handed_off | :cleared,
+                    | :note | :handed_off | :cleared | :rule_changed,
           actor: actor | nil, at, payload: map}
+# rule_changed (#451): the rules in force on the parameter changed while the episode was open:
+# %{"from" => digest, "to" => digest, "rule_ids" => [rule_id], "policy_id"}; the episode is unchanged.
 # escalated payload: %{"from", "to", "acknowledgement_cleared" => boolean, ...}; cleared: %{"cause", "unacknowledged"}
 
 summary = %{active: n, critical: %{new: n, acknowledged: n}, caution: %{new: n, acknowledged: n}}

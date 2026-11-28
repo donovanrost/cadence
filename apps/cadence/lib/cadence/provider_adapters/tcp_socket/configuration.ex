@@ -43,27 +43,17 @@ defmodule Cadence.ProviderAdapters.TCPSocket.Configuration do
         "listen" -> :listen
       end
 
-    ingress_protocol_family =
-      case Map.get(
-             configuration,
-             :ingress_protocol_family,
-             Map.get(configuration, "ingress_protocol_family")
-           ) do
-        nil ->
-          nil
-
-        protocol_family when is_atom(protocol_family) ->
-          protocol_family
-
-        protocol_family when is_binary(protocol_family) ->
-          String.to_existing_atom(protocol_family)
-      end
+    peers =
+      Map.get(configuration, :expected_peer_addresses, configuration["expected_peer_addresses"])
 
     %{
       mode: mode,
+      delivery_auth: delivery_auth(configuration),
+      delivery_credential_ref:
+        Map.get(configuration, :delivery_credential_ref, configuration["delivery_credential_ref"]),
       host: Map.get(configuration, :host, Map.get(configuration, "host", "127.0.0.1")),
       port: Map.get(configuration, :port, Map.get(configuration, "port", 0)),
-      ingress_protocol_family: ingress_protocol_family,
+      ingress_protocol_family: ingress_protocol_family(configuration),
       fixed_message_bytes:
         Map.get(
           configuration,
@@ -85,10 +75,8 @@ defmodule Cadence.ProviderAdapters.TCPSocket.Configuration do
       shared_listener?: shared_listener_config?(configuration),
       # (#990, DECISIONS #115) The peers a listening endpoint accepts; a peer outside them is
       # refused before any frame is read.
-      allowed_peers:
-        configuration
-        |> Map.get(:expected_peer_addresses, Map.get(configuration, "expected_peer_addresses"))
-        |> PeerAddresses.ranges(),
+      allowed_peers: PeerAddresses.ranges(if(is_list(peers), do: peers)),
+      invalid_allowlist?: PeerAddresses.classify(peers) in [:invalid, :too_broad],
       # (ux U50) How long our own connection goes without reads before a second connection for
       # this contact counts as a refusal (refuse_second_connection/2).
       quiet_connection_ms:
@@ -101,6 +89,25 @@ defmodule Cadence.ProviderAdapters.TCPSocket.Configuration do
         # A key present with null means the default (api-ops): never fail a contact start on it.
         |> Kernel.||(@quiet_connection_ms)
     }
+  end
+
+  defp ingress_protocol_family(configuration) do
+    case Map.get(
+           configuration,
+           :ingress_protocol_family,
+           configuration["ingress_protocol_family"]
+         ) do
+      family when is_atom(family) -> family
+      family when is_binary(family) -> String.to_existing_atom(family)
+    end
+  end
+
+  defp delivery_auth(configuration) do
+    case Map.get(configuration, :delivery_auth, configuration["delivery_auth"]) do
+      value when value in [nil, :plaintext, "plaintext"] -> :plaintext
+      value when value in [:mtls, "mtls"] -> :mtls
+      _invalid -> :unsupported
+    end
   end
 
   defp coerce_integer(value) when is_binary(value) do
