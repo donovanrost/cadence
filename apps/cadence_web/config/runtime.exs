@@ -279,33 +279,6 @@ case System.get_env("CADENCE_DATA_SOURCE_CREDENTIAL_ENV_PROFILES") ||
     end
 end
 
-decode_frontend_release_json = fn env_name, default ->
-  case System.get_env(env_name) do
-    nil ->
-      default
-
-    encoded ->
-      case Jason.decode(encoded) do
-        {:ok, value} when is_list(value) or is_map(value) -> value
-        {:ok, _other} -> raise "#{env_name} must decode to a JSON array or object"
-        {:error, reason} -> raise "#{env_name} is invalid JSON: #{inspect(reason)}"
-      end
-  end
-end
-
-config :cadence_web, :frontend_release_publication,
-  trust_records: decode_frontend_release_json.("CADENCE_FRONTEND_RELEASE_TRUST_RECORDS_JSON", []),
-  allowed_origins:
-    decode_frontend_release_json.("CADENCE_FRONTEND_RELEASE_ALLOWED_ORIGINS_JSON", [])
-
-publisher_token_sha256 =
-  case System.get_env("CADENCE_FRONTEND_RELEASE_PUBLISHER_TOKEN") do
-    token when is_binary(token) and byte_size(token) > 0 -> :crypto.hash(:sha256, token)
-    _unset_or_empty -> nil
-  end
-
-config :cadence_web, :frontend_release_publisher, token_sha256: publisher_token_sha256
-
 config :cadence_web,
        :admin_mode_ttl_seconds,
        System.get_env("CADENCE_ADMIN_MODE_TTL_SECONDS", "3600") |> String.to_integer()

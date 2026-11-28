@@ -49,14 +49,6 @@ export const setupMissionRoutes: RouteRecordRaw[] = [
     meta: { mode: "setup", nav: "spacecraft", title: "Configuration" },
   },
   {
-    // L19 (ux AppSurfaces.md; plans/spacecraft-apps.md): a spacecraft-scope app in the L9 host frame.
-    path: "setup/spacecraft/:spacecraftId/apps/:appKey/:surface?",
-    name: "setup.spacecraft.app",
-    component: () => import("@/features/apps/AppSurfaceScreen.vue"),
-    props: (to) => ({ spacecraftId: spacecraftIdParam(paramText(to.params, "spacecraftId")) }),
-    meta: { mode: "setup", nav: "spacecraft", title: "App" },
-  },
-  {
     path: "setup/profiles",
     name: "setup.profiles",
     component: () => import("@/features/profiles/ProfilesListScreen.vue"),
@@ -201,13 +193,6 @@ export const setupMissionRoutes: RouteRecordRaw[] = [
     name: "setup.apps",
     component: () => import("@/features/apps/AppsScreen.vue"),
     meta: { mode: "setup", nav: "apps", title: "Apps" },
-  },
-  {
-    // L9 (ux screens/AppSurfaces.md): the app's surface in the console host; no :surface opens its first.
-    path: "setup/apps/:appKey/:surface?",
-    name: "setup.app",
-    component: () => import("@/features/apps/AppSurfaceScreen.vue"),
-    meta: { mode: "setup", nav: "apps", title: "App" },
   },
   {
     path: "setup/settings/:section?",

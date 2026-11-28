@@ -3,13 +3,12 @@ import type { MissionId } from "@/api/index.ts";
 import type { SpacecraftId } from "@/api";
 import { ApListRow, ApTag } from "@/ui";
 import AppActions from "./AppActions.vue";
-import type { App } from "./api.ts";
-import type { AppStatus } from "./host.ts";
+import type { App, AppStatus } from "./api.ts";
 import type { UninstallScope } from "./uninstall-words.ts";
 import { versionMeta } from "./versions.ts";
 
-/** One app: name (a link to its pages once installed, L9), what it does or what's off without it. */
-/** `spacecraftId`: the row is that spacecraft's (L19): its pages and verbs are the spacecraft's. */
+/** One app: its name, what it does or what's off without it, and its verbs. */
+/** `spacecraftId`: the row is that spacecraft's (L19): its verbs are the spacecraft's. */
 defineProps<{
   missionId: MissionId;
   app: App;
@@ -41,7 +40,7 @@ const word = (a: App) =>
 <template>
   <ApListRow
     :state="app.state === 'installed' ? 'nominal' : 'off'"
-    :title="app.surfaces.length > 0 && app.installed ? undefined : app.name"
+    :title="app.name"
     :sentence="
       app.installed
         ? (app.description ?? undefined)
@@ -49,17 +48,6 @@ const word = (a: App) =>
     "
     :meta="versionMeta(app)"
   >
-    <template v-if="app.surfaces.length > 0 && app.installed" #title>
-      <RouterLink
-        :to="
-          spacecraftId
-            ? { name: 'setup.spacecraft.app', params: { spacecraftId, appKey: app.key } }
-            : { name: 'setup.app', params: { appKey: app.key } }
-        "
-        class="font-semibold text-readout hover:underline"
-        >{{ app.name }}</RouterLink
-      >
-    </template>
     <template #action>
       <div class="flex flex-col items-end gap-2">
         <ApTag :state="app.state === 'installed' ? 'nominal' : 'off'" :label="word(app)" />

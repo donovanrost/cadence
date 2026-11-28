@@ -1,9 +1,14 @@
 import type { MissionId } from "@/api/index.ts";
 import { decoders, request, type ApiResult, type Decoded, type SpacecraftId } from "@/api";
-import { appStatus, surfaceRow } from "./host.ts";
 
 /** Contract: docs/apogee/api/setup.md, `GET /missions/:id/apps` (A1). */
-const { array, boolean, nullable, object, oneOf, string, token } = decoders;
+const { array, boolean, known, nullable, object, oneOf, string, token } = decoders;
+
+/** L19: the server's status of the app on this scope; the row says only what the tag doesn't. */
+const appStatus = object({
+  state: known(["active", "not_installed", "disabled", "activation_pending", "failed"] as const),
+});
+export type AppStatus = Decoded<typeof appStatus>;
 
 const app = object({
   key: token,
@@ -21,9 +26,8 @@ const app = object({
   /** The server's word, by the registry's ordering, that `available_version` is newer (#191). */
   update_available: boolean,
   consequence_if_missing: nullable(string),
-  /** L9 (A1 extension, asked of api): the app's status and its surfaces; absent on older servers. */
+  /** L9 (A1 extension): the app's status; absent on older servers. */
   status: (v: unknown, path = "") => (v === undefined ? null : nullable(appStatus)(v, path)),
-  surfaces: (v: unknown, path = "") => (v === undefined ? [] : array(surfaceRow, 50)(v, path)),
 });
 export const appsReader = object({
   apps: array(app, 200),

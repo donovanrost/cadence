@@ -34,24 +34,6 @@ defmodule CadenceWeb.Plugs.RequireAuthenticatedScopeTest do
                "/console/acme/apollo/now?spacecraft_id=sc-1&window=24h"
     end
 
-    test "does not store application-host JSON GETs as browser return paths" do
-      conn = build_conn()
-      conn = init_test_session(conn, %{})
-
-      conn = %{
-        conn
-        | method: "GET",
-          request_path: "/api/cadence/application-host/v1/missions/mission-1/catalog",
-          query_string: ""
-      }
-
-      conn = RequireAuthenticatedScope.call(conn, [])
-
-      assert conn.halted
-      assert redirected_to(conn) == "/console/sign-in"
-      refute get_session(conn, :user_return_to)
-    end
-
     test "redirects an unauthenticated non-GET without storing a return path" do
       conn = build_conn()
       conn = conn |> init_test_session(%{}) |> then(&%{&1 | method: "POST"})

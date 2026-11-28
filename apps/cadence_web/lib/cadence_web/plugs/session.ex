@@ -1,7 +1,8 @@
-defmodule CadenceWeb.Plugs.FrontendReleasePublisherSession do
-  @moduledoc false
-
-  alias CadenceWeb.Plugs.FrontendReleaseRequestBody
+defmodule CadenceWeb.Plugs.Session do
+  @moduledoc """
+  The browser session cookie. A dev review server behind an HTTPS origin
+  (`:review_session_secure?`) marks the cookie secure.
+  """
 
   @spec init(Plug.opts()) :: Plug.opts()
   def init(opts) do
@@ -18,8 +19,6 @@ defmodule CadenceWeb.Plugs.FrontendReleasePublisherSession do
         do: opts.review,
         else: opts.plain
 
-    if FrontendReleaseRequestBody.publisher_request?(conn),
-      do: conn,
-      else: Plug.Session.call(conn, session_opts)
+    Plug.Session.call(conn, session_opts)
   end
 end

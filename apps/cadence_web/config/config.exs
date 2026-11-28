@@ -23,10 +23,4 @@ config :cadence_web, CadenceWeb.Mailer, adapter: Swoosh.Adapters.Local
 
 config :cadence_web, :admin_mode_ttl_seconds, 3_600
 
-config :cadence_web, :frontend_release_publication,
-  trust_records: [],
-  allowed_origins: []
-
-config :cadence_web, :frontend_release_publisher, token_sha256: nil
-
 import_config "#{config_env()}.exs"

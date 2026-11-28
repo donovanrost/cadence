@@ -19,7 +19,6 @@ function app(status: unknown): App {
         update_available: false,
         consequence_if_missing: null,
         status,
-        surfaces: [],
       },
     ],
     spacecraft_count: 1,
@@ -53,12 +52,12 @@ describe("an app row (L19)", () => {
     expect(w.text()).not.toContain("Status not known");
   });
 
-  it("a headless app (no surfaces, #669) is a plain row with its verbs and no link", () => {
-    const headless = { ...app({ state: "active", label: null, version: "1" }), platform: false };
+  it("an app row is its name and its verbs, with no link (#672)", () => {
+    const row = { ...app({ state: "active", label: null, version: "1" }), platform: false };
     const w = mount(AppRow, {
       props: {
         missionId: missionId("mission_1"),
-        app: headless,
+        app: row,
         canInstall: true,
         uninstallScope: { kind: "spacecraft" },
         spacecraftId: spacecraftId("sc_1"),

@@ -40,9 +40,6 @@ defmodule CadenceWeb.Endpoint do
     headers: %{"cache-control" => "public, max-age=31536000, immutable"}
   )
 
-  plug(CadenceWeb.Plugs.FrontendReleasePublisher)
-  plug(CadenceWeb.Plugs.FrontendReleaseRequestBody)
-
   # Dev only, and not on the console-e2e CI server (config/dev.exs `:tidewave?`): its toolbar loads
   # from tidewave.ai into every page and scans the DOM, which the fleet-scale budgets were timing
   # as Fleet's longest task (#867).
@@ -58,7 +55,7 @@ defmodule CadenceWeb.Endpoint do
     json_decoder: Jason
   )
 
-  plug(CadenceWeb.Plugs.FrontendReleasePublisherSession, @session_options)
+  plug(CadenceWeb.Plugs.Session, @session_options)
   plug(Plug.MethodOverride)
   plug(CadenceWeb.Plugs.PreserveRequestMethod)
   plug(Plug.Head)

@@ -6,9 +6,8 @@ defmodule CadenceWeb.Router do
   @dev_ingest_routes Application.compile_env(:cadence_web, :dev_ingest_routes, false)
 
   pipeline :browser do
-    plug(CadenceWeb.Plugs.BrowserAccepts)
+    plug(:accepts, ["html"])
     plug(:fetch_session)
-    plug(CadenceWeb.Plugs.ApplicationHostCSRF)
     plug(:protect_from_forgery)
     plug(:put_secure_browser_headers)
     plug(CadenceWeb.Plugs.FetchBrowserCurrentScope)
@@ -16,19 +15,6 @@ defmodule CadenceWeb.Router do
 
   pipeline :require_authenticated_scope do
     plug(CadenceWeb.Plugs.RequireAuthenticatedScope)
-  end
-
-  pipeline :require_authenticated_user do
-    plug(CadenceWeb.Plugs.RequireAuthenticatedScope)
-  end
-
-  pipeline :application_host_json do
-    plug(:accepts, ["json"])
-    plug(:fetch_session)
-    plug(:put_secure_browser_headers)
-    plug(CadenceWeb.Plugs.FetchBrowserCurrentScope)
-    plug(CadenceWeb.Plugs.RequireApplicationHostScope)
-    plug(CadenceWeb.Plugs.ApplicationHostSession)
   end
 
   pipeline :api do
@@ -68,14 +54,6 @@ defmodule CadenceWeb.Router do
     get("/ready", HealthController, :ready)
   end
 
-  pipeline :frontend_release_publisher do
-    plug(CadenceWeb.Plugs.FrontendReleasePublisher)
-  end
-
-  pipeline :frontend_release_artifact do
-    plug(:put_secure_browser_headers)
-  end
-
   # Dev only (#745): the mail the Local adapter holds, at /dev/mailbox and /dev/mailbox/json, so a
   # seed working through the public API can read an invitation link. Compiled in only when
   # dev.exs sets :dev_routes; there is no such route in test or prod builds.
@@ -83,16 +61,6 @@ defmodule CadenceWeb.Router do
     scope "/dev" do
       forward("/mailbox", Plug.Swoosh.MailboxPreview)
     end
-  end
-
-  scope "/", CadenceWeb do
-    pipe_through(:frontend_release_artifact)
-
-    get(
-      "/releases/:application_id/:release_id/artifacts/*artifact_path",
-      FrontendReleaseArtifactController,
-      :show
-    )
   end
 
   # Console SPA document. Every client-side route returns the same shell; unauthenticated GETs
@@ -522,8 +490,6 @@ defmodule CadenceWeb.Router do
       post("/apps/:key/install", AppController, :install)
       post("/apps/:key/disable", AppController, :disable)
       post("/apps/:key/uninstall", AppController, :uninstall)
-      # L9 surface host: one surface's application-host catalog, status and surfaces.
-      get("/apps/:key/surfaces/:surface_id/host", AppSurfaceController, :host)
 
       # -- Events and scheduling (owner: api, DECISIONS #26). Contracts: ops.md, scheduling.md
       get("/events", EventController, :index)
@@ -713,33 +679,5 @@ defmodule CadenceWeb.Router do
     end
 
     match(:*, "/*path", NotFoundController, :show)
-  end
-
-  scope "/api/cadence/frontend-release/v1", CadenceWeb do
-    pipe_through([:api, :frontend_release_publisher])
-
-    put("/objects/:digest", FrontendReleasePublisherController, :upload)
-    post("/releases", FrontendReleasePublisherController, :create)
-    post("/promotions", FrontendReleasePublisherController, :promote)
-  end
-
-  scope "/api/cadence/application-host/v1", CadenceWeb do
-    pipe_through([:browser, :require_authenticated_user, :application_host_json])
-
-    post("/missions/:mission_id/query", ApplicationHostController, :query)
-
-    post(
-      "/missions/:mission_id/spacecraft/:spacecraft_id/query",
-      ApplicationHostController,
-      :query
-    )
-
-    post("/missions/:mission_id/actions", ApplicationHostController, :actions)
-
-    post(
-      "/missions/:mission_id/spacecraft/:spacecraft_id/actions",
-      ApplicationHostController,
-      :actions
-    )
   end
 end

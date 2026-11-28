@@ -24,7 +24,6 @@ const app = (state: App["state"]): App => ({
   update_available: false,
   consequence_if_missing: null,
   status: null,
-  surfaces: [],
 });
 const mountActions = (state: App["state"]) =>
   mount(AppActions, {

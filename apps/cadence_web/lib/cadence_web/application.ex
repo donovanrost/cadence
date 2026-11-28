@@ -17,7 +17,6 @@ defmodule CadenceWeb.Application do
 
     children = [
       {Phoenix.PubSub, name: CadenceWeb.PubSub},
-      CadenceWeb.FrontendReleasePublication.Janitor,
       CadenceWeb.Console.LimitTransitions,
       {Task.Supervisor, name: CadenceWeb.Console.TaskSupervisor},
       # The live fleet push reads each mission once, not once per socket (#797).
