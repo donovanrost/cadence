@@ -20,7 +20,7 @@ defmodule Cadence.SemanticRuntime.Carry do
 
   @type fingerprints :: %{
           algorithms: %{binary() => binary()},
-          monitoring: %{binary() => binary()},
+          monitoring: %{tuple() => %{policy_id: binary(), digest: binary()}},
           parameters: %{binary() => binary()}
         }
 
@@ -38,7 +38,8 @@ defmodule Cadence.SemanticRuntime.Carry do
       when is_map(runtime_plans) do
     %{
       algorithms: Map.new(algorithms, &{&1.algorithm_id, digest(&1)}),
-      monitoring: Map.new(monitoring, &{&1.policy_id, digest(&1)}),
+      monitoring:
+        Map.new(monitoring, &{identity(&1), %{policy_id: &1.policy_id, digest: digest(&1)}}),
       parameters: parameters(runtime_plans, algorithms)
     }
   end
@@ -59,8 +60,7 @@ defmodule Cadence.SemanticRuntime.Carry do
       | latest: keep(state.latest, state.fingerprints, fingerprints, :parameters),
         algorithm_state:
           keep(state.algorithm_state, state.fingerprints, fingerprints, :algorithms),
-        monitoring_state:
-          keep(state.monitoring_state, state.fingerprints, fingerprints, :monitoring),
+        monitoring_state: keep_monitoring(state, fingerprints),
         timer_cursors: keep_timers(state, fingerprints),
         fingerprints: fingerprints
     }
@@ -68,6 +68,48 @@ defmodule Cadence.SemanticRuntime.Carry do
     after_ = entries(kept)
     {kept, %{kept: after_, dropped: before - after_}}
   end
+
+  # A partition's monitoring state is keyed `{scope, policy_id}`, and a policy is several plan
+  # entries (its mission entry and a per-craft override share `policy_id`), so the state of a craft
+  # follows the entry that craft runs: its own spacecraft entry when the plan has one, else the
+  # mission entry. A craft whose override came or went, or whose entry changed, starts fresh; the
+  # rest of the fleet keeps its state.
+  defp keep_monitoring(%State{} = state, new) do
+    old = effective(Map.get(state.fingerprints, :monitoring, %{}))
+    now = effective(new.monitoring)
+
+    Map.filter(state.monitoring_state, fn {{{_mission, craft}, policy_id}, _value} ->
+      digest = resolve(now, policy_id, craft)
+      digest != nil and digest == resolve(old, policy_id, craft)
+    end)
+  end
+
+  # `%{policy_id => %{mission: digest | nil, craft: %{spacecraft_id => digest}}}`.
+  defp effective(monitoring) do
+    Enum.reduce(monitoring, %{}, fn {{_rule, scope, craft}, %{policy_id: id, digest: digest}},
+                                    acc ->
+      entry = Map.get(acc, id, %{mission: nil, craft: %{}})
+
+      entry =
+        if scope == :spacecraft,
+          do: %{entry | craft: Map.put(entry.craft, craft, digest)},
+          else: %{entry | mission: digest}
+
+      Map.put(acc, id, entry)
+    end)
+  end
+
+  defp resolve(index, policy_id, craft) do
+    case Map.get(index, policy_id) do
+      nil -> nil
+      %{craft: crafts, mission: mission} -> Map.get(crafts, craft, mission)
+    end
+  end
+
+  # What a plan entry is carried by (`MonitoringPlan.key/1`); a plan compiled without rule
+  # identities (a test plan) is its policy, mission-wide.
+  defp identity(%MonitoringPlan{rule_id: nil, policy_id: policy_id}), do: {policy_id, nil, nil}
+  defp identity(%MonitoringPlan{} = plan), do: MonitoringPlan.key(plan)
 
   defp keep(entries, old, new, kind) do
     stable = stable_ids(Map.get(old, kind, %{}), Map.fetch!(new, kind))
@@ -128,6 +170,8 @@ defmodule Cadence.SemanticRuntime.Carry do
   defp value(map, key) when is_map(map),
     do: Map.get(map, key)
 
+  # What the evaluator reads, from the compiler (`rule_digest`); a plan without one is its content.
+  defp digest(%MonitoringPlan{rule_digest: digest}) when is_binary(digest), do: digest
   defp digest(%MonitoringPlan{} = plan), do: ContentHash.term_sha256({:monitoring_plan, plan})
   defp digest(%AlgorithmPlan{} = plan), do: ContentHash.term_sha256({:algorithm_plan, plan})
   defp digest(term), do: ContentHash.term_sha256(term)

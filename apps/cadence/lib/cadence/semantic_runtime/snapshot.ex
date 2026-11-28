@@ -25,7 +25,7 @@ defmodule Cadence.SemanticRuntime.Snapshot do
   alias Cadence.Runtime.PartitionKey
   alias Cadence.SemanticRuntime.{State, Terms}
 
-  @version 2
+  @version 3
   @key [:organization_scope_id, :mission_id, :partition_id]
 
   @type resume :: %{binary() => non_neg_integer()}
