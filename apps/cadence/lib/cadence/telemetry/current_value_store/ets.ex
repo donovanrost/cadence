@@ -55,10 +55,32 @@ defmodule Cadence.Telemetry.CurrentValueStore.ETS do
         write_concurrency: true
       ])
 
+    # The keys of each spacecraft's values, added when a key first appears (a new point, not each
+    # sample), so one spacecraft's values are a lookup of its keys instead of a pass over every
+    # value on the node (#143). A key deleted since stays listed; a read skips it.
+    _index =
+      :ets.new(index_table_name(table_name), [
+        :named_table,
+        :public,
+        :ordered_set,
+        read_concurrency: true,
+        write_concurrency: true
+      ])
+
     {:ok, table_name}
   end
 
   defp receipts_table_name(table_name), do: :"#{table_name}_receipts"
+  defp index_table_name(table_name), do: :"#{table_name}_by_spacecraft"
+
+  defp index_table(backend_opts) do
+    backend_opts |> Keyword.get(:table_name, @table_name) |> index_table_name()
+  end
+
+  # An object is the 1-tuple of its key, `{{mission, scope}, key}`, so that the spacecraft's keys
+  # are a prefix range of the ordered set.
+  defp index_entry({mission_id, scope_id, _point, _realm, _source, _binding} = key),
+    do: {{{mission_id, scope_id}, key}}
 
   @impl true
   def record_samples(samples) when is_list(samples), do: record_samples(samples, [])
@@ -71,7 +93,7 @@ defmodule Cadence.Telemetry.CurrentValueStore.ETS do
     |> SelectionPolicy.selected_samples([])
     |> latest_per_key()
     |> Enum.each(fn {key, sample} ->
-      maybe_store_sample(table, key, sample)
+      maybe_store_sample(table, index_table(backend_opts), key, sample)
       note_receipt(backend_opts, sample)
     end)
 
@@ -137,6 +159,7 @@ defmodule Cadence.Telemetry.CurrentValueStore.ETS do
     with :ok <- validate_replacement_scope(mission_id, point_id, sample) do
       table = ensure_table!(backend_opts)
       true = :ets.insert(table, {key(sample), sample})
+      true = :ets.insert(index_table(backend_opts), index_entry(key(sample)))
       note_receipt(backend_opts, sample)
       :ok
     end
@@ -175,6 +198,7 @@ defmodule Cadence.Telemetry.CurrentValueStore.ETS do
 
     Enum.each(samples, fn %Sample{} = sample ->
       true = :ets.insert(table, {key(sample), sample})
+      true = :ets.insert(index_table(backend_opts), index_entry(key(sample)))
       note_receipt(backend_opts, sample)
     end)
 
@@ -210,12 +234,8 @@ defmodule Cadence.Telemetry.CurrentValueStore.ETS do
     spacecraft_ids = id_set(Keyword.get(opts, :spacecraft_ids))
     table = ensure_table!(backend_opts)
 
-    # The match spec compares the KEY inside the table (mission, and the asked points) and copies
-    # out only the entries that pass: a fleet's thousands of other points are never copied.
     table
-    |> :ets.select([
-      {{{mission_id, :"$1", :"$2", :_, :_, :_}, :"$3"}, point_guards(opts), [{{:"$1", :"$3"}}]}
-    ])
+    |> entries(mission_id, spacecraft_filter, opts, backend_opts)
     |> Enum.flat_map(fn {stored_scope_id, %Sample{} = sample} ->
       if (is_nil(spacecraft_filter) or
             stored_scope_id == spacecraft_scope_id(spacecraft_filter)) and
@@ -226,6 +246,32 @@ defmodule Cadence.Telemetry.CurrentValueStore.ETS do
          else: []
     end)
     |> Enum.sort_by(& &1.point_name)
+  end
+
+  # All of a mission's values: the match spec compares the KEY inside the table (mission, and the
+  # asked points) and copies out only the entries that pass: a fleet's thousands of other points
+  # are never copied. One spacecraft's: a lookup of its keys, not a pass over the node's values.
+  defp entries(table, mission_id, nil, opts, _backend_opts) do
+    :ets.select(table, [
+      {{{mission_id, :"$1", :"$2", :_, :_, :_}, :"$3"}, point_guards(opts), [{{:"$1", :"$3"}}]}
+    ])
+  end
+
+  defp entries(table, mission_id, spacecraft_id, opts, backend_opts) do
+    scope_id = spacecraft_scope_id(spacecraft_id)
+    points = opts |> Keyword.get(:point_ids) |> id_set()
+
+    backend_opts
+    |> index_table()
+    |> :ets.select([{{{{mission_id, scope_id}, :"$1"}}, [], [:"$1"]}])
+    |> Enum.flat_map(fn {_m, _s, point_id, _r, _d, _b} = key ->
+      with true <- member?(points, point_id),
+           [{^key, sample}] <- :ets.lookup(table, key) do
+        [{scope_id, sample}]
+      else
+        _skip -> []
+      end
+    end)
   end
 
   # `:point_ids` restricts the read to those points (a guard on the key's point), `:spacecraft_ids`
@@ -255,6 +301,7 @@ defmodule Cadence.Telemetry.CurrentValueStore.ETS do
     table = ensure_table!(backend_opts)
     true = :ets.delete_all_objects(table)
     true = :ets.delete_all_objects(receipts_table(backend_opts))
+    true = :ets.delete_all_objects(index_table(backend_opts))
     :ok
   end
 
@@ -262,6 +309,7 @@ defmodule Cadence.Telemetry.CurrentValueStore.ETS do
     table = ensure_table!(backend_opts)
     true = :ets.match_delete(table, {{mission_id, :_, :_, :_, :_, :_}, :_})
     true = :ets.match_delete(receipts_table(backend_opts), {{mission_id, :_}, :_})
+    true = :ets.match_delete(index_table(backend_opts), {{{mission_id, :_}, :_}})
     :ok
   end
 
@@ -282,13 +330,14 @@ defmodule Cadence.Telemetry.CurrentValueStore.ETS do
     end)
   end
 
-  defp maybe_store_sample(table, key, %Sample{} = sample) do
+  defp maybe_store_sample(table, index, key, %Sample{} = sample) do
     case :ets.lookup(table, key) do
       [{^key, existing_sample}] ->
         maybe_insert_newer_sample(table, key, sample, existing_sample)
 
       [] ->
         true = :ets.insert(table, {key, sample})
+        true = :ets.insert(index, index_entry(key))
     end
   end
 

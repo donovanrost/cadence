@@ -5,7 +5,7 @@ defmodule Cadence.Reads.FleetReceiptsTest do
   """
   use Cadence.DataCase, async: false
 
-  alias Cadence.Reads.FleetStatus
+  alias Cadence.Reads.{DurableReceiptCache, FleetStatus}
   alias Cadence.Telemetry.{CurrentValueStore, Sample}
   alias Cadence.Telemetry.CurrentValueStore.{ETS, Postgres}
 
@@ -137,7 +137,7 @@ defmodule Cadence.Reads.FleetReceiptsTest do
       key = {FleetStatus, :durable, org, mission}
 
       on_exit(fn ->
-        :persistent_term.erase(key)
+        DurableReceiptCache.forget(key)
 
         if saved,
           do: Application.put_env(:cadence, :fleet_durable_receipts_ttl_ms, saved),

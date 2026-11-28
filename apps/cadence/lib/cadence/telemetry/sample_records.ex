@@ -61,6 +61,19 @@ defmodule Cadence.Telemetry.SampleRecords do
     |> Map.new()
   end
 
+  @doc "Newest receipt time per point of one spacecraft (`%{point_id => DateTime}`)."
+  @spec latest_receipts_by_point(binary(), binary(), binary()) :: %{binary() => DateTime.t()}
+  def latest_receipts_by_point(organization_id, mission_id, spacecraft_id)
+      when is_binary(organization_id) and is_binary(mission_id) and is_binary(spacecraft_id) do
+    TelemetrySampleRow
+    |> where([row], row.mission_id == ^mission_id and row.spacecraft_id == ^spacecraft_id)
+    |> where([row], row.organization_id == ^organization_id or is_nil(row.organization_id))
+    |> group_by([row], row.point_id)
+    |> select([row], {row.point_id, max(row.receipt_time)})
+    |> Repo.all()
+    |> Map.new()
+  end
+
   @doc "The newest stored sample per point for one spacecraft (`PointLatest`, M23)."
   @spec latest_by_point(binary(), binary(), binary(), [binary()]) :: [Sample.t()]
   def latest_by_point(organization_id, mission_id, spacecraft_id, point_ids)
