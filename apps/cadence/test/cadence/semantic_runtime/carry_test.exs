@@ -5,7 +5,8 @@ defmodule Cadence.SemanticRuntime.CarryTest do
   """
   use ExUnit.Case, async: true
 
-  alias Cadence.SemanticRuntime.{AlgorithmPlan, Carry, MonitoringPlan, State}
+  alias Cadence.Catalog.MissionModel.{Compiler, Declaration, Layer}
+  alias Cadence.SemanticRuntime.{AlgorithmPlan, Carry, MonitoringPlan, PlanDecoder, State}
 
   @scope {"mission", "craft-a"}
   @other_scope {"mission", "craft-b"}
@@ -131,6 +132,92 @@ defmodule Cadence.SemanticRuntime.CarryTest do
 
       assert carried.monitoring_state == %{}
     end
+  end
+
+  describe "across two compiled revisions" do
+    test "the untouched policy's streak carries and the edited policy's resets" do
+      first = compile(threshold: 5)
+      second = compile(threshold: 9, extra: ["/parameters/unrelated"])
+
+      refute first.revision.revision_id == second.revision.revision_id
+
+      streak = %{effective_state: :normal, candidate_state: :warning, violation_count: 2}
+
+      state = %State{
+        monitoring_state: monitored(first, streak),
+        fingerprints: fingerprints(first)
+      }
+
+      assert {carried, %{kept: 1, dropped: 1}} = Carry.carry(state, fingerprints(second))
+
+      assert [{{@scope, kept_id}, ^streak}] = Enum.to_list(carried.monitoring_state)
+      assert kept_id == policy_id(second, "/policies/steady")
+
+      refute Map.has_key?(
+               carried.monitoring_state,
+               {@scope, policy_id(second, "/policies/edited")}
+             )
+    end
+
+    test "a revision that changes no policy carries every streak" do
+      first = compile(threshold: 5)
+      again = compile(threshold: 5, extra: ["/parameters/unrelated"])
+      streak = %{effective_state: :normal, candidate_state: :warning, violation_count: 2}
+
+      state = %State{
+        monitoring_state: monitored(first, streak),
+        fingerprints: fingerprints(first)
+      }
+
+      assert {carried, %{kept: 2, dropped: 0}} = Carry.carry(state, fingerprints(again))
+      assert carried.monitoring_state == state.monitoring_state
+    end
+  end
+
+  defp compile(opts) do
+    parameters =
+      for name <- ["/parameters/edited", "/parameters/steady"] ++ Keyword.get(opts, :extra, []),
+          do: Declaration.new(%{kind: :parameter, qualified_name: name})
+
+    policies =
+      for {name, parameter, rules} <- [
+            {"/policies/edited", "/parameters/edited",
+             [%{limit: Keyword.fetch!(opts, :threshold)}]},
+            {"/policies/steady", "/parameters/steady", [%{limit: 1}]}
+          ] do
+        Declaration.new(%{
+          kind: :monitoring_policy,
+          qualified_name: name,
+          references: [%{expected_kind: :parameter, source_ref: parameter, role: :parameter}],
+          definition: %{default_rules: rules}
+        })
+      end
+
+    layer =
+      Layer.new(%{
+        organization_id: "org-carry",
+        mission_id: "mission-carry",
+        name: "carry",
+        declarations: [%{kind: :space_system, qualified_name: "/"}] ++ parameters ++ policies
+      })
+
+    {:ok, compilation} = Compiler.compile([layer])
+    compilation
+  end
+
+  defp fingerprints(compilation),
+    do: Carry.fingerprints(compilation.plans, PlanDecoder.decode(compilation.plans))
+
+  defp monitored(compilation, streak) do
+    for name <- ["/policies/edited", "/policies/steady"],
+        into: %{},
+        do: {{@scope, policy_id(compilation, name)}, streak}
+  end
+
+  defp policy_id(compilation, name) do
+    Enum.find_value(compilation.revision.declarations, fn {id, declaration} ->
+      if declaration.qualified_name == name, do: id
+    end)
   end
 
   # State evolved under `fingerprints`: both policies in two scopes, the algorithm's memory and
