@@ -6,7 +6,7 @@ defmodule CadenceWeb.Console.SpacecraftChannelTest do
   require Phoenix.ChannelTest
 
   alias Cadence.Dashboards.RuntimeInvalidation
-  alias CadenceWeb.{ConsoleSocket, ControlPlaneApiFixtures}
+  alias CadenceWeb.{ConsoleSocket, MissionReadModelFixtures}
   alias CadenceWeb.TestFixtures
 
   @endpoint CadenceWeb.Endpoint
@@ -47,7 +47,7 @@ defmodule CadenceWeb.Console.SpacecraftChannelTest do
 
   test "selected points: the first push has current values, then only changes", c do
     # Ingests one HK packet for spacecraft-001 (HK.counter = 30, a caution limit).
-    ControlPlaneApiFixtures.seed_mission_read_models(c.org.organization_id, c.mission.mission_id)
+    MissionReadModelFixtures.seed_mission_read_models(c.org.organization_id, c.mission.mission_id)
     topic = "spacecraft:#{c.mission.mission_id}:spacecraft-001"
 
     assert {:ok, %{points: [%{point_id: "HK.counter", type: type}, %{point_id: "HK.nope"}]},

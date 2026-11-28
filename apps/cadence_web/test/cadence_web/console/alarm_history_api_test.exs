@@ -6,7 +6,7 @@ defmodule CadenceWeb.Console.AlarmHistoryAPITest do
 
   alias Cadence.Alarms.{EpisodeEventRow, EpisodeRow}
   alias Cadence.Repo
-  alias CadenceWeb.ControlPlaneApiFixtures
+  alias CadenceWeb.MissionReadModelFixtures
   alias CadenceWeb.TestFixtures
 
   @sc "spacecraft-001"
@@ -17,7 +17,7 @@ defmodule CadenceWeb.Console.AlarmHistoryAPITest do
     user = TestFixtures.persist_user!(display_name: "Mira K.")
     TestFixtures.grant_membership!(user, org)
     mission = TestFixtures.persist_mission!(org)
-    ControlPlaneApiFixtures.seed_mission_read_models(org.organization_id, mission.mission_id)
+    MissionReadModelFixtures.seed_mission_read_models(org.organization_id, mission.mission_id)
     c = %{user: user, org: org, mission: mission}
 
     # The seeded active episode's time comes from fixture telemetry; make it an hour ago.

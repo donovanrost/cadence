@@ -1,7 +1,7 @@
 defmodule CadenceWeb.Console.PointAPITest do
   use CadenceWeb.ConnCase, async: false
 
-  alias CadenceWeb.ControlPlaneApiFixtures
+  alias CadenceWeb.MissionReadModelFixtures
   alias CadenceWeb.TestFixtures
 
   # seed_mission_read_models ingests one HK packet received at this instant.
@@ -12,7 +12,7 @@ defmodule CadenceWeb.Console.PointAPITest do
     user = TestFixtures.persist_user!()
     TestFixtures.grant_membership!(user, org)
     mission = TestFixtures.persist_mission!(org)
-    ControlPlaneApiFixtures.seed_mission_read_models(org.organization_id, mission.mission_id)
+    MissionReadModelFixtures.seed_mission_read_models(org.organization_id, mission.mission_id)
 
     %{user: user, mission: mission}
   end

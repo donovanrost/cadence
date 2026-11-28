@@ -2,14 +2,14 @@ defmodule CadenceWeb.Console.TelemetryLatestAPITest do
   @moduledoc "Compose B2's Now column: latest values for a few points across many spacecraft."
   use CadenceWeb.ConnCase, async: false
 
-  alias CadenceWeb.{ControlPlaneApiFixtures, TestFixtures}
+  alias CadenceWeb.{MissionReadModelFixtures, TestFixtures}
 
   setup do
     org = TestFixtures.persist_org!()
     user = TestFixtures.persist_user!()
     TestFixtures.grant_membership!(user, org)
     mission = TestFixtures.persist_mission!(org)
-    ControlPlaneApiFixtures.seed_mission_read_models(org.organization_id, mission.mission_id)
+    MissionReadModelFixtures.seed_mission_read_models(org.organization_id, mission.mission_id)
 
     {:ok, _activation} =
       Cadence.Activations.record_binding_set_activation(

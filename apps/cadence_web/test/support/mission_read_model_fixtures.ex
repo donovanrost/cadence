@@ -1,4 +1,4 @@
-defmodule CadenceWeb.ControlPlaneApiFixtures do
+defmodule CadenceWeb.MissionReadModelFixtures do
   @moduledoc false
 
   import ExUnit.Assertions
@@ -6,12 +6,9 @@ defmodule CadenceWeb.ControlPlaneApiFixtures do
 
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet}
   alias Cadence.Auth.ServiceIdentity
-  alias Cadence.Catalog.MissionModel.Layer
   alias Cadence.Contacts.{Path, RealizedContact, ScheduledContact, TransportBinding}
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Limits.Definition, as: LimitDefinition
-  alias Cadence.MissionModelApproval
-  alias Cadence.MissionModelCatalogNaming
   alias Cadence.Missions.Mission
   alias Cadence.Organizations.Organization
   alias Cadence.SourceEndpoints.SourceEndpoint
@@ -114,34 +111,6 @@ defmodule CadenceWeb.ControlPlaneApiFixtures do
              )
 
     scope
-  end
-
-  def fetch_command_id(runtime_plans, command_name) do
-    runtime_plans.command.plan["runtime_definitions"]
-    |> Enum.find(&(&1["name"] == command_name))
-    |> Map.fetch!("command_id")
-  end
-
-  def compile_and_approve_empty_mission_model!(organization_id, mission_id) do
-    layer =
-      Layer.new(%{
-        organization_id: organization_id,
-        mission_id: mission_id,
-        name: "Control-plane activation model",
-        declarations: [%{kind: :space_system, qualified_name: "/"}]
-      })
-
-    assert {:ok, compilation} = Cadence.MissionModels.compile_layers([layer])
-    MissionModelCatalogNaming.name!(organization_id, mission_id, compilation.revision.revision_id)
-
-    assert {:ok, revision} =
-             MissionModelApproval.approve!(
-               organization_id,
-               mission_id,
-               compilation.revision.revision_id
-             )
-
-    revision
   end
 
   def seed_mission_read_models(organization_id, mission_id) do

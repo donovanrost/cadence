@@ -3,10 +3,10 @@ defmodule CadenceWeb.Console.ContactRuntimeAPITest do
 
   alias Cadence.Auth.ServiceIdentity
   alias Cadence.SourceEndpoints
-  alias CadenceWeb.{ControlPlaneApiFixtures, TestFixtures}
+  alias CadenceWeb.{MissionReadModelFixtures, TestFixtures}
 
   setup %{conn: conn} do
-    fixture = ControlPlaneApiFixtures.bootstrap(conn)
+    fixture = MissionReadModelFixtures.bootstrap(conn)
     {:ok, organization} = Cadence.Organizations.fetch_organization(fixture.organization_id)
     admin = TestFixtures.persist_user!()
     TestFixtures.grant_membership!(admin, organization, role: :organization_admin)
@@ -20,7 +20,7 @@ defmodule CadenceWeb.Console.ContactRuntimeAPITest do
           display_name: "Runtime simulator",
           capabilities: [:mission_admin]
         }),
-        ControlPlaneApiFixtures.organization_admin_scope(fixture.organization_id)
+        MissionReadModelFixtures.organization_admin_scope(fixture.organization_id)
       )
 
     {:ok, source} =
@@ -29,7 +29,7 @@ defmodule CadenceWeb.Console.ContactRuntimeAPITest do
       })
 
     contact =
-      ControlPlaneApiFixtures.persist_active_uplink_contact_for_command_release(
+      MissionReadModelFixtures.persist_active_uplink_contact_for_command_release(
         fixture.organization_id,
         fixture.mission_id,
         source.source_endpoint_id
@@ -63,7 +63,7 @@ defmodule CadenceWeb.Console.ContactRuntimeAPITest do
   end
 
   test "an authorized service can read only the path runtime", context do
-    conn = ControlPlaneApiFixtures.authorize(build_conn(), context.service_token)
+    conn = MissionReadModelFixtures.authorize(build_conn(), context.service_token)
     path_id = context.path.path_id
 
     assert %{"data" => %{"path_id" => ^path_id, "direction" => "uplink"}} =

@@ -9,14 +9,14 @@ defmodule CadenceWeb.Console.StationGeometryAPITest do
 
   alias Cadence.Comms.StationLocations
   alias Cadence.Organizations
-  alias CadenceWeb.{ControlPlaneApiFixtures, TestFixtures}
+  alias CadenceWeb.{MissionReadModelFixtures, TestFixtures}
 
   setup %{conn: conn} do
     previous = Application.get_env(:cadence, :activation_governance, [])
     Application.put_env(:cadence, :activation_governance, approval_required: false)
     on_exit(fn -> Application.put_env(:cadence, :activation_governance, previous) end)
 
-    fixture = ControlPlaneApiFixtures.bootstrap(conn)
+    fixture = MissionReadModelFixtures.bootstrap(conn)
     {:ok, organization} = Organizations.fetch_organization(fixture.organization_id)
     member = TestFixtures.persist_user!()
     TestFixtures.grant_membership!(member, organization, role: :member)
@@ -140,7 +140,7 @@ defmodule CadenceWeb.Console.StationGeometryAPITest do
     for {method, path} <- [{:post, "/config/stage"}, {:get, "/ground-stations"}] do
       assert %{"error" => %{"code" => "service_not_allowed"}} =
                build_conn()
-               |> ControlPlaneApiFixtures.authorize(c.api_token)
+               |> MissionReadModelFixtures.authorize(c.api_token)
                |> dispatch(@endpoint, method, c.base <> path, %{})
                |> json_response(403)
     end
