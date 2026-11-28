@@ -11,6 +11,7 @@ defmodule Cadence.Commanding.RequestValidation do
   alias Cadence.Catalog.Command.{Invocation, WireEncoding}
   alias Cadence.Commanding.CommandRequest
   alias Cadence.MissionModels
+  alias Cadence.Persistence.JsonDocument
   alias Cadence.Reads.MissionModels.ActiveBasis
   alias Cadence.Runtime.MissionModelPlanDecoder
   alias Cadence.SourceEndpoints
@@ -290,7 +291,7 @@ defmodule Cadence.Commanding.RequestValidation do
   def pinned_plan_id(%{metadata: %{"validation_basis" => %{"runtime_plan_id" => id}}}), do: id
 
   def pinned_plan_id(%{metadata_document: document}) when is_map(document),
-    do: pinned_plan_id(%{metadata: Cadence.Persistence.JsonDocument.unwrap_value(document)})
+    do: pinned_plan_id(%{metadata: JsonDocument.unwrap_value(document)})
 
   def pinned_plan_id(_request), do: nil
 
