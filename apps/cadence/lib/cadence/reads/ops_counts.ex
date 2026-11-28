@@ -11,13 +11,22 @@ defmodule Cadence.Reads.OpsCounts do
   alias Cadence.Auth.Scope
   alias Cadence.Control.Alarms
   alias Cadence.Control.Contacts
-  alias Cadence.Reads.{Attention, CommandCounts, FleetStatus, MissionRuntimeStatus}
+
+  alias Cadence.Reads.{
+    Attention,
+    CommandCounts,
+    FleetStatus,
+    MissionRuntimeStatus,
+    MonitoredParameters
+  }
 
   @spec load(Scope.t(), binary()) :: map()
   def load(%Scope{} = scope, mission_id) do
     organization_id = scope.organization_id
     now = DateTime.utc_now()
-    limits_configured? = Cadence.Limits.list_limit_definitions(mission_id) != []
+
+    limits_configured? =
+      MonitoredParameters.configured?(organization_id, mission_id)
 
     %{
       observed_at: now,

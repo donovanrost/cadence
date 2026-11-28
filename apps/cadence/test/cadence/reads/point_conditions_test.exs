@@ -1,16 +1,17 @@
 defmodule Cadence.Reads.PointConditionsTest do
   @moduledoc """
   A spacecraft's points from both stores (#143): ground-limit states and live monitoring alarms,
-  labelled by source, critical and caution first, a stale point named stale, a point with a limit
-  and a sample but no evaluation shown as not evaluated, paged with a cursor that never repeats or
+  labelled by source, critical and caution first, a stale point named stale, a point the compiled plan monitors
+  and a sample but no state shown as not evaluated, paged with a cursor that never repeats or
   skips a row, with a fixed number of queries however many points there are.
   """
   use Cadence.DataCase, async: false
 
-  alias Cadence.Limits
   alias Cadence.Limits.{Evaluator, Event, Store}
+  alias Cadence.MonitoringPlanFixtures
   alias Cadence.Reads.PointConditions
   alias Cadence.SemanticObservations.LatestAlarmStateRow
+  alias Cadence.SemanticRuntime.PlanDecoder
   alias Cadence.Spacecraft
   alias Cadence.SpacecraftStore
   alias Cadence.Telemetry.{CurrentValueStore, Sample, SampleRecords}
@@ -47,7 +48,7 @@ defmodule Cadence.Reads.PointConditionsTest do
 
     start_supervised!(CurrentValueStore.child_spec(cache))
 
-    for n <- 1..2, do: craft(n)
+    for n <- 1..3, do: craft(n)
     :ok
   end
 
@@ -243,29 +244,83 @@ defmodule Cadence.Reads.PointConditionsTest do
     assert [%{freshness: :stale}] = result.points
   end
 
-  test "a point with an active ground limit and a sample but no evaluation is not evaluated" do
-    review = Limits.limit_definition_review(@org, @mission, "HK.new", "FLIGHT")
+  describe "the inventory is the compiled plan's (#451 T3a)" do
+    setup do
+      # One policy on a parameter, a craft whose override turns it off, and a craft-only one.
+      plans =
+        MonitoringPlanFixtures.compile!(
+          @org,
+          @mission,
+          [
+            {"temp", "/parameters/temperature", above: 10},
+            {"mode", "/parameters/mode", above: 100, disabled: true}
+          ],
+          [
+            {:override, "temp", "temp-sc-2", ["sc-2"], disabled: true},
+            {:craft_only, "mode-own", "/parameters/mode", ["sc-1"], above: 1}
+          ]
+        )
 
-    {:ok, _} =
-      Limits.append_limit_definition(
-        @org,
-        @mission,
-        %{point_id: "HK.new", limit_set_name: "FLIGHT", thresholds: %{"yellow_high" => 5}},
-        review
-      )
+      entries = PlanDecoder.decode(plans).monitoring
 
-    heard!("sc-1", "HK.new", 10)
+      id_of = fn threshold ->
+        Enum.find_value(entries, fn
+          %{scope: :mission, default_rules: [rule | _]} = e ->
+            if (rule["value"] || rule[:value]) == threshold, do: e.parameter_id
 
-    assert [row] = load().points
+          _other ->
+            nil
+        end)
+      end
 
-    assert {row.point_id, row.source, row.condition, row.evaluated} ==
-             {"HK.new", :ground_limit, :nominal, false}
+      %{
+        opts: [revision_id: plans.monitoring.mission_model_revision_id],
+        temp: id_of.(10),
+        mode: id_of.(100)
+      }
+    end
 
-    assert row.evaluated_at == nil and row.entered_at == nil
-    assert load().counts.not_evaluated == 1
+    test "a monitored point with a sample and no state is not evaluated, and says which rule source",
+         c do
+      heard!("sc-1", c.temp, 10)
 
-    # No sample on this spacecraft: the limit does not apply to it as far as is known.
-    assert load("sc-2").points == []
+      assert [row] = load("sc-1", c.opts).points
+
+      assert {row.point_id, row.source, row.condition, row.evaluated} ==
+               {c.temp, :catalog_monitoring, :nominal, false}
+
+      assert row.evaluated_at == nil and row.entered_at == nil and row.policy_id == nil
+      assert load("sc-1", c.opts).counts.not_evaluated == 1
+    end
+
+    test "a craft's own entries decide: its craft-only policy lists, a disabled override does not",
+         c do
+      for craft <- ["sc-1", "sc-2", "sc-3"],
+          point <- [c.temp, c.mode],
+          do: heard!(craft, point, 10)
+
+      assert Enum.sort(ids(load("sc-1", c.opts))) ==
+               Enum.sort([{c.temp, :catalog_monitoring}, {c.mode, :catalog_monitoring}])
+
+      # sc-2's override turns the temperature off; the mode policy is sc-1's only.
+      assert ids(load("sc-2", c.opts)) == []
+      assert ids(load("sc-3", c.opts)) == [{c.temp, :catalog_monitoring}]
+    end
+
+    test "a point with no sample on the craft, or already in a state, is not listed again", c do
+      assert load("sc-1", c.opts).points == []
+
+      heard!("sc-1", c.temp, 10)
+      live!("sc-1", c.temp, "critical")
+
+      assert [%{source: :catalog_monitoring, evaluated: true, condition: :critical}] =
+               load("sc-1", c.opts).points
+    end
+
+    test "a mission with no monitoring plan lists no inventory", c do
+      heard!("sc-1", c.temp, 10)
+      assert load("sc-1", revision_id: nil).points == []
+    end
   end
 
   test "ground rows with no evaluation history before them say the entry time is a lower bound" do
