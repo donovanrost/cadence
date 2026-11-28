@@ -9,6 +9,9 @@ defmodule Cadence.Reads.ActionQueue.SourceKeys do
     # E2 (#546; U109): a craft on a revision whose approval was withdrawn; its facts nest in
     # `withdrawal` (console's now/withdrawnComposition.ts).
     "model_approval_withdrawn" => [:spacecraft_id, :severity, :withdrawal],
+    # #972: a provider that can't use some spacecraft's current orbit, grouped by cause
+    # (`conflict`); the full spacecraft list is paged by the providers ephemeris read.
+    "provider_ephemeris" => [:spacecraft_count, :reason, :next_retry_at],
     # ux U61: a day nearing its first window with nothing being booked. Per-viewer fields
     # (viewer_can_approve, viewer_can_book) are the console's.
     "plan_coverage" => [
@@ -87,6 +90,9 @@ defmodule Cadence.Reads.ActionQueue.SourceKeys do
       :ends_at,
       :provider_profile_id,
       :provider_profile_name,
+      # #990: who sets the listener's source allowlist ("provider" | "transport") and its transport.
+      :allowlist_source,
+      :transport_id,
       :last_refused_at,
       :refused_count,
       :last_refusal,

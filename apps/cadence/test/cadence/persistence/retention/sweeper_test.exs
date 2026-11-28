@@ -2,6 +2,7 @@ defmodule Cadence.Persistence.Retention.SweeperTest do
   use Cadence.DataCase, async: false
 
   alias Cadence.Persistence.Retention.Sweeper
+  alias Cadence.TestSupport.RetentionLock
 
   # A rule of `n` chunks of 10 rows, then done; the cursor counts the chunks swept.
   defmodule CountingRule do
@@ -31,6 +32,24 @@ defmodule Cadence.Persistence.Retention.SweeperTest do
   test "it sweeps chunks until the rule says done, running each chunk's after-commit work" do
     assert %{chunks: 3, rows: 30, stopped: :done} = sweep(chunks: 3)
     for n <- 0..2, do: assert_received({:committed, ^n})
+  end
+
+  test "a session outside the test that holds the rule's lock makes a sweep report :locked; a lock_key of its own is unaffected (#939)" do
+    # A second database session, as another run on the same test database would be.
+    config = Cadence.Repo.config()
+    keys = [:hostname, :port, :username, :password, :database, :socket_dir, :socket]
+    {:ok, other} = Postgrex.start_link(Keyword.put(Keyword.take(config, keys), :pool_size, 1))
+
+    Postgrex.transaction(other, fn conn ->
+      Postgrex.query!(conn, "SELECT pg_advisory_xact_lock(hashtext($1))", [
+        "retention:#{CountingRule.name()}"
+      ])
+
+      assert %{stopped: :locked, chunks: 0, rows: 0} = sweep(chunks: 3)
+
+      key = RetentionLock.key(CountingRule)
+      assert %{stopped: :done, chunks: 3, rows: 30} = sweep(chunks: 3, lock_key: key)
+    end)
   end
 
   test "it stops at the budget and hands back the cursor to resume from" do

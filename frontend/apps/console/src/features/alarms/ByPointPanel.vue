@@ -1,10 +1,11 @@
 <script setup lang="ts">
+import type { PointId } from "@/api/index.ts";
 import { ApPanel } from "@/ui";
 import type { PointCount } from "./list.ts";
 
 /** L2 · Active alarms per point; choosing one filters L1 (spreading check). */
 defineProps<{ points: readonly PointCount[]; selected: string | null }>();
-const emit = defineEmits<{ select: [pointId: string | null] }>();
+const emit = defineEmits<{ select: [pointId: PointId | null] }>();
 </script>
 
 <template>

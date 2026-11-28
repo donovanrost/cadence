@@ -22,6 +22,8 @@ defmodule Cadence.Jobs.Job do
           | :telemetry_historical_data_workflow
           | :managed_questdb_provisioning
           | :tsdb_backend_lifecycle
+          | :pass_prediction
+          | :ephemeris_upload
 
   @type t :: %__MODULE__{
           job_id: binary(),

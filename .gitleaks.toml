@@ -141,7 +141,8 @@ secretGroup = 1
     description = "Public loopback simulator admin fixture"
     condition = "AND"
     regexTarget = "secret"
-    paths = [ '''(?:^|/)dev/seed/earendil\.exs$''' ]
+    # The seed's simulator setup lives in earendil_simulator.exs since #978.
+    paths = [ '''^dev/seed/earendil(?:_simulator)?\.exs$''' ]
     regexes = [ '''^earendil-local-admin$''' ]
 
 # An environment lookup with a literal fallback is still a committed value.

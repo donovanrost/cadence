@@ -1,21 +1,15 @@
 defmodule Cadence.Protocol.RecordArchive.FileSystem.RetentionTest do
   use Cadence.DataCase, async: false
+  @moduletag :tmp_dir
 
   alias Cadence.Persistence.Retention.Sweeper
   alias Cadence.Protocol.RecordArchive.FileSystem.Retention, as: Rule
   alias Cadence.Repo
+  alias Cadence.TestSupport.RetentionLock
 
   @now ~U[2026-11-26 12:00:00Z]
 
-  setup do
-    base =
-      Path.join(
-        System.tmp_dir!(),
-        "cadence_protocol_retention_#{System.unique_integer([:positive])}"
-      )
-
-    File.mkdir_p!(base)
-
+  setup %{tmp_dir: base} do
     saved =
       {Application.get_env(:cadence, :protocol_record_archive),
        Application.get_env(:cadence, :retention)}
@@ -28,7 +22,6 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem.RetentionTest do
     Application.put_env(:cadence, :retention, protocol_archive_days: 30)
 
     on_exit(fn ->
-      File.rm_rf!(base)
       {archive, retention} = saved
       restore(:protocol_record_archive, archive)
       restore(:retention, retention)
@@ -111,7 +104,15 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem.RetentionTest do
   defp file?(c, key), do: File.exists?(Path.join(c.base, key))
 
   defp sweep(opts \\ []),
-    do: Sweeper.sweep(Rule, Rule.initial_cursor(), Keyword.merge([now: @now, pause_ms: 0], opts))
+    do:
+      Sweeper.sweep(
+        Rule,
+        Rule.initial_cursor(),
+        Keyword.merge(
+          [now: @now, pause_ms: 0, lock_key: RetentionLock.key(Rule)],
+          opts
+        )
+      )
 
   test "an expired segment's row, identities and file go; a newer segment is untouched", c do
     old = segment(c, "old", 40)
@@ -191,7 +192,14 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem.RetentionTest do
       first = sweep(chunk_rows: 2, budget_ms: 0)
       assert first.stopped == :budget
 
-      rest = Sweeper.sweep(Rule, first.cursor, now: @now, pause_ms: 0, chunk_rows: 2)
+      rest =
+        Sweeper.sweep(Rule, first.cursor,
+          now: @now,
+          pause_ms: 0,
+          lock_key: RetentionLock.key(Rule),
+          chunk_rows: 2
+        )
+
       assert rest.stopped == :done
       refute Enum.any?(lost, &file?(c, &1))
     end

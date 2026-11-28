@@ -64,6 +64,7 @@ defmodule Cadence.Reads.SpacecraftDirectoryPageTest do
           adapter_key: :tcp_socket,
           configuration: %{
             "mode" => "listen",
+            "expected_peer_addresses" => ["127.0.0.1/32", "::1/128"],
             "direction_capability" => "inbound",
             "host" => "0.0.0.0",
             "port" => "5000",
@@ -139,6 +140,13 @@ defmodule Cadence.Reads.SpacecraftDirectoryPageTest do
     refute Map.has_key?(later, :scids_in_use)
     refute Map.has_key?(later, :next_free_scid)
     assert later.telemetry in [:ok, :degraded]
+  end
+
+  test "name cursor walks in bytewise order across a linguistic collation", c do
+    names = ["a_a", "aA", "A_a"]
+    Enum.each(names, &craft!(c, &1))
+
+    assert walk(c, limit: 1) == Enum.sort(names)
   end
 
   test "q matches name, profile name or a SCID prefix; the summary stays whole-mission", c do
@@ -237,7 +245,7 @@ defmodule Cadence.Reads.SpacecraftDirectoryPageTest do
     # The page is a range scan of the (organization, mission, name, id) index, not a sort.
     %{rows: plan} =
       Repo.query!(
-        "EXPLAIN SELECT spacecraft_id FROM mission_spacecraft WHERE organization_id = $1 AND mission_id = $2 AND lifecycle_state = 'active' AND (display_name > 'Craft 0500' OR (display_name = 'Craft 0500' AND spacecraft_id > 'sc-0500')) ORDER BY display_name, spacecraft_id LIMIT 201",
+        ~s|EXPLAIN SELECT spacecraft_id FROM mission_spacecraft WHERE organization_id = $1 AND mission_id = $2 AND lifecycle_state = 'active' AND (display_name COLLATE "C" > 'Craft 0500' OR (display_name = 'Craft 0500' AND spacecraft_id COLLATE "C" > 'sc-0500')) ORDER BY display_name COLLATE "C", spacecraft_id COLLATE "C" LIMIT 201|,
         [c.org, c.mission]
       )
 

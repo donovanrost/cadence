@@ -1,3 +1,4 @@
+import type { OrganizationId } from "@/api/index.ts";
 import { actor, decoders as d, orNull, request, type ApiResult, type Decoded } from "@/api";
 
 /** PA1 history (api c06a70c0): versions newest first, each with its changes against the one before. */
@@ -27,7 +28,7 @@ export type AccountVersions = Decoded<typeof versionsReader>;
 export type AccountVersion = AccountVersions["versions"][number];
 
 export function fetchAccountVersions(
-  key: Readonly<{ orgId: string; id: string }>,
+  key: Readonly<{ orgId: OrganizationId; id: string }>,
   signal: AbortSignal,
 ): Promise<ApiResult<AccountVersions>> {
   return request(

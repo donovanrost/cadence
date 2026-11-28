@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { DashboardId } from "@/api/index.ts";
 import type { MissionId } from "@/api/index.ts";
 import { computed, nextTick, ref } from "vue";
 import { announcePolite, ApButton, ApCallout, ApSheet } from "@/ui";
@@ -13,7 +14,11 @@ import { focusLost, refocus } from "../focus-fallback.ts";
  * ⋯ › Versions (Grafana-style): history, compare any two, restore one as a new current version.
  * Restore isn't offered while editing (the draft would sit on a stale base).
  */
-const props = defineProps<{ missionId: MissionId; dashboardId: string; canRestore: boolean }>();
+const props = defineProps<{
+  missionId: MissionId;
+  dashboardId: DashboardId;
+  canRestore: boolean;
+}>();
 const emit = defineEmits<{ restored: [warnings: readonly SourceWarning[]] }>();
 const v = useVersions(
   computed(() => props.missionId),

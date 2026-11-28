@@ -156,6 +156,8 @@ The customer-facing provider API is rooted at `/provider/v1`.
 | `GET` | `/provider/v1/account` | Validate credentials and selected environment |
 | `GET` | `/provider/v1/capabilities` | Read behavior, operation, and delivery capabilities |
 | `GET` | `/provider/v1/spacecraft` | Discover provider spacecraft inventory |
+| `PUT` | `/provider/v1/spacecraft/:ref/ephemeris` | Upload a spacecraft's current orbit (#968), when `orbit.source` is `accepts_ephemeris_upload` |
+| `GET` | `/provider/v1/spacecraft/:ref/ephemeris` | Read the orbit the provider holds for a spacecraft |
 | `GET` | `/provider/v1/ground-stations` | Discover stations and service pools |
 | `GET` | `/provider/v1/service-profiles` | Discover provisioned provider services |
 | `GET` | `/provider/v1/delivery-profiles` | Discover delivery destinations |
@@ -288,6 +290,9 @@ Minimum shape:
     "station_batch_limit": 30,
     "page_size_limit": 100
   },
+  "orbit": {
+    "source": "accepts_ephemeris_upload"
+  },
   "delivery": {
     "kinds": ["realtime_stream"],
     "protocols": ["tcp"],
@@ -295,6 +300,18 @@ Minimum shape:
   }
 }
 ```
+
+`orbit.source` (#968) says how the provider gets each spacecraft's orbit:
+
+- `accepts_ephemeris_upload`: the customer uploads it (see Ephemeris Upload). The simulator
+  declares this.
+- `looks_up_by_norad_id`: the provider fetches public element sets by catalog number itself, so
+  the customer's element set must carry a NORAD id.
+
+`orbit` is optional. A provider that omits it behaves as `looks_up_by_norad_id`. Cadence never
+calls an operation the provider didn't declare, and a spacecraft without a NORAD id is still
+reported as `norad_id_missing`, not dropped. Cadence's providers read shows such a provider's
+`orbit_source` as `null` (not declared), while counting it as a lookup provider.
 
 The simulator can exercise these reservation modes:
 
@@ -307,6 +324,52 @@ The simulator can exercise these reservation modes:
 Cadence always creates a durable internal idempotency key. The adapter decides
 whether the provider supports sending it, translating it into a client
 reference, or retaining it only as local evidence.
+
+## Ephemeris Upload
+
+`PUT /provider/v1/spacecraft/:ref/ephemeris` gives an `accepts_ephemeris_upload` provider the
+customer's current orbit for one spacecraft, as the provider knows it (`:ref`, the spacecraft's
+provider-side reference). Cadence sends it whenever an element set becomes the spacecraft's
+current one, and retries a failed upload with backoff. The request carries no credentials beyond
+the adapter's own.
+
+```json
+{
+  "omm": {
+    "OBJECT_NAME": "EARENDIL 1",
+    "NORAD_CAT_ID": 90001,
+    "CENTER_NAME": "EARTH",
+    "REF_FRAME": "TEME",
+    "TIME_SYSTEM": "UTC",
+    "MEAN_ELEMENT_THEORY": "SGP4",
+    "EPOCH": "2026-11-27T00:00:00.000000",
+    "MEAN_MOTION": 15.2,
+    "ECCENTRICITY": 0.0005,
+    "INCLINATION": 53.0,
+    "RA_OF_ASC_NODE": 10.0,
+    "ARG_OF_PERICENTER": 20.0,
+    "MEAN_ANOMALY": 30.0,
+    "BSTAR": 0.00002,
+    "MEAN_MOTION_DOT": 0.0,
+    "MEAN_MOTION_DDOT": 0.0
+  },
+  "epoch": "2026-11-27T00:00:00.000000Z",
+  "content_sha256": "<64 lowercase hex digits>"
+}
+```
+
+- `omm` uses the CCSDS OMM keys CelesTrak publishes. `EPOCH`, `MEAN_MOTION`, `ECCENTRICITY`,
+  `INCLINATION`, `RA_OF_ASC_NODE`, `ARG_OF_PERICENTER` and `MEAN_ANOMALY` are required.
+- The upload is idempotent per `content_sha256`. The same hash again answers `200` with the
+  stored upload, a new one answers `201` and replaces it, an unknown spacecraft answers `404`,
+  and a malformed body answers `422 invalid_request`.
+- A provider declaring `looks_up_by_norad_id` doesn't implement this operation; Cadence never
+  calls it there.
+- The simulator keeps one upload per run and spacecraft. A scenario whose
+  `orbit_readiness.source_kind` is `"uploaded"` reads its readiness from the uploads: every
+  searched spacecraft needs one whose epoch is at most 14 days old at the search start, else
+  `orbit_not_ready` with status `missing` or `expired`. `"synthetic"`, the default, keeps the
+  configured status.
 
 ## Inventory
 
@@ -331,9 +394,13 @@ display_name
 region
 service_pool_refs
 antenna_count, when meaningful
+location, when known: {latitude_deg, longitude_deg, height_m} (WGS84 geodetic, #890)
 state
 extensions
 ```
+
+Cadence stores a reported `location` apart from the mission's own station location and uses it
+only while the mission has set none (`docs/apogee/api/setup.md`, ground stations).
 
 Cadence maps these references explicitly to mission spacecraft and configured
 provider use. It does not treat SCID as durable provider identity.
@@ -385,9 +452,23 @@ Minimum read shape:
     "framing_family": "ccsds_tm",
     "endpoint_health": "healthy"
   },
+  "egress": {
+    "source_addresses": ["203.0.113.10/32", "198.51.100.0/24"]
+  },
   "extensions": {}
 }
 ```
+
+`egress` is the provider's half of the connection (#990, DECISIONS #115), apart from `target`
+(where Cadence listens); mutual TLS will add the provider's client identity here. Its
+`source_addresses` is required when the delivery's target mode is `provider_connects`: a
+non-empty list of the IP addresses or CIDR ranges the provider connects from. An entry that
+allows every address (`0.0.0.0/0`, `::/0`, `::ffff:0:0/96` or any spelling of them) is refused.
+A delivery without a usable list can't become a Cadence listen transport (named refusals
+`provider_egress_addresses_missing`, `provider_egress_addresses_too_broad`,
+`provider_egress_addresses_invalid`). Cadence refuses any peer outside the list before reading a
+frame. The simulator reports loopback (`127.0.0.1/32`, `::1/128`) unless configured with
+`:delivery_source_addresses`.
 
 Provisioning a TCP destination is a setup operation, not a reservation field:
 
@@ -459,7 +540,11 @@ Opportunity IDs are stable within an immutable run. An opportunity is still a
 proposal: successful search never guarantees successful reservation.
 
 The provider, not Cadence, owns ephemeris, station geometry, propagation, and
-visibility generation. Current readiness is repeated under each opportunity's
+visibility generation. An opportunity may report its pass geometry under `extensions`:
+`max_elevation_deg` (degrees) and `tca` (UTC time of closest approach). Cadence shows that as
+the provider's elevation. The simulator reports both for its pass-backed offers
+(`orbit_readiness.source_kind: "uploaded"`, model `sgp4_pass_v1`), and neither for synthetic
+ones. Current readiness is repeated under each opportunity's
 `extensions.orbit_readiness` and retained at page level for empty availability.
 Missing, expired, or processing orbit state returns `422 orbit_not_ready` with
 bounded readiness evidence. Cadence must distinguish that result from a

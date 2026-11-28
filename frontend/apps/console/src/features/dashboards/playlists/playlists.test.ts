@@ -1,3 +1,4 @@
+import { dashboardId as dashIdReader } from "@/api/index.ts";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { missionId as missionIdReader } from "@/api/index.ts";
 import {
@@ -67,7 +68,7 @@ describe("playlists against api's D23/D24 (475cf1295)", () => {
       description: "",
       dwell_seconds: 30,
       wallboard_mode: true,
-      dashboard_ids: ["dash-1"],
+      dashboard_ids: [dashIdReader("dash-1")],
     };
     expect(
       (await updatePlaylist(missionIdReader("m-1"), "pl-1", body, current.updated_at)).ok,

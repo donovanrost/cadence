@@ -11,8 +11,9 @@ defmodule Cadence.Reads.Attention do
   `archive_quarantine` (archive entries that can never be indexed; #88), `listener_refusal`
   (connections refused on a pass's shared listener; #87, U50), `expired_group` (a command group
   whose deadline passed before all its members went out; U75, #97), `plan_coverage` (a day
-  nearing its first window with nothing being booked; U61) and `model_approval_withdrawn` (a craft
-  on a revision whose approval was withdrawn; E2, #546). While an
+  nearing its first window with nothing being booked; U61), `model_approval_withdrawn` (a craft
+  on a revision whose approval was withdrawn; E2, #546) and `provider_ephemeris` (a provider that
+  can't use some spacecraft's current orbit, grouped by cause; #972). While an
   `activation_apply` item is open it carries the cause, so `mission_runtime` stays out of the list
   and those items say `runtime_not_applied: true` instead (fe-ops: one row for one cause). Other
   mission-level sources (provider changes, for example) join by implementing the same four
@@ -40,6 +41,7 @@ defmodule Cadence.Reads.Attention do
   alias Cadence.Platform.ReadMemo
   alias Cadence.Reads.MissionRuntimeAttention, as: MissionRuntime
   alias Cadence.Reads.PlanCoverageAttention, as: PlanCoverage
+  alias Cadence.Reads.ProviderEphemerisAttention, as: ProviderEphemeris
   alias Cadence.Reads.WithdrawnApprovalAttention, as: WithdrawnApproval
 
   @sources [
@@ -58,7 +60,8 @@ defmodule Cadence.Reads.Attention do
     ExpiredGroup,
     PlanCoverage,
     ScidMismatch,
-    WithdrawnApproval
+    WithdrawnApproval,
+    ProviderEphemeris
   ]
   @resolved_window_s 60
 

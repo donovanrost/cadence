@@ -11,7 +11,7 @@ defmodule CadenceWeb.Console.SingleBookingController do
 
   alias Cadence.Accounts.MemberNames
   alias Cadence.Contacts.SingleBookings
-  alias Cadence.Reads.{Passes, PassListenerOverlap}
+  alias Cadence.Reads.{Passes, PassGeometry, PassListenerOverlap}
   alias CadenceWeb.Console.{ConfigJSON, Problem}
 
   def search(conn, params) do
@@ -24,9 +24,19 @@ defmodule CadenceWeb.Console.SingleBookingController do
            Map.drop(params, ["mission_id"]),
            opts
          ) do
-      {:ok, result} -> json(conn, %{data: ConfigJSON.encode(result)})
+      {:ok, result} -> json(conn, %{data: ConfigJSON.encode(with_geometry(conn, result))})
       {:error, reason} -> error(conn, reason)
     end
+  end
+
+  # #892: each offer's predicted geometry and its no_predicted_pass flag (one match query).
+  defp with_geometry(conn, %{spacecraft: %{id: spacecraft_id}, offers: offers} = result) do
+    org = scope(conn).organization_id
+
+    %{
+      result
+      | offers: PassGeometry.opportunities(org, mission_id(conn), spacecraft_id, offers)
+    }
   end
 
   # A16b: the route picker's options and the search limits.

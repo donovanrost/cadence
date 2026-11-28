@@ -1,3 +1,4 @@
+import type { PointId } from "@/api/index.ts";
 import type { OpState } from "@/ui";
 import type { Alarm, Thresholds } from "@/features/alarms/index.ts";
 import { fleetOpState, fleetStateWord, type FleetSpacecraft } from "@/features/fleet/index.ts";
@@ -34,7 +35,7 @@ export function centredWindow(range: RangeKey, at: number, now: Date): TimeWindo
 export function pickAlarm(
   alarms: readonly Alarm[],
   alarmId: string | null,
-  pointId: string | null = null,
+  pointId: PointId | null = null,
 ): Alarm | null {
   const named =
     (alarmId !== null ? alarms.find((alarm) => alarm.id === alarmId) : undefined) ??
@@ -178,7 +179,7 @@ export function sisters(
   alarms: readonly Alarm[],
   fleet: readonly FleetSpacecraft[],
   sc: FleetSpacecraft,
-  pointId: string,
+  pointId: PointId,
 ): { sc: FleetSpacecraft; alarm: Alarm }[] {
   if (sc.plane === null) return [];
   const inPlane = new Map(

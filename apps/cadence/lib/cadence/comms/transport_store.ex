@@ -490,8 +490,15 @@ defmodule Cadence.Comms.TransportStore do
 
   defp delivery_configuration(delivery_profile) do
     case TCPSocket.from_delivery_profile(delivery_profile) do
-      {:ok, configuration} -> {:ok, configuration}
-      {:error, message} -> {:error, {:provider_delivery_profile_unusable, message}}
+      {:ok, configuration} ->
+        {:ok, configuration}
+
+      {:error, message} ->
+        # A provider-connects profile without usable egress addresses gets a named code (#990).
+        case TCPSocket.egress_refusal(delivery_profile) do
+          nil -> {:error, {:provider_delivery_profile_unusable, message}}
+          code -> {:error, code}
+        end
     end
   end
 

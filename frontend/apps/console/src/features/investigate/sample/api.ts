@@ -1,3 +1,4 @@
+import type { PointId } from "@/api/index.ts";
 import type { MissionId } from "@/api/index.ts";
 import {
   decoders as d,
@@ -6,6 +7,7 @@ import {
   type ApiResult,
   type Decoded,
   type SpacecraftId,
+  pointId as pointIdReader,
 } from "@/api/index.ts";
 
 /**
@@ -50,7 +52,7 @@ const recordReader = d.object({
 });
 
 const sampleReader = d.object({
-  point_id: d.string,
+  point_id: pointIdReader,
   // free-text: the point's catalog name
   point_name: d.nullable(d.string),
   sample_id: d.token,
@@ -85,7 +87,7 @@ export type SampleRead = Decoded<typeof sampleReadReader>;
 
 export type SampleKey = Readonly<{
   sampleId: string;
-  pointId: string;
+  pointId: PointId;
   spacecraftId: SpacecraftId;
   /** The exact match (±1 s on the receipt clock). */
   receiptTime: string | null;

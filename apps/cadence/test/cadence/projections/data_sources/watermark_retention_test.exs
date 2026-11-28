@@ -7,6 +7,7 @@ defmodule Cadence.Projections.DataSources.Watermarks.RetentionTest do
 
   alias Cadence.Persistence.Retention.Sweeper
   alias Cadence.Projections.DataSources.Watermarks.Retention, as: Rule
+  alias Cadence.TestSupport.RetentionLock
 
   @now ~U[2026-11-26 12:00:00Z]
 
@@ -24,7 +25,15 @@ defmodule Cadence.Projections.DataSources.Watermarks.RetentionTest do
   end
 
   defp sweep(opts \\ []),
-    do: Sweeper.sweep(Rule, Rule.initial_cursor(), Keyword.merge([now: @now, pause_ms: 0], opts))
+    do:
+      Sweeper.sweep(
+        Rule,
+        Rule.initial_cursor(),
+        Keyword.merge(
+          [now: @now, pause_ms: 0, lock_key: RetentionLock.key(Rule)],
+          opts
+        )
+      )
 
   defp event!(tag, name, days_old) do
     at = DateTime.add(@now, -days_old * 86_400, :second)
@@ -107,7 +116,12 @@ defmodule Cadence.Projections.DataSources.Watermarks.RetentionTest do
     assert %{rows: 2, stopped: :budget} = first
 
     assert %{rows: 3, stopped: :done} =
-             Sweeper.sweep(Rule, first.cursor, now: @now, pause_ms: 0, chunk_rows: 2)
+             Sweeper.sweep(Rule, first.cursor,
+               now: @now,
+               pause_ms: 0,
+               lock_key: RetentionLock.key(Rule),
+               chunk_rows: 2
+             )
 
     refute Enum.any?(ids, &present?/1)
   end

@@ -76,3 +76,38 @@ describe("probeStop: stop identity", () => {
     expect(focusRow(25, 3)).toBe(focusRow(25, 7));
   });
 });
+
+/** #928: a named region (the staged-changes bar) is a landmark; an unnamed one isn't (ARIA). */
+describe("probeStop: named regions are landmarks", () => {
+  function landmarkOfButtonIn(html: string) {
+    document.body.innerHTML = html;
+    const button = document.querySelector("button");
+    if (!(button instanceof HTMLElement)) throw new Error("no button");
+    vi.spyOn(button, "getBoundingClientRect").mockReturnValue(new DOMRect(10, 10, 100, 40));
+    vi.spyOn(document, "elementFromPoint").mockReturnValue(button);
+    button.focus();
+    return probeStop([])?.landmark;
+  }
+
+  it("names a stop in a labelled region outside main by that region", () => {
+    expect(
+      landmarkOfButtonIn(
+        '<div role="region" aria-label="Staged changes"><button>Open review</button></div>',
+      ),
+    ).toBe("region 'Staged changes'");
+    expect(
+      landmarkOfButtonIn(
+        '<h2 id="t">Changes</h2><section aria-labelledby="t"><button>Go</button></section>',
+      ),
+    ).toBe("region 'Changes'");
+  });
+
+  it("keeps a region inside main in main's run, and ignores an unnamed region", () => {
+    expect(
+      landmarkOfButtonIn(
+        '<main><div role="region" aria-label="Inner"><button>x</button></div></main>',
+      ),
+    ).toBe("main");
+    expect(landmarkOfButtonIn('<div role="region"><button>x</button></div>')).toBe("");
+  });
+});

@@ -445,6 +445,16 @@ defmodule CadenceWeb.Router do
       # #847: before :spacecraft_id, so "names" isn't read as an id.
       get("/spacecraft/names", SpacecraftController, :names)
       get("/spacecraft/:spacecraft_id", SpacecraftDetailController, :show)
+
+      # #889 (slice 1 of #732): orbits as SGP4 element sets. Contract: docs/apogee/api/element-sets.md
+      post("/element-sets", ElementSetController, :bulk)
+      get("/spacecraft/:spacecraft_id/element-sets", ElementSetController, :index)
+      post("/spacecraft/:spacecraft_id/element-sets", ElementSetController, :create)
+      get("/spacecraft/:spacecraft_id/element-sets/current", ElementSetController, :current)
+      # #891 (slice 3 of #732): predicted passes. Contract: docs/apogee/api/predicted-passes.md
+      get("/predicted-passes", PredictedPassController, :index)
+      post("/predicted-passes/recompute", PredictedPassController, :recompute)
+      get("/spacecraft/:spacecraft_id/predicted-passes", PredictedPassController, :spacecraft)
       get("/spacecraft/:spacecraft_id/source-endpoints", SourceEndpointController, :index)
       post("/spacecraft/:spacecraft_id/source-endpoints", SourceEndpointController, :create)
       get("/source-endpoints", SourceEndpointController, :index)
@@ -525,6 +535,13 @@ defmodule CadenceWeb.Router do
       post("/providers/:provider_id/validate", MissionProviderController, :validate)
       post("/providers/:provider_id/sync", MissionProviderController, :sync)
       post("/providers/:provider_id/archive", MissionProviderController, :archive)
+
+      get(
+        "/providers/:provider_id/ephemeris/spacecraft",
+        ProviderEphemerisController,
+        :spacecraft
+      )
+
       get("/transports", CommsController, :transports)
       get("/transports/:transport_id", CommsController, :transport)
       get("/routing-rules", CommsController, :routing_rules)

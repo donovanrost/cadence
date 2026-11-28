@@ -59,6 +59,7 @@ defmodule Cadence.Reads.PassListenerOverlapTest do
           adapter_key: :tcp_socket,
           configuration: %{
             "mode" => "listen",
+            "expected_peer_addresses" => ["127.0.0.1/32", "::1/128"],
             "port" => @port,
             "ingress_protocol_family" => "tm",
             "frame_size" => 10
@@ -114,6 +115,7 @@ defmodule Cadence.Reads.PassListenerOverlapTest do
                 adapter_key: :tcp_socket,
                 configuration: %{
                   mode: :listen,
+                  expected_peer_addresses: ["127.0.0.1/32", "::1/128"],
                   port: @port,
                   ingress_protocol_family: :tm,
                   frame_size: 10
@@ -238,6 +240,7 @@ defmodule Cadence.Reads.PassListenerOverlapTest do
                  adapter_key: :tcp_socket,
                  configuration: %{
                    "mode" => "listen",
+                   "expected_peer_addresses" => ["127.0.0.1/32", "::1/128"],
                    "port" => @port,
                    "ingress_protocol_family" => "tm",
                    "frame_size" => 10

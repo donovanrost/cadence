@@ -1,3 +1,4 @@
+import type { PointId } from "@/api/index.ts";
 import type { MissionId } from "@/api/index.ts";
 import {
   spacecraftId as spacecraftIdReader,
@@ -6,6 +7,7 @@ import {
   request,
   type ApiResult,
   type Decoded,
+  pointId as pointIdReader,
 } from "@/api/index.ts";
 import { thresholdsReader } from "@/features/alarms/index.ts";
 
@@ -23,7 +25,7 @@ const bucket = d.object({
 });
 
 const historyShape = d.object({
-  point_id: d.token,
+  point_id: pointIdReader,
   unit: d.nullable(d.string),
   description: d.nullable(d.string),
   spacecraft_id: d.nullable(spacecraftIdReader),
@@ -64,7 +66,7 @@ const interval = d.object({
 });
 
 export const intervalsReader = d.object({
-  point_id: d.token,
+  point_id: pointIdReader,
   spacecraft_id: d.nullable(spacecraftIdReader),
   from: d.timestamp,
   to: d.timestamp,
@@ -72,7 +74,7 @@ export const intervalsReader = d.object({
 });
 export type LimitIntervals = Decoded<typeof intervalsReader>;
 
-const pointPath = (missionId: MissionId, prefix: string, pointId: string) =>
+const pointPath = (missionId: MissionId, prefix: string, pointId: PointId) =>
   `/missions/${encodeURIComponent(missionId)}/${prefix}/points/${encodeURIComponent(pointId)}`;
 
 function windowQuery(
@@ -90,7 +92,7 @@ function windowQuery(
 
 export function fetchHistory(
   missionId: MissionId,
-  pointId: string,
+  pointId: PointId,
   spacecraftId: SpacecraftId,
   window: HistoryWindow,
   signal?: AbortSignal,
@@ -105,7 +107,7 @@ export function fetchHistory(
 
 export function fetchLimitIntervals(
   missionId: MissionId,
-  pointId: string,
+  pointId: PointId,
   spacecraftId: SpacecraftId,
   window: HistoryWindow,
   signal?: AbortSignal,

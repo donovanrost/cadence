@@ -1,3 +1,4 @@
+import type { DashboardId } from "@/api/index.ts";
 import type { MissionId } from "@/api/index.ts";
 import { computed, onScopeDispose, ref, shallowRef, watch, type Ref } from "vue";
 import type { ApiError } from "@/api";
@@ -31,7 +32,7 @@ export type Notice =
  */
 export function useEditSession(
   missionId: Readonly<Ref<MissionId>>,
-  dashboardId: Readonly<Ref<string>>,
+  dashboardId: Readonly<Ref<DashboardId>>,
   runtime: Readonly<Ref<Runtime>>,
   /** The dashboard's current version, from the viewer read (refreshed on `dashboards`). */
   currentVersion: Readonly<Ref<number | null>>,

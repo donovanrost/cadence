@@ -3,6 +3,7 @@ import type { MissionId } from "@/api/index.ts";
 import { computed, ref } from "vue";
 import { useRoute } from "vue-router";
 import { useRemoteQuery } from "@/api";
+import { useMissionInvalidation } from "@/live";
 import { paramText } from "@/shell";
 import { ApButton, ApEmptyState, ApPanel, ApRemote } from "@/ui";
 import { fetchProviders } from "./api.ts";
@@ -15,6 +16,12 @@ const props = defineProps<{ missionId: MissionId }>();
 const route = useRoute();
 const providerId = computed(() => paramText(route.params, "providerId") || null);
 const { state, refetch } = useRemoteQuery(() => props.missionId, fetchProviders);
+// setup.md (#972): providers after an upload run, a write, validate or sync; stations for counts.
+useMissionInvalidation(
+  computed(() => props.missionId),
+  ["providers", "stations"],
+  refetch,
+);
 const notProvided = computed(
   () => state.value.status === "failed" && state.value.error.kind === "not_found",
 );

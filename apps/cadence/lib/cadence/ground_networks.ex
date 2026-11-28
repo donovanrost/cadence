@@ -3,8 +3,10 @@ defmodule Cadence.GroundNetworks do
 
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Comms.StationAvailability.ProviderReports
+  alias Cadence.Comms.StationLocations
   alias Cadence.Contacts.ProviderClients.Registry
   alias Cadence.Ids
+  alias Cadence.Platform.ScopedReadUpdates
 
   alias Cadence.GroundNetworks.{
     CredentialResolver,
@@ -90,7 +92,7 @@ defmodule Cadence.GroundNetworks do
 
   def validate_provider(organization_id, mission_id, provider_id, opts) do
     with {:ok, provider} <- fetch_provider(organization_id, mission_id, provider_id) do
-      do_validate_provider(provider, opts)
+      provider |> do_validate_provider(opts) |> providers_changed(provider)
     end
   end
 
@@ -98,7 +100,7 @@ defmodule Cadence.GroundNetworks do
   @spec validate_provider_configuration(MissionProvider.t(), keyword()) ::
           {:ok, MissionProvider.t()} | {:error, term()}
   def validate_provider_configuration(%MissionProvider{} = provider, opts \\ []),
-    do: do_validate_provider(provider, opts)
+    do: provider |> do_validate_provider(opts) |> providers_changed(provider)
 
   @spec sync_provider(Scope.t() | binary(), binary(), binary(), keyword()) ::
           {:ok, MissionProvider.t()} | {:error, term()}
@@ -112,7 +114,7 @@ defmodule Cadence.GroundNetworks do
 
   def sync_provider(organization_id, mission_id, provider_id, opts) do
     with {:ok, provider} <- fetch_provider(organization_id, mission_id, provider_id) do
-      do_sync_provider(provider, opts)
+      provider |> do_sync_provider(opts) |> providers_changed(provider)
     end
   end
 
@@ -120,7 +122,7 @@ defmodule Cadence.GroundNetworks do
   @spec sync_provider_configuration(MissionProvider.t(), keyword()) ::
           {:ok, MissionProvider.t()} | {:error, term()}
   def sync_provider_configuration(%MissionProvider{} = provider, opts \\ []),
-    do: do_sync_provider(provider, opts)
+    do: provider |> do_sync_provider(opts) |> providers_changed(provider)
 
   defp do_validate_provider(provider, opts) do
     checked_at = now(opts)
@@ -166,6 +168,14 @@ defmodule Cadence.GroundNetworks do
              provider.mission_id,
              provider.provider_id,
              ground_stations
+           ),
+         {:ok, _locations} <-
+           StationLocations.record_provider_reports(
+             provider.organization_id,
+             provider.mission_id,
+             provider.provider_id,
+             ground_stations,
+             synced_at
            ) do
       sync_document =
         build_sync_document(
@@ -318,7 +328,8 @@ defmodule Cadence.GroundNetworks do
       "supported_service_profile_refs" => profile.supported_service_profile_refs,
       "state" => Atom.to_string(profile.state),
       "operator_summary" => profile.operator_summary,
-      "diagnostics" => profile.diagnostics
+      "diagnostics" => profile.diagnostics,
+      "egress" => profile.egress
     }
   end
 
@@ -328,8 +339,11 @@ defmodule Cadence.GroundNetworks do
   """
   @spec record_provider_failure(MissionProvider.t(), binary(), term()) :: {:error, term()}
   def record_provider_failure(%MissionProvider{} = provider, observation, reason)
-      when observation in ["control_plane", "sync"],
-      do: record_failure(provider, observation, reason, now([]))
+      when observation in ["control_plane", "sync"] do
+    provider
+    |> record_failure(observation, reason, now([]))
+    |> providers_changed(provider)
+  end
 
   defp record_failure(provider, observation, reason, at) do
     metadata =
@@ -341,6 +355,13 @@ defmodule Cadence.GroundNetworks do
 
     _result = MissionProviders.update_operational_state(provider, %{metadata: metadata})
     {:error, reason}
+  end
+
+  # A validate or sync outcome, failed or not, is on the providers read (its health, the last sync
+  # and the station count): its `providers` live update (#972), after the record is written.
+  defp providers_changed(result, %MissionProvider{} = provider) do
+    ScopedReadUpdates.publish(:providers_changed, provider.organization_id, provider.mission_id)
+    result
   end
 
   defp encode_error(%ProviderError{} = error), do: ProviderError.to_map(error)

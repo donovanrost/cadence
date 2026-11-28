@@ -6,6 +6,7 @@ import {
   type RemoteState,
   type Scid,
   type SpacecraftId,
+  type PointId,
 } from "@/api/index.ts";
 import { useMissionInvalidation } from "@/live/index.ts";
 import { FLEET_TELEMETRY_GAP_MS, throttle, type FleetSpacecraft } from "@/features/fleet/index.ts";
@@ -21,7 +22,7 @@ export type RefreshFailed = Readonly<{ at: Date; readAt: Date }>;
 type Request = Readonly<{
   m: MissionId;
   w: WindowSel;
-  series: readonly { scid: Scid; id: SpacecraftId; p: string }[];
+  series: readonly { scid: Scid; id: SpacecraftId; p: PointId }[];
 }>;
 
 /**

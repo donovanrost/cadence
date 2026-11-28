@@ -1,11 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import { scid as scidReader } from "@/api/index.ts";
+import { pointId as pointIdReader, scid as scidReader } from "@/api/index.ts";
 import { readRecent, remember, suggest } from "./recent.ts";
 
-const r = (scid: number, point: string) => ({ scid: scidReader(scid), name: `SC-${scid}`, point });
+const r = (scid: number, point: string) => ({
+  scid: scidReader(scid),
+  name: `SC-${scid}`,
+  point: pointIdReader(point),
+});
 const sel = (scids: number[], points: string[]) => ({
   scids: scids.map((n) => scidReader(n)),
-  points,
+  points: points.map((p) => pointIdReader(p)),
   window: { kind: "preset" as const, key: "6h" as const },
 });
 

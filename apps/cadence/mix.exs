@@ -47,6 +47,8 @@ defmodule Cadence.MixProject do
     [
       {:cadence_catalog, path: "../../packages/cadence_catalog", env: Mix.env()},
       {:ccsds, path: "../../packages/ccsds"},
+      # SGP4 and the pass search for predicted passes (#891).
+      {:sgp4, path: "../../packages/sgp4"},
       {:ecto_sql, "~> 3.13"},
       # grpcbox currently constrains gproc to 1.2.x, which does not compile cleanly on OTP 29.
       {:gproc, "~> 1.3", override: true},

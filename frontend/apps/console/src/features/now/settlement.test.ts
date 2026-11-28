@@ -1,5 +1,5 @@
+import { missionId as missionIdOf } from "@/api/index.ts";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import type { MissionId } from "@/api/index.ts";
 import { fetchSettlement } from "./useSettlement.ts";
 
 // domain's #71 sample item (as in actionQueue.test.ts), with the pass's booking.
@@ -45,7 +45,7 @@ describe("fetchSettlement", () => {
   it("asks for the pass's booking and reads its open item", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValueOnce(reply(sample));
     vi.stubGlobal("fetch", fetch);
-    const r = await fetchSettlement("m1" as MissionId, "res-7");
+    const r = await fetchSettlement(missionIdOf("m1"), "res-7");
     const input = fetch.mock.calls[0]?.[0];
     const url = input instanceof Request ? input.url : (input?.toString() ?? "");
     expect(url).toContain("/missions/m1/attention/contact_settlement?reservation_id=res-7");
@@ -56,7 +56,7 @@ describe("fetchSettlement", () => {
 
   it("reads null when the pass has no open item", async () => {
     vi.stubGlobal("fetch", vi.fn<typeof globalThis.fetch>().mockResolvedValueOnce(reply(null)));
-    const r = await fetchSettlement("m1" as MissionId, "res-8");
+    const r = await fetchSettlement(missionIdOf("m1"), "res-8");
     expect(r).toEqual({ ok: true, value: null });
   });
 });

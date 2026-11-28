@@ -162,8 +162,8 @@ defmodule Cadence.Dev.ReflectOrbital.Fixture do
         "id" => "earendil-#{id}",
         "name" => "#{name} (Demo)",
         "region" => region,
-        "latitude_deg" => latitude,
-        "longitude_deg" => longitude,
+        # Reported in the provider inventory as the station's location (#957).
+        "location" => %{"latitude_deg" => latitude, "longitude_deg" => longitude},
         "antenna_count" => antennas,
         "ingress_port" =>
           String.to_integer(System.get_env("EARENDIL_INGRESS_BASE_PORT", "42100")) + index,
@@ -172,6 +172,13 @@ defmodule Cadence.Dev.ReflectOrbital.Fixture do
         "synthetic" => true
       }
     end)
+  end
+
+  def orbit_source do
+    case System.get_env("EARENDIL_ORBIT_SOURCE", "synthetic") do
+      source when source in ["synthetic", "uploaded"] -> source
+      other -> raise "EARENDIL_ORBIT_SOURCE must be synthetic or uploaded, got #{inspect(other)}"
+    end
   end
 
   def scenario do
@@ -184,9 +191,11 @@ defmodule Cadence.Dev.ReflectOrbital.Fixture do
       "spacecraft_count" => length(fleet),
       "spacecraft_prefix" => "EARENDIL",
       "ground_stations" => sites(),
+      # EARENDIL_ORBIT_SOURCE=uploaded: real passes over uploaded orbits (#893). The default
+      # stays synthetic: the demo and planning seeds the console e2e runs submit no orbits.
       "orbit_readiness" => %{
         "status" => "current",
-        "source_kind" => "synthetic",
+        "source_kind" => orbit_source(),
         "ephemeris_ref" => "earendil-demo-orbits-v1",
         "version" => 1,
         "validity_seconds" => 604_800

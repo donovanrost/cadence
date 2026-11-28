@@ -1,11 +1,18 @@
 import { describe, expect, it } from "vite-plus/test";
-import { decode, decoders as d, isKnown, missionId, spacecraftId } from "@/api/index.ts";
+import {
+  decode,
+  decoders as d,
+  isKnown,
+  missionId,
+  spacecraftId,
+  pointId as pointIdReader,
+} from "@/api/index.ts";
 import { sampleReadReader, samplePath } from "./api.ts";
 
 const ready = () => ({
   status: "ready",
   sample: {
-    point_id: "EPS.VBAT",
+    point_id: pointIdReader("EPS.VBAT"),
     point_name: null,
     sample_id: "s-1",
     spacecraft_id: "sc-312",
@@ -75,7 +82,7 @@ describe("api D1: the one-sample read", () => {
 describe("samplePath", () => {
   const ids = decode(d.object({ m: missionId, sc: spacecraftId }), { m: "m-1", sc: "sc-312" });
   if (!ids.ok) throw new Error(ids.error.message);
-  const key = { sampleId: "s/1", pointId: "EPS.VBAT", spacecraftId: ids.value.sc };
+  const key = { sampleId: "s/1", pointId: pointIdReader("EPS.VBAT"), spacecraftId: ids.value.sc };
 
   it("passes receipt_time when known, for an exact match", () => {
     const at = "2026-11-08T02:08:11.250Z";
@@ -85,7 +92,7 @@ describe("samplePath", () => {
     );
     expect(url.pathname).toBe("/missions/m-1/telemetry/samples/s%2F1");
     expect(Object.fromEntries(url.searchParams)).toEqual({
-      point_id: "EPS.VBAT",
+      point_id: pointIdReader("EPS.VBAT"),
       spacecraft_id: "sc-312",
       receipt_time: at,
     });

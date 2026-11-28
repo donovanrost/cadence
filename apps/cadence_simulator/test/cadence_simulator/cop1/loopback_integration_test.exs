@@ -55,6 +55,7 @@ defmodule CadenceSimulator.COP1.LoopbackIntegrationTest do
         configuration: %{
           uplink_resource_id: "test-loopback-session",
           mode: :listen,
+          expected_peer_addresses: ["127.0.0.1/32", "::1/128"],
           port: 0,
           ingress_protocol_family: :cop1_clcw,
           fixed_message_bytes: 4,

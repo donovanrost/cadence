@@ -18,7 +18,10 @@ defmodule Cadence.Contacts.ProfileStoreTest do
         provider_profile_id: "provider-1",
         mission_id: context.mission_id,
         adapter_key: :tcp_socket,
-        configuration: %{"mode" => "listen"},
+        configuration: %{
+          "mode" => "listen",
+          "expected_peer_addresses" => ["127.0.0.1/32", "::1/128"]
+        },
         metadata: %{"owner" => "ops"}
       })
 

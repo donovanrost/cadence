@@ -15,6 +15,7 @@ defmodule CadenceSimulator.CadenceRuntimeBootstrapTest do
              "provider_binding_id" => "tcp-downlink-provider",
              "adapter_key" => "tcp_socket",
              "mode" => "listen",
+             "expected_peer_addresses" => ["127.0.0.1/32", "::1/128"],
              "host" => "127.0.0.1",
              "port" => 4100,
              "ingress_protocol_family" => "tm",
@@ -69,6 +70,7 @@ defmodule CadenceSimulator.CadenceRuntimeBootstrapTest do
              "provider_binding_id" => "tcp-downlink-provider",
              "adapter_key" => "tcp_socket",
              "mode" => "listen",
+             "expected_peer_addresses" => ["127.0.0.1/32", "::1/128"],
              "host" => "127.0.0.1",
              "port" => 4100,
              "ingress_protocol_family" => "tm",
@@ -119,6 +121,7 @@ defmodule CadenceSimulator.CadenceRuntimeBootstrapTest do
              "provider_binding_id" => "tcp-downlink-provider",
              "adapter_key" => "tcp_socket",
              "mode" => "listen",
+             "expected_peer_addresses" => ["127.0.0.1/32", "::1/128"],
              "host" => "127.0.0.1",
              "port" => 4100,
              "ingress_protocol_family" => "tm",
@@ -169,6 +172,7 @@ defmodule CadenceSimulator.CadenceRuntimeBootstrapTest do
              "provider_binding_id" => "tcp-uplink-provider",
              "adapter_key" => "tcp_socket",
              "mode" => "listen",
+             "expected_peer_addresses" => ["127.0.0.1/32", "::1/128"],
              "host" => "127.0.0.1",
              "port" => 4200
            }
@@ -226,6 +230,7 @@ defmodule CadenceSimulator.CadenceRuntimeBootstrapTest do
              "provider_binding_id" => "tcp-uplink-provider",
              "adapter_key" => "tcp_socket",
              "mode" => "listen",
+             "expected_peer_addresses" => ["127.0.0.1/32", "::1/128"],
              "host" => "127.0.0.1",
              "port" => 4200
            }
@@ -273,6 +278,7 @@ defmodule CadenceSimulator.CadenceRuntimeBootstrapTest do
              "provider_binding_id" => "tcp-downlink-provider-a",
              "adapter_key" => "tcp_socket",
              "mode" => "listen",
+             "expected_peer_addresses" => ["127.0.0.1/32", "::1/128"],
              "host" => "127.0.0.1",
              "port" => 4100
            },
@@ -280,6 +286,7 @@ defmodule CadenceSimulator.CadenceRuntimeBootstrapTest do
              "provider_binding_id" => "tcp-downlink-provider-b",
              "adapter_key" => "tcp_socket",
              "mode" => "listen",
+             "expected_peer_addresses" => ["127.0.0.1/32", "::1/128"],
              "host" => "127.0.0.1",
              "port" => 4101
            }

@@ -12,5 +12,8 @@
     "framing_family": "ccsds_tm",
     "endpoint_health": "healthy"
   },
+  "egress": {
+    "source_addresses": ["127.0.0.1/32", "::1/128"]
+  },
   "extensions": {}
 }

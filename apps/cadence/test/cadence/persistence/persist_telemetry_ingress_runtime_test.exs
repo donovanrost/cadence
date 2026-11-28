@@ -23,18 +23,12 @@ defmodule Cadence.Persistence.PersistTelemetryIngressRuntimeTest do
   alias CCSDS.Core.SDUOctets
   alias CCSDS.SDLP.TM.Segmentation
 
-  test "persists protocol anomalies when raw evidence is archived outside Postgres" do
-    ingress_base_path =
-      Path.join(
-        System.tmp_dir!(),
-        "cadence_ingress_archive_anomaly_#{System.unique_integer([:positive])}"
-      )
-
-    protocol_base_path =
-      Path.join(
-        System.tmp_dir!(),
-        "cadence_protocol_archive_anomaly_#{System.unique_integer([:positive])}"
-      )
+  @tag :tmp_dir
+  test "persists protocol anomalies when raw evidence is archived outside Postgres", %{
+    tmp_dir: tmp_dir
+  } do
+    ingress_base_path = Path.join(tmp_dir, "ingress")
+    protocol_base_path = Path.join(tmp_dir, "protocol")
 
     persistence_policy =
       filesystem_persistence_policy(ingress_base_path, protocol_base_path,
@@ -167,18 +161,12 @@ defmodule Cadence.Persistence.PersistTelemetryIngressRuntimeTest do
     assert Enum.all?(anomaly_rows, &(&1.evidence_id == raw_evidence_two.evidence_id))
   end
 
-  test "batched persistence retries tolerate already-inserted protocol anomalies" do
-    ingress_base_path =
-      Path.join(
-        System.tmp_dir!(),
-        "cadence_ingress_archive_retry_#{System.unique_integer([:positive])}"
-      )
-
-    protocol_base_path =
-      Path.join(
-        System.tmp_dir!(),
-        "cadence_protocol_archive_retry_#{System.unique_integer([:positive])}"
-      )
+  @tag :tmp_dir
+  test "batched persistence retries tolerate already-inserted protocol anomalies", %{
+    tmp_dir: tmp_dir
+  } do
+    ingress_base_path = Path.join(tmp_dir, "ingress")
+    protocol_base_path = Path.join(tmp_dir, "protocol")
 
     persistence_policy =
       filesystem_persistence_policy(ingress_base_path, protocol_base_path,

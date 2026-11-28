@@ -171,6 +171,10 @@ export function attentionWords(
     case "listener_refusal":
     case "outcome_unknown":
     case "replay_id_conflict":
+    // provider_ephemeris (#972) words its own row.
+    case "norad_id_missing":
+    case "failed":
+    case "not_ready":
     case null:
     default:
       // A source this console doesn't know yet says only that the contact needs a look.

@@ -269,4 +269,44 @@ defmodule Cadence.Reads.ActionQueue.AttentionItemsTest do
     assert AttentionItems.provider_change(%{pending | expired: true}).state == "expired"
     assert AttentionItems.provider_change(nil) == nil
   end
+
+  test "a provider_ephemeris group is one P2 row naming its provider, sample and count (#972)" do
+    item = %{
+      id: "northlight:not_ready:mission_provider_not_validated",
+      source: "provider_ephemeris",
+      conflict: "not_ready",
+      state: "open",
+      provider_id: "northlight",
+      spacecraft_ids: ["sc-1"],
+      spacecraft_count: 37,
+      reason: "mission_provider_not_validated",
+      next_retry_at: at(3_600),
+      raised_at: at(-600),
+      since: at(-600),
+      acknowledged_by: nil,
+      resolution: nil
+    }
+
+    assert %{items: [row]} =
+             AttentionItems.build(%{items: [item], resolved: []}, names(), @now)
+
+    assert %{
+             id:
+               "attention:provider_ephemeris:northlight:not_ready:mission_provider_not_validated",
+             priority: 2,
+             state: :caution,
+             count: 1,
+             due_at: nil,
+             spacecraft: [%{id: "sc-1", name: "EARENDIL-001"}],
+             attention: %{
+               conflict: "not_ready",
+               provider: %{id: "northlight", name: "Northlight"},
+               spacecraft_count: 37,
+               reason: "mission_provider_not_validated",
+               next_retry_at: retry
+             }
+           } = row
+
+    assert retry == at(3_600)
+  end
 end

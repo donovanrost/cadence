@@ -74,6 +74,7 @@ defmodule CadenceWeb.Console.CommsAPITest do
         "display_name" => "Svalbard X-band",
         "configuration" => %{
           "mode" => "listen",
+          "expected_peer_addresses" => ["127.0.0.1/32", "::1/128"],
           "direction_capability" => "inbound",
           "host" => "0.0.0.0",
           "port" => "5000",
@@ -129,7 +130,8 @@ defmodule CadenceWeb.Console.CommsAPITest do
     station = get_data(c, "/config/kinds/ground_station/schema")
 
     assert Enum.map(station["fields"], & &1["path"]) ==
-             ~w(display_name code provider region metadata)
+             ~w(display_name code provider region latitude_deg longitude_deg height_m
+                elevation_mask_deg metadata)
 
     code = Enum.find(station["fields"], &(&1["path"] == "code"))
     # Optional until set (ux U25); the pattern still applies to a code that is given.

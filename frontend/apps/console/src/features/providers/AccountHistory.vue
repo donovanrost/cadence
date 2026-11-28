@@ -1,11 +1,12 @@
 <script setup lang="ts">
+import type { OrganizationId } from "@/api/index.ts";
 import { computed } from "vue";
 import { useRemoteQuery } from "@/api";
 import { ApEmptyState, ApPanel, ApRemote, formatShort } from "@/ui";
 import { changeLines, fetchAccountVersions } from "./history.ts";
 
 /** V3 · History: settings and credential-reference versions (renames make no version). */
-const props = defineProps<{ orgId: string; accountId: string }>();
+const props = defineProps<{ orgId: OrganizationId; accountId: string }>();
 const key = computed(() => ({ orgId: props.orgId, id: props.accountId }));
 const { state, refetch } = useRemoteQuery(key, fetchAccountVersions);
 defineExpose({ refetch });

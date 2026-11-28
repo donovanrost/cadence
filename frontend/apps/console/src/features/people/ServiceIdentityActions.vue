@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { OrganizationId } from "@/api/index.ts";
 import { ref } from "vue";
 import { useRouter } from "vue-router";
 import { ApButton, ApCallout, ApInlineConfirm, ApPanel } from "@/ui";
@@ -9,7 +10,7 @@ import { revokeServiceIdentity, rotateServiceIdentity, serviceFailure } from "./
  * U3 detail · Rotate key / Revoke (O6), each confirmed in place with the kit's ApInlineConfirm
  * (design-language §7; one open at a time). A rotated token is shown once.
  */
-const props = defineProps<{ orgId: string; id: string; name: string }>();
+const props = defineProps<{ orgId: OrganizationId; id: string; name: string }>();
 const emit = defineEmits<{ changed: [] }>();
 const router = useRouter();
 const rotating = ref(false);

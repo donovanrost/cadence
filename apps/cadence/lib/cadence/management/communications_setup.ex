@@ -2,26 +2,24 @@ defmodule Cadence.Management.CommunicationsSetup do
   @moduledoc """
   Authorized Communications setup workflows, independent of frontend delivery.
 
-  This management-plane coordinator composes mission identity, Comms persistence
-  and provider-backed transport configuration. The caller owns submission replay
-  admission; these functions do not promise cross-session exactly-once effects.
+  This management-plane coordinator composes mission identity and Comms persistence for the
+  routing and ground-station forms. Transports are written only through the console's change
+  sets; the old `transport_new` form was removed (#990), so no path here creates a listening
+  transport outside the kind's allowlist rule. The caller owns submission replay admission;
+  these functions do not promise cross-session exactly-once effects.
   """
-  alias Cadence.Applications.JSONBoundary
   alias Cadence.Auth.{Policy, Scope}
 
   alias Cadence.Comms.{
     GroundStation,
     GroundStationStore,
     RoutingRule,
-    RoutingRuleStore,
-    Transport
+    RoutingRuleStore
   }
 
-  alias Cadence.ExtensionCatalog
-  alias Cadence.Management.{Providers, Transports}
   alias Cadence.Missions
 
-  @forms ~w(transport_new routing_new ground_station_new ground_station_edit)
+  @forms ~w(routing_new ground_station_new ground_station_edit)
 
   def execute(%Scope{mission_id: scoped_mission} = scope, mission_id, form, event, input)
       when form in @forms and event in ["validate", "save"] and
@@ -46,7 +44,7 @@ defmodule Cadence.Management.CommunicationsSetup do
   defp bounded_input(input) when is_map(input) and map_size(input) == 1 do
     case Map.to_list(input) do
       [{key, fields}]
-      when key in ["transport", "routing_rule", "ground_station"] and is_map(fields) ->
+      when key in ["routing_rule", "ground_station"] and is_map(fields) ->
         if map_size(fields) <= 64 and Enum.all?(fields, &bounded_field?/1),
           do: :ok,
           else: {:error, :invalid_application_request}
@@ -62,16 +60,6 @@ defmodule Cadence.Management.CommunicationsSetup do
     do:
       is_binary(key) and byte_size(key) <= 128 and String.valid?(key) and
         is_binary(value) and byte_size(value) <= 8192 and String.valid?(value)
-
-  defp save_form(scope, mission_id, %{"transport" => params} = payload, "transport_new")
-       when is_map(params) and map_size(payload) == 1 do
-    with {:ok, display_name} <- required_text(params, "display_name"),
-         {:ok, transport} <- build_transport(scope, mission_id, params, display_name),
-         {:ok, saved} <- Transports.persist_transport(scope.organization_id, transport) do
-      href = "/missions/#{mission_id}/comms/transports/#{saved.transport_id}"
-      {:ok, navigation_result("transportId", saved.transport_id, href)}
-    end
-  end
 
   defp save_form(scope, mission_id, %{"routing_rule" => params} = payload, "routing_new")
        when is_map(params) and map_size(payload) == 1 do
@@ -156,61 +144,6 @@ defmodule Cadence.Management.CommunicationsSetup do
     end
   end
 
-  defp validate_form(
-         scope,
-         mission_id,
-         %{"transport" => %{"origin" => "provider_managed"} = params} = payload,
-         "transport_new"
-       )
-       when map_size(payload) == 1 do
-    with {:ok, entry} <- ExtensionCatalog.fetch_transport_kind(params["transport_kind"]),
-         {:ok, selection} <- provider_selection(scope, mission_id, entry, params) do
-      configuration = selection.configuration
-      summary = if configuration, do: entry.module.display_summary(configuration)
-
-      result = %{
-        "valid" =>
-          match?({:ok, _}, required_text(params, "display_name")) and not is_nil(configuration),
-        "transport_review" => %{
-          "origin" => "provider_managed",
-          "endpoint" => if(summary, do: summary.endpoint)
-        },
-        "provider_setup" => %{
-          "version" => 1,
-          "transport_kind" => params["transport_kind"],
-          "provider_id" => params["mission_provider_id"] || "",
-          "provider_version" => params["mission_provider_version"] || "",
-          "service_profile_id" => params["service_profile_id"] || "",
-          "delivery_profile_id" => params["delivery_profile_id"] || "",
-          "provider_name" => if(selection.provider, do: selection.provider.display_name),
-          "services" => Enum.map(selection.services, &profile_option/1),
-          "deliveries" => Enum.map(selection.deliveries, &profile_option/1),
-          "configuration" => provider_configuration_rows(configuration, summary)
-        }
-      }
-
-      with :ok <- JSONBoundary.validate(result), do: {:ok, result}
-    end
-  end
-
-  defp validate_form(scope, mission_id, %{"transport" => params} = payload, "transport_new")
-       when is_map(params) and map_size(payload) == 1 do
-    with {:ok, display_name} <- required_text(params, "display_name"),
-         {:ok, transport} <- build_transport(scope, mission_id, params, display_name),
-         {:ok, entry} <- ExtensionCatalog.fetch_transport_kind(params["transport_kind"]) do
-      summary = entry.module.display_summary(transport.configuration)
-
-      {:ok,
-       %{
-         "valid" => true,
-         "transport_review" => %{
-           "origin" => Atom.to_string(transport.origin),
-           "endpoint" => summary.endpoint
-         }
-       }}
-    end
-  end
-
   defp validate_form(_scope, _mission_id, params, surface_id) do
     with :ok <- validate_form_for_surface(params, surface_id) do
       {:ok, %{"valid" => true}}
@@ -255,183 +188,6 @@ defmodule Cadence.Management.CommunicationsSetup do
       "navigation" => %{"kind" => "navigate", "href" => href}
     }
   end
-
-  defp build_transport(_scope, mission_id, %{"origin" => "direct"} = params, display_name) do
-    with {:ok, entry} <-
-           ExtensionCatalog.fetch_transport_kind(Map.get(params, "transport_kind", "tcp_socket")),
-         {:ok, configuration} <- entry.module.normalize_config(direct_config_params(params)) do
-      {:ok,
-       Transport.new(%{
-         mission_id: mission_id,
-         display_name: display_name,
-         origin: :direct,
-         transport_kind: entry.kind,
-         adapter_key: entry.adapter_key,
-         direction_capability: configuration["direction_capability"],
-         configuration: configuration
-       })}
-    end
-  end
-
-  defp build_transport(
-         scope,
-         mission_id,
-         %{"origin" => "provider_managed"} = params,
-         display_name
-       ) do
-    with {:ok, entry} <-
-           ExtensionCatalog.fetch_transport_kind(Map.get(params, "transport_kind", "tcp_socket")),
-         {:ok, selection} <- provider_selection(scope, mission_id, entry, params),
-         %{} = configuration <- selection.configuration do
-      %{provider: provider, service: service, delivery: delivery} = selection
-
-      {:ok,
-       Transport.new(%{
-         mission_id: mission_id,
-         display_name: display_name,
-         origin: :provider_managed,
-         transport_kind: entry.kind,
-         adapter_key: entry.adapter_key,
-         direction_capability: configuration["direction_capability"],
-         configuration: configuration,
-         mission_provider_id: provider.provider_id,
-         mission_provider_version: provider.version,
-         service_profile_ref: profile_ref(service),
-         delivery_profile_ref: profile_ref(delivery)
-       })}
-    else
-      nil -> {:error, :provider_managed_transport_selection_incomplete}
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  defp build_transport(_scope, _mission_id, _params, _display_name),
-    do: {:error, :invalid_transport_origin}
-
-  defp direct_config_params(params) do
-    %{
-      "mode" => params["tcp_mode"],
-      "direction_capability" => params["direction_capability"],
-      "host" => params["host"],
-      "port" => params["port"],
-      "framing_mode" => params["framing_mode"],
-      "frame_size" => params["frame_size"],
-      "reconnect_policy" => params["reconnect_policy"],
-      "tls_enabled" => params["tls_enabled"]
-    }
-  end
-
-  defp profile_items(provider, key) do
-    case get_in(provider.inventory_sync_document, [key, "items"]) do
-      items when is_list(items) -> items
-      _other -> []
-    end
-  end
-
-  defp provider_selection(scope, mission_id, entry, params) do
-    providers = Providers.list_providers(scope.organization_id, mission_id)
-
-    with true <-
-           Enum.all?(
-             ~w(mission_provider_id mission_provider_version service_profile_id delivery_profile_id),
-             &is_binary(params[&1])
-           ),
-         {:ok, provider} <-
-           optional_selection(providers, params["mission_provider_id"], & &1.provider_id),
-         true <- not is_nil(provider) or params["mission_provider_version"] == "",
-         true <-
-           is_nil(provider) or
-             (provider_ready?(provider) and
-                params["mission_provider_version"] == Integer.to_string(provider.version)),
-         services <-
-           if(provider,
-             do:
-               Enum.filter(
-                 profile_items(provider, "service_profiles"),
-                 &(&1["state"] == "active" and &1["direction"] == "downlink")
-               ),
-             else: []
-           ),
-         {:ok, service} <-
-           optional_selection(services, params["service_profile_id"], &profile_token/1),
-         deliveries <- if(service, do: compatible_deliveries(provider, service, entry), else: []),
-         {:ok, delivery} <-
-           optional_selection(deliveries, params["delivery_profile_id"], &profile_token/1),
-         {:ok, configuration} <-
-           if(delivery, do: entry.module.from_delivery_profile(delivery), else: {:ok, nil}) do
-      {:ok,
-       %{
-         provider: provider,
-         services: services,
-         service: service,
-         deliveries: deliveries,
-         delivery: delivery,
-         configuration: configuration
-       }}
-    else
-      false -> {:error, :mission_provider_not_validated}
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  defp optional_selection(_items, token, _identity) when token in [nil, ""], do: {:ok, nil}
-
-  defp optional_selection(items, token, identity) do
-    case Enum.filter(items, &(identity.(&1) == token)) do
-      [item] -> {:ok, item}
-      _other -> {:error, :provider_managed_transport_selection_incomplete}
-    end
-  end
-
-  defp profile_option(profile) do
-    %{
-      "label" => "#{profile["display_name"] || profile["id"]} · v#{profile["version"]}",
-      "value" => profile_token(profile),
-      "disabled" => false
-    }
-  end
-
-  defp provider_configuration_rows(nil, _summary), do: []
-
-  defp provider_configuration_rows(configuration, summary) do
-    [
-      {"Endpoint", summary.endpoint},
-      {"Mode", summary.mode},
-      {"Direction", summary.direction_capability},
-      {"Framing", summary.framing},
-      {"Frame bytes", configuration["fixed_message_bytes"] || "Not fixed"},
-      {"Reconnect", get_in(configuration, ["reconnect", "policy"]) || "Not configured"},
-      {"TLS", if(summary.tls_enabled?, do: "Enabled", else: "Disabled")}
-    ]
-    |> Enum.map(fn {label, value} ->
-      %{"label" => label, "value" => to_string(value), "mono" => true}
-    end)
-  end
-
-  defp compatible_deliveries(provider, service, kind_entry) do
-    provider
-    |> profile_items("delivery_profiles")
-    |> Enum.filter(fn delivery ->
-      delivery["state"] == "ready" and delivery["direction"] == "downlink" and
-        service["id"] in (delivery["supported_service_profile_refs"] || []) and
-        match?({:ok, _}, kind_entry.module.from_delivery_profile(delivery))
-    end)
-  end
-
-  defp profile_token(profile),
-    do:
-      profile
-      |> Map.take(["id", "version"])
-      |> Jason.encode!()
-      |> Base.url_encode64(padding: false)
-
-  defp profile_ref(profile), do: Map.take(profile, ["id", "version"])
-
-  defp provider_ready?(provider),
-    do:
-      provider.lifecycle_state == :active and match?(%DateTime{}, provider.last_validated_at) and
-        match?(%DateTime{}, provider.last_synced_at) and
-        get_in(provider.metadata, ["control_plane", "status"]) == "healthy"
 
   defp transport_ref(%{"transport_ref" => value}) when is_binary(value) do
     case String.split(value, ":", parts: 2) do

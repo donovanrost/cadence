@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { DashboardId } from "@/api/index.ts";
 import type { MissionId } from "@/api/index.ts";
 import { computed, nextTick, ref } from "vue";
 import { RouterLink } from "vue-router";
@@ -13,7 +14,7 @@ import { postSnapshot, type DataVisibility, type Snapshot } from "../settings/ap
  */
 const props = defineProps<{
   missionId: MissionId;
-  dashboardId: string;
+  dashboardId: DashboardId;
   selection: TimeSelection;
   spacecraftId: string;
   version: number | null;

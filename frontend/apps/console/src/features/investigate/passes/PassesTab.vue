@@ -19,6 +19,7 @@ import {
 } from "@/ui";
 import { fetchPasses, passGantt, type Pass } from "@/features/contacts/index.ts";
 import { readinessTag } from "@/features/contacts/readiness.ts";
+import { elevationWords } from "@/features/scheduling/geometry.ts";
 import { contactOpState, contactState, contactStateWord } from "@/features/scheduling/index.ts";
 import type { FleetSpacecraft } from "@/features/fleet/index.ts";
 import { minutes } from "../history/api.ts";
@@ -54,11 +55,15 @@ const passes = useRemoteQuery(key, (k, signal) => {
   );
 });
 const recent = useRemoteQuery(key, (k, signal) => fetchRecentPasses(k.m, k.sc, signal));
-useMissionInvalidation(missionId, ["contacts", "commanding", "pass_results"], () => {
-  coverage.refetch();
-  passes.refetch();
-  recent.refetch();
-});
+useMissionInvalidation(
+  missionId,
+  ["contacts", "commanding", "pass_results", "predicted_passes"],
+  () => {
+    coverage.refetch();
+    passes.refetch();
+    recent.refetch();
+  },
+);
 
 const cov = computed(() =>
   coverage.state.value.status === "ready" ? coverage.state.value.value : null,
@@ -255,7 +260,7 @@ const unshownPasses = computed(() =>
             <ApListRow
               v-for="p in upcoming"
               :key="p.id"
-              :sentence="`${p.source.provider_name ?? 'Provider unknown'} · ${formatCountdown(new Date(p.starts_at), now)} · ${formatDuration((Date.parse(p.ends_at) - Date.parse(p.starts_at)) / 1000)}${link(p) ? ` · ${link(p)}` : ''}${cov?.queued[p.id] ? ` · ${cov.queued[p.id]} queued` : ''}`"
+              :sentence="`${p.source.provider_name ?? 'Provider unknown'} · ${formatCountdown(new Date(p.starts_at), now)} · ${formatDuration((Date.parse(p.ends_at) - Date.parse(p.starts_at)) / 1000)}${elevationWords(p) ? ` · Max el ${elevationWords(p)}` : ''}${link(p) ? ` · ${link(p)}` : ''}${cov?.queued[p.id] ? ` · ${cov.queued[p.id]} queued` : ''}`"
             >
               <template #title>
                 <button

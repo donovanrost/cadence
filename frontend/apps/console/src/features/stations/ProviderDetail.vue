@@ -1,8 +1,13 @@
 <script setup lang="ts">
 import type { MissionId } from "@/api/index.ts";
-import { ref } from "vue";
+import { computed, ref } from "vue";
+import { useRoute } from "vue-router";
 import { ApButton, ApCallout, ApEmptyState, ApKeyValue, OutcomeCallout } from "@/ui";
 import type { MissionProvider } from "./api.ts";
+import EphemerisCounts from "./EphemerisCounts.vue";
+import { ephemerisSummary } from "./ephemeris.ts";
+import { membersQuery } from "./ephemerisMembers.ts";
+import EphemerisMembers from "./EphemerisMembers.vue";
 import ProviderArchive from "./ProviderArchive.vue";
 import {
   checkProvider,
@@ -20,6 +25,9 @@ const props = defineProps<{
   canManage: boolean;
 }>();
 const emit = defineEmits<{ changed: [] }>();
+// #972: Now's provider_ephemeris row opens the provider on its cause (and reason).
+const route = useRoute();
+const members = computed(() => membersQuery(route.query));
 const busy = ref<"validate" | "sync" | null>(null);
 const note = ref<{ tone: "nominal" | "info" | "caution" | "crit"; text: string } | null>(null);
 const confirm = ref<InstanceType<typeof ProviderArchive> | null>(null);
@@ -53,6 +61,7 @@ const facts = (p: MissionProvider) => [
   { key: "validate", label: "Validated", value: healthLine(p.health.validate).text },
   { key: "sync", label: "Synced", value: healthLine(p.health.sync).text },
   { key: "grant", label: "Account grant", value: grantLine(p.grant).text },
+  { key: "orbits", label: "Orbits", value: ephemerisSummary(p.ephemeris).lead },
 ];
 </script>
 
@@ -71,6 +80,9 @@ const facts = (p: MissionProvider) => [
           grantLine(provider.grant).text
         }}</span>
       </template>
+      <template #value-orbits
+        ><EphemerisCounts :ephemeris="provider.ephemeris" :provider-id="provider.id" linked
+      /></template>
     </ApKeyValue>
     <ApCallout v-if="provider.grant?.state === 'revoked'" tone="crit">{{
       revokedSentence(provider.account?.name ?? null)
@@ -94,6 +106,13 @@ const facts = (p: MissionProvider) => [
         >Archive…</ApButton
       >
     </div>
+    <EphemerisMembers
+      v-if="members"
+      :mission-id="missionId"
+      :provider-id="provider.id"
+      :cause="members.cause"
+      :reason="members.reason"
+    />
     <ProviderArchive
       ref="confirm"
       :mission-id="missionId"

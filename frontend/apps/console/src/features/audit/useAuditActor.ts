@@ -1,6 +1,6 @@
 import { computed, type Ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { useRemoteQuery } from "@/api";
+import { useRemoteQuery, type OrganizationId } from "@/api";
 import { fetchPeople, type Member } from "@/features/people/index.ts";
 
 export type ActorOption = Readonly<{ value: string; label: string }>;
@@ -28,7 +28,7 @@ export function actorOptions(
 }
 
 /** Audit's actor filter lives in the query (`?actor=<user_id>&who=<name>`), as People links it. */
-export function useAuditActor(organizationId: Ref<string | null>) {
+export function useAuditActor(organizationId: Ref<OrganizationId | null>) {
   const route = useRoute();
   const router = useRouter();
   const people = useRemoteQuery(organizationId, fetchPeople);

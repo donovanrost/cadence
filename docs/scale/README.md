@@ -37,6 +37,9 @@ peak swap percentage. A baseline requires the load to stay at or below the
 logical core count and swap use to stay under 50% in every sample. Runs with
 missing host readings or a threshold breach are ceiling checks.
 
+Launch baseline runs from an unsandboxed session: a Codex sandbox denies macOS
+`sysctl`, leaving host load and swap unavailable and making the run a ceiling check.
+
 Without `--spacecraft`, `mix cadence.scale.run --duration S` samples an
 already running Cadence node. `mix cadence_simulator.load` runs the
 simulator-only TCP sink benchmark.

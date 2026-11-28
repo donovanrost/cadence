@@ -219,10 +219,10 @@ defmodule Cadence.Observability.ScaleSamplerTest do
   end
 
   describe "lifetime" do
-    setup do
-      out = Path.join(System.tmp_dir!(), "scale-#{System.unique_integer([:positive])}.jsonl")
-      on_exit(fn -> File.rm(out) end)
-      %{out: out}
+    @describetag :tmp_dir
+
+    setup %{tmp_dir: tmp_dir} do
+      %{out: Path.join(tmp_dir, "sample.jsonl")}
     end
 
     test "stops when its runner goes down", %{out: out} do
@@ -250,10 +250,10 @@ defmodule Cadence.Observability.ScaleSamplerTest do
   end
 
   describe "sampling" do
-    setup do
-      out = Path.join(System.tmp_dir!(), "scale-#{System.unique_integer([:positive])}.jsonl")
-      on_exit(fn -> File.rm(out) end)
-      %{out: out}
+    @describetag :tmp_dir
+
+    setup %{tmp_dir: tmp_dir} do
+      %{out: Path.join(tmp_dir, "sample.jsonl")}
     end
 
     test "writes the interval and aggregates its ingest events", %{out: out} do

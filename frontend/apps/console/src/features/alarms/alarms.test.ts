@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vite-plus/test";
-import { spacecraftId as spacecraftIdReader, scid as scidReader } from "@/api/index.ts";
+import {
+  spacecraftId as spacecraftIdReader,
+  scid as scidReader,
+  pointId as pointIdReader,
+} from "@/api/index.ts";
 import { spacecraftRow } from "@/features/fleet/index.ts";
 import { alarmQueryString, bandFor, conditionWords } from "./api.ts";
 import type { Episode } from "./episodes.ts";
@@ -29,7 +33,7 @@ function ep(id: string, overrides: Partial<Episode> = {}): Episode {
       name: "EARENDIL-001",
       scid: scidReader(1),
     },
-    point: { id: "EPS.VBAT", name: "VBAT", unit: "V" },
+    point: { id: pointIdReader("EPS.VBAT"), name: "VBAT", unit: "V" },
     thresholds: { red_low: 24, yellow_low: 25, yellow_high: 33, red_high: 34 },
     opened_at: "2026-11-09T01:00:00Z",
     cleared_at: null,
@@ -90,11 +94,13 @@ describe("alarm list on episodes", () => {
   });
 
   it("filters by point and counts active episodes per point", () => {
-    const other = ep("o", { point: { id: "P2", name: "P2", unit: null } });
-    expect(alarmRows([ep("a"), other], fleet, "new", "P2", now).map((r) => r.key)).toEqual(["o"]);
+    const other = ep("o", { point: { id: pointIdReader("P2"), name: "P2", unit: null } });
+    expect(
+      alarmRows([ep("a"), other], fleet, "new", pointIdReader("P2"), now).map((r) => r.key),
+    ).toEqual(["o"]);
     expect(byPoint([ep("a"), ep("b", { severity: "caution" }), other, clearedRecent])).toEqual([
-      { pointId: "EPS.VBAT", name: "VBAT", count: 2, critical: 1 },
-      { pointId: "P2", name: "P2", count: 1, critical: 1 },
+      { pointId: pointIdReader("EPS.VBAT"), name: "VBAT", count: 2, critical: 1 },
+      { pointId: pointIdReader("P2"), name: "P2", count: 1, critical: 1 },
     ]);
   });
 
@@ -120,7 +126,7 @@ describe("alarm grouping and the empty state (OpsLists §Alarms)", () => {
   const fleet = [1, 2, 3, 4].map((n) => spacecraftRow(n, { plane: 7 }));
   const eps = [
     ep("a", at(1)),
-    ep("x", { ...at(4), point: { id: "P2", name: "TEMP", unit: "°C" } }),
+    ep("x", { ...at(4), point: { id: pointIdReader("P2"), name: "TEMP", unit: "°C" } }),
     ep("b", at(2)),
     ep("c", at(3)),
   ];
@@ -221,7 +227,7 @@ describe("the alarm read's paging and sister query (#794)", () => {
     expect(
       alarmQueryString({
         state: "active",
-        pointId: "EPS.VBAT",
+        pointId: pointIdReader("EPS.VBAT"),
         plane: 7,
         excludeSpacecraftId: "spacecraft-earendil-312",
         limit: 1,

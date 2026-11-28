@@ -1,5 +1,6 @@
 defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
   use Cadence.ProcessDataCase, async: false
+  @moduletag :tmp_dir
 
   import Ecto.Query
 
@@ -12,11 +13,7 @@ defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
   alias Cadence.Repo
 
   setup context do
-    base_path =
-      Path.join(
-        System.tmp_dir!(),
-        "cadence_protocol_record_archive_#{System.unique_integer([:positive])}"
-      )
+    base_path = context.tmp_dir
 
     repo =
       if context[:archive_fault] do
@@ -36,8 +33,6 @@ defmodule Cadence.Protocol.RecordArchive.FileSystemTest do
       )
 
     start_supervised!(RecordArchive.child_spec(archive_policy))
-
-    on_exit(fn -> File.rm_rf!(base_path) end)
 
     organization_id =
       "org-protocol-archive-" <> Integer.to_string(System.unique_integer([:positive]))

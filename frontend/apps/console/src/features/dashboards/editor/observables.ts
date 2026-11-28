@@ -1,3 +1,4 @@
+import type { DashboardId } from "@/api/index.ts";
 import type { MissionId } from "@/api/index.ts";
 import { decoders as d, request, type ApiResult, type Decoded } from "@/api";
 import type { WidgetFields } from "./contracts.ts";
@@ -18,7 +19,7 @@ export type ObservableResults = Decoded<typeof reply>;
 
 export function searchObservables(
   missionId: MissionId,
-  dashboardId: string,
+  dashboardId: DashboardId,
   input: Readonly<{ query: string; baseVersion: number; fields: WidgetFields }>,
   signal?: AbortSignal,
 ): Promise<ApiResult<ObservableResults>> {

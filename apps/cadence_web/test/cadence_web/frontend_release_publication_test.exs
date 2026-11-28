@@ -1366,7 +1366,8 @@ defmodule CadenceWeb.FrontendReleasePublicationTest do
     file_path =
       Path.join(
         System.tmp_dir!(),
-        ".cadence_frontend_release_test_" <> Integer.to_string(System.unique_integer([:positive]))
+        ".cadence_frontend_release_test_" <>
+          Base.encode32(:crypto.strong_rand_bytes(10), padding: false)
       )
 
     File.write!(file_path, bytes)

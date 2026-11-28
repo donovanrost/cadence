@@ -1,3 +1,5 @@
+import type { OrganizationId } from "@/api/index.ts";
+import type { PointId } from "@/api/index.ts";
 import type { MissionId } from "@/api/index.ts";
 import {
   actor as sharedActor,
@@ -10,6 +12,7 @@ import {
   type ApiResult,
   type Decoded,
   type SpacecraftId,
+  pointId as pointIdReader,
 } from "@/api/index.ts";
 import { engineeringValue, sourceStates, thresholdsReader } from "./api.ts";
 
@@ -28,7 +31,7 @@ const episodeFields = {
   source_state: d.nullable(d.known(sourceStates)),
   spacecraft_id: d.nullable(spacecraftIdReader),
   spacecraft: d.nullable(spacecraftRef),
-  point: d.object({ id: d.token, name: d.string, unit: d.nullable(d.string) }),
+  point: d.object({ id: pointIdReader, name: d.string, unit: d.nullable(d.string) }),
   thresholds: d.nullable(thresholdsReader),
   opened_at: d.timestamp,
   cleared_at: d.nullable(d.timestamp),
@@ -52,7 +55,7 @@ const episodeFields = {
         sample_type: d.nullable(
           d.knownText(["telemetry_sample", "derived_telemetry_sample"] as const),
         ),
-        point_id: d.string,
+        point_id: pointIdReader,
         at: d.timestamp,
         /** api D1 part A: the receipt time the one-sample read matches on; null without a sample. */
         receipt_time: d.optional(d.nullable(d.timestamp)),
@@ -226,7 +229,7 @@ const peopleReader = d.object({
 });
 export type Person = Decoded<typeof peopleReader>["members"][number];
 
-export function fetchPeople(organizationId: string, signal?: AbortSignal) {
+export function fetchPeople(organizationId: OrganizationId, signal?: AbortSignal) {
   return request(
     `/organizations/${encodeURIComponent(organizationId)}/people`,
     peopleReader,
@@ -238,7 +241,7 @@ export function fetchPeople(organizationId: string, signal?: AbortSignal) {
 export function episodeFor(
   episodes: readonly Episode[],
   spacecraftId: SpacecraftId,
-  pointId: string,
+  pointId: PointId,
 ) {
   return (
     episodes.find(

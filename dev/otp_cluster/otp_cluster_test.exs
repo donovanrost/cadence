@@ -11,6 +11,65 @@ defmodule Cadence.OTPClusterSpikeTest do
     %{peers: peers, key: {:partition, "org-spike", "mission-spike", make_ref()}}
   end
 
+  test "private epmd and peer distribution listen on loopback only", %{peers: peers} do
+    epmd_port = hd(peers).epmd_port
+
+    {output, 0} =
+      System.cmd("epmd", ["-port", Integer.to_string(epmd_port), "-names"],
+        env: [{"ERL_EPMD_ADDRESS", "127.0.0.1"}, {"ERL_EPMD_PORT", Integer.to_string(epmd_port)}]
+      )
+
+    listeners =
+      for [_, name, port] <- Regex.scan(~r/name (\S+) at port (\d+)/, output), into: %{} do
+        {name, String.to_integer(port)}
+      end
+
+    expected_names =
+      peers
+      |> Enum.map(&(&1.node |> Atom.to_string() |> String.split("@") |> hd()))
+      |> Enum.sort()
+
+    assert Enum.sort(Map.keys(listeners)) == expected_names
+
+    for peer <- peers do
+      [_, host] = peer.node |> Atom.to_string() |> String.split("@", parts: 2)
+      assert {:ok, {127, 0, 0, 1}} = :inet.getaddr(String.to_charlist(host), :inet)
+    end
+
+    {:ok, interfaces} = :inet.getifaddrs()
+
+    other_addresses =
+      for {_name, properties} <- interfaces,
+          {:addr, {first, _, _, _} = address} <- properties,
+          first != 127,
+          do: address
+
+    assert other_addresses != []
+
+    for port <- [epmd_port | Map.values(listeners)] do
+      assert reachable?({127, 0, 0, 1}, port)
+      refute reachable?({127, 0, 0, 2}, port)
+
+      for address <- other_addresses do
+        refute reachable?(address, port)
+      end
+    end
+
+    Cluster.stop(peers)
+    refute reachable?({127, 0, 0, 1}, epmd_port)
+  end
+
+  defp reachable?(address, port) do
+    case :gen_tcp.connect(address, port, [:binary, active: false], 100) do
+      {:ok, socket} ->
+        :ok = :gen_tcp.close(socket)
+        true
+
+      {:error, _reason} ->
+        false
+    end
+  end
+
   test "libcluster forms three nodes and routing distinguishes registration from readiness", %{
     peers: [a, b, c] = peers,
     key: key

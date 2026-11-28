@@ -159,6 +159,34 @@ defmodule Cadence.Management.Transports do
             ],
        do: error("delivery_profile_ref", "That delivery profile doesn't carry this service.")
 
+  # #990 (DECISIONS #115): a listening transport takes its allowlist from the provider's egress.
+  defp field_error(:provider_egress_addresses_missing),
+    do:
+      coded(
+        "delivery_profile_ref",
+        :provider_egress_addresses_missing,
+        "That delivery profile doesn't say which addresses the provider connects from, so " <>
+          "Cadence can't listen for it."
+      )
+
+  defp field_error(:provider_egress_addresses_too_broad),
+    do:
+      coded(
+        "delivery_profile_ref",
+        :provider_egress_addresses_too_broad,
+        "That delivery profile's source addresses allow every address, so Cadence can't " <>
+          "listen for it."
+      )
+
+  defp field_error(:provider_egress_addresses_invalid),
+    do:
+      coded(
+        "delivery_profile_ref",
+        :provider_egress_addresses_invalid,
+        "That delivery profile's source addresses aren't IP addresses or CIDR ranges, so " <>
+          "Cadence can't listen for it."
+      )
+
   defp field_error({:provider_delivery_profile_unusable, message}) when is_binary(message),
     do:
       error("delivery_profile_ref", "This transport can't use that delivery profile: #{message}")
@@ -167,6 +195,7 @@ defmodule Cadence.Management.Transports do
     do: error("mission_provider_id", "The provider's details couldn't be read. Try again.")
 
   defp error(path, message), do: %{path: path, message: message}
+  defp coded(path, code, message), do: %{path: path, message: message, code: Atom.to_string(code)}
 
   defp provider_transport_basis(configuration) do
     provider = configuration.provider

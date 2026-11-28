@@ -1,3 +1,4 @@
+import { dashboardId as dashIdReader } from "@/api/index.ts";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { commandReader, widgetDefaults, type Command } from "./contracts.ts";
 import { editFailure } from "./api.ts";
@@ -72,10 +73,10 @@ describe("draft autosave", () => {
   afterEach(() => localStorage.clear());
 
   it("round-trips through storage and clears when empty", () => {
-    storeDraft("m", "d", appended(empty, update("a", "Bus")));
-    expect(loadDraft("m", "d")?.commands).toHaveLength(1);
-    clearDraft("m", "d");
-    expect(loadDraft("m", "d")).toBeNull();
+    storeDraft("m", dashIdReader("d"), appended(empty, update("a", "Bus")));
+    expect(loadDraft("m", dashIdReader("d"))?.commands).toHaveLength(1);
+    clearDraft("m", dashIdReader("d"));
+    expect(loadDraft("m", dashIdReader("d"))).toBeNull();
   });
 
   it("ignores a stored draft it can't read", () => {
@@ -83,7 +84,7 @@ describe("draft autosave", () => {
       "cadence.console.dashboard-draft.m.d",
       '{"version":1,"commands":[{"event":"nope"}]}',
     );
-    expect(loadDraft("m", "d")).toBeNull();
+    expect(loadDraft("m", dashIdReader("d"))).toBeNull();
   });
 });
 

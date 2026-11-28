@@ -9,6 +9,7 @@ import {
   type Decoded,
 } from "@/api/index.ts";
 import { attentionUplinkReader } from "@/features/contacts/readiness.ts";
+import { failedReasons, notReadyReasons } from "@/features/stations/ephemerisReasons.ts";
 import {
   attentionConflicts,
   attentionSources,
@@ -103,8 +104,19 @@ export const attentionReader = d.object({
       }),
     ),
   ),
-  /** mission_runtime (U38) or contact_start (U45): the reason key. */
-  reason: d.optional(d.nullable(d.knownText([...runtimeReasons, ...startReasons] as const))),
+  /** mission_runtime (U38), contact_start (U45) or provider_ephemeris (#972): the reason key. */
+  reason: d.optional(
+    d.nullable(
+      d.knownText([
+        ...runtimeReasons,
+        ...startReasons,
+        ...failedReasons,
+        ...notReadyReasons,
+      ] as const),
+    ),
+  ),
+  /** provider_ephemeris (#972): the group's earliest retry or re-check; null for norad_id_missing. */
+  next_retry_at: d.optional(d.nullable(d.timestamp)),
   desired_generation: d.optional(d.nullable(d.integer)),
   applied_generation: d.optional(d.nullable(d.integer)),
   since: d.optional(d.nullable(d.timestamp)),

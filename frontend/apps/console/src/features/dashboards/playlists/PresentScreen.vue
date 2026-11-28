@@ -46,7 +46,7 @@ const show = usePresent(
   computed(() => ready.value?.dashboards ?? []),
   computed(() => ready.value?.dwell_seconds ?? 30),
 );
-const dashboardId = computed(() => show.current.value?.id ?? "");
+const dashboardId = computed(() => show.current.value?.id ?? null);
 // Each dashboard opens on its own defaults; D5 loads it, the channel (C1) keeps it live.
 const runtime = ref({ from: "", to: "", spacecraftId: "" });
 const view = useDashboardView(missionId, dashboardId, runtime, {

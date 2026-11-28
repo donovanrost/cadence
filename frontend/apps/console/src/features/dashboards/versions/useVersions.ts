@@ -1,3 +1,4 @@
+import type { DashboardId } from "@/api/index.ts";
 import type { MissionId } from "@/api/index.ts";
 import { ref, shallowRef, type Ref } from "vue";
 import type { ApiError } from "@/api";
@@ -25,7 +26,7 @@ export function compareSentence(c: Pick<Comparison, "from" | "to" | "changes">):
  */
 export function useVersions(
   missionId: Readonly<Ref<MissionId>>,
-  dashboardId: Readonly<Ref<string>>,
+  dashboardId: Readonly<Ref<DashboardId>>,
 ) {
   const list = shallowRef<Versions | null>(null);
   const comparison = shallowRef<Comparison | null>(null);

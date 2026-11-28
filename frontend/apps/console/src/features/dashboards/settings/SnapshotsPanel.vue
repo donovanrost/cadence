@@ -1,10 +1,11 @@
 <script setup lang="ts">
+import type { DashboardId } from "@/api/index.ts";
 import { ApEmptyState, ApPanel, ApTable, type ApColumn } from "@/ui";
 import type { Snapshot } from "./api.ts";
 import { byLine, routerPath, snapshotWindow, visibilityWord } from "./present.ts";
 
 /** Snapshots (ux): read-only; taken from the viewer, never here; no Delete until domain's Q6 batch. */
-defineProps<{ dashboardId: string; snapshots: readonly Snapshot[] }>();
+defineProps<{ dashboardId: DashboardId; snapshots: readonly Snapshot[] }>();
 const columns: readonly ApColumn[] = [
   { key: "window", label: "Window", mono: true },
   { key: "version", label: "Version", mono: true },

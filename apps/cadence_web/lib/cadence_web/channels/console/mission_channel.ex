@@ -28,6 +28,8 @@ defmodule CadenceWeb.Console.MissionChannel do
     contacts_changed: "contacts",
     contact_plans_changed: "contact_plans",
     stations_changed: "stations",
+    predicted_passes_changed: "predicted_passes",
+    providers_changed: "providers",
     pass_results_changed: "pass_results",
     attention_changed: "attention",
     spacecraft_configuration_changed: "spacecraft",
@@ -36,6 +38,10 @@ defmodule CadenceWeb.Console.MissionChannel do
     configuration_changed: "configuration",
     activations_changed: "activations"
   }
+
+  @doc false
+  # The read-update events and the `invalidate` resource each becomes (tests).
+  def read_update_resources, do: @read_update_resources
 
   @runtime_resources %{
     catalog_revision_changed: "catalog",

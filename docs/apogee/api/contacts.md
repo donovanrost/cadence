@@ -44,9 +44,10 @@ contact with no scheduled contact (started by hand, #84) whose time overlaps the
 - `not_started: boolean` (ux U78): `true` when it never went live: still `defined`, or closed by
   Cadence's never-started sweep (`stopped`; `ends_at` is the close). Only on `booked: false` rows;
 - `reservation_id`, `scheduled_contact_id`, `plan`, `requirement`, `provider_revision`,
-  `pass_phase`, `delivery_state`, `antenna`, `source`, `cost`, `max_elevation_deg`,
+  `pass_phase`, `delivery_state`, `antenna`, `source`, `cost`,
   `uplink_capable`, `booking_evidence`, `attested_by`, `uplink_confirmed`, `off_plan`, `ended_by`,
   `attention`, `uplink_readiness`, `contact_action`, `contact_ended`: `null`; `releasable: false`.
+  `max_elevation_deg` is the matched predicted pass's or `null` (#892, below).
 
 ```json
 {"data": {
@@ -62,7 +63,9 @@ contact with no scheduled contact (started by hand, #84) whose time overlaps the
     "starts_at": "…", "ends_at": "…",
     "uplink_capable": null,
     "source": {"provider": "provider_…", "provider_name": "Simulator", "synthetic": true},
-    "max_elevation_deg": null,
+    "max_elevation_deg": 41.7,
+    "elevation_source": "predicted",
+    "predicted_pass_id": "predicted_pass_…",
     "cost": null,
     "plan": {"id": "contact_plan_…", "version": 42},
     "reservation_id": "provider_reservation_…",
@@ -101,9 +104,17 @@ contact with no scheduled contact (started by hand, #84) whose time overlaps the
   when `ref` matches a Cadence ground station (by id, `metadata.code` or
   `metadata.provider_station_ref`), and are `null` otherwise. Show `ref` then.
 - `antenna`: `null` unless the provider names one. `label` is always `null` (providers only give a ref).
-- **Nothing is derived** (DECISIONS #4, no propagation): `max_elevation_deg`, `uplink_capable` and
-  `cost` are `null` unless the provider supplied them in the snapshot (`cost` is then `{amount,
-  currency}`). `source.synthetic` is `true` for the simulator's deterministic windows. Say so in the
+- **Elevation** (#892): `max_elevation_deg` is the provider's when the snapshot reports one, else
+  the matched predicted pass's, else `null`. `elevation_source` is `"provider"`, `"predicted"` or
+  `null`, and is `null` exactly when `max_elevation_deg` is. `predicted_pass_id` is the matched
+  predicted pass (the id `GET .../predicted-passes` returns) or `null`, set even when the
+  provider's elevation is shown. A pass matches the predicted pass of the same spacecraft and
+  station whose window overlaps it, the longest overlap winning (then the earlier AOS, then the
+  id); a hand-started contact matches from its own window, up to now while it is live. The match
+  is one query per page. A predicted pass is geometry, not a booking: `next_pass` and `next_aos_at`
+  stay bookings only.
+- `uplink_capable` and `cost` are `null` unless the provider supplied them in the snapshot (`cost`
+  is then `{amount, currency}`). `source.synthetic` is `true` for the simulator's deterministic windows. Say so in the
   UI. `source.provider_name` and `source.synthetic` are `null` when the snapshot doesn't say.
 - `plan`: the contact plan revision that booked it, or `null` for direct bookings.
 - `listener_overlap` (U58 (b), #361): `null`, or `{with: {spacecraft: {id | null, name | null},
@@ -429,11 +440,25 @@ no actions, so acknowledge, resolve and retry answer `404 attention_item_not_fou
   (domain's `p1`); else **P2**. Due at LOS (`ends_at`).
 - Keys besides the shared ones (`contact_id`, `reservation_id`, `station`, `provider`,
   `starts_at`, `raised_at` = the first refusal): `realized_contact_id`, `path_id`, `spacecraft_id`,
-  `ends_at`, `provider_profile_id`, `provider_profile_name`, `last_refused_at`, `refused_count`,
-  `last_refusal {reason, scid, peer, at}` (`reason` `unregistered_scid | ambiguous_scid |
-  unexpected_peer | unidentified | read_failed | second_connection | unknown`, read as known text;
-  `peer` for Technical details only), `own_quiet_since` (or null), `connected`, `shared_with`
-  (the other open passes' realized contact ids), `second_connections_refused`.
+  `ends_at`, `provider_profile_id`, `provider_profile_name`, `allowlist_source`, `transport_id`,
+  `last_refused_at`, `refused_count`, `last_refusal {reason, scid, peer, at}` (`peer` for
+  Technical details only), `own_quiet_since` (or null), `connected`, `shared_with` (the other open
+  passes' realized contact ids), `second_connections_refused`.
+- `last_refusal.reason`, read as known text:
+  - `peer_not_allowed`: the peer isn't in the listener's allowed source addresses (#990), refused
+    before Cadence read from it;
+  - `no_registered_contact`: no pass was registered on the listener when the peer connected;
+  - `unregistered_scid`: the first frame's SCID matches no pass registered through this binding;
+  - `ambiguous_scid`: it matches more than one;
+  - `unidentified`: the first frame couldn't be read as a TM frame (there's no fallback);
+  - `read_failed`: reading the first frame failed;
+  - `second_connection`: the pass already had its connection;
+  - `unknown`: anything else.
+- `allowlist_source` (#990) says who sets the listener's allowed source addresses, so the fix
+  line can name who acts: `"provider"` for a provider-managed transport (its delivery profile's
+  `egress.source_addresses`; ask the provider) or `"transport"` for a transport configured in
+  Cadence (edit its allowed source addresses). `null` when the listen profile isn't found.
+  `transport_id` is the transport the profile was materialized from, or `null`.
 - Resolved: `action` `accepted` (the pass's own connection came) or `ended` (LOS), by the system.
 - `GET /passes/:id` carries `second_connections_refused: integer | null`: connections refused
   while the pass's own was up (live, else as recorded at LOS), null without a realized contact.
@@ -751,13 +776,30 @@ never count them toward a requirement.
   expires_at, starts_at, ends_at, station {ref, id, code, name}, antenna {id, label} | null,
   provider {id, name}, availability, uplink_capable, synthetic, cost, overlaps {reservation_id,
   spacecraft {id, name}, station_code, starts_at, reason: same_spacecraft | same_antenna} |
-  null, listener_overlap}], hidden {no_uplink_route}, not_ready: [{code, message}], truncated}`.
+  null, listener_overlap, max_elevation_deg, elevation_source, predicted_pass_id, tca,
+  no_predicted_pass}], hidden {no_uplink_route}, not_ready: [{code, message}], truncated}`.
+  Geometry (#892): `max_elevation_deg`, `elevation_source` and `predicted_pass_id` as on a pass
+  above; `tca` is the matched predicted pass's, or `null`. `no_predicted_pass` is `true` when
+  prediction covers the window and no predicted pass backs it (a stale element set, a wrong
+  station location or a provider error; the offer is still shown and bookable), `false` when one
+  matches, and `null` when prediction can't say. "Covers" needs per-pair evidence the
+  recompute runs record (`search_basis`):
+  - the spacecraft's current element set is the one it was last searched with;
+  - the station's current location and mask are the ones it was last searched with;
+  - the window lies wholly inside what both searched, and after the prune bound;
+  - the pair had no unbracketed search result.
+
+  Anything uncertain answers `null`: no element set, deep space or decayed, a new set or a
+  station change whose recompute hasn't run yet, no location, a window before the search or after
+  the horizon. A stale `null` is conservative; a `true` is never a guess.
   `listener_overlap` as on a pass above (#361), against the mission's booked passes (offers are
   alternatives, never checked against each other); booking it is still allowed. The server fans out
   over the spacecraft's ready routes; route keys and evidence ride inside the signed `token`.
   `station.id`, `code` and `name` are `null` when the provider's station matches no Cadence
   station (`ref` is always set). `overlaps` covers every live booking, plan or not. No ready route
-  is `offers: []` with `not_ready` saying why, not an error. Errors: `422 invalid_params` on the
+  is `offers: []` with `not_ready` saying why, not an error. An archived provider's routes are
+  refused with `mission_provider_archived` even while a transport still pins its older active
+  version (#985). Errors: `422 invalid_params` on the
   field (window in the past, over 7 days, end before start), `404 spacecraft_not_found`, `503
   search_unavailable` (every route's provider search failed).
 - `POST /single-bookings` `{token, note?}` (note ≤ 500) → `{outcome: confirmed | requested |

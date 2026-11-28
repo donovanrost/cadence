@@ -1,3 +1,4 @@
+import { pointIdParam, type PointId } from "@/api/index.ts";
 import type { OpState } from "@/ui";
 import { isHistorical, pointLimits, type TelemetryPoint } from "@/features/telemetry/index.ts";
 
@@ -48,13 +49,21 @@ export function visiblePoints(
     );
 }
 
-/** ?points=a,b,c → at most 3 ids. */
-export const pointsFrom = (value: unknown): string[] =>
-  typeof value === "string" && value ? value.split(",").filter(Boolean).slice(0, MAX_PLOTTED) : [];
+/** ?points=a,b,c → at most 3 point ids. */
+export const pointsFrom = (value: unknown): PointId[] =>
+  typeof value === "string" && value
+    ? value
+        .split(",")
+        .flatMap((part) => {
+          const point = pointIdParam(part);
+          return point === null ? [] : [point];
+        })
+        .slice(0, MAX_PLOTTED)
+    : [];
 
 /** CSV of the focused point's buckets, newest first (T3 Export CSV). */
 export function toCsv(
-  pointId: string,
+  pointId: PointId,
   rows: readonly Readonly<{ t: number; min: number; mean: number; max: number }>[],
 ): string {
   const lines = [...rows]

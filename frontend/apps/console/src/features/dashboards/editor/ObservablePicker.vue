@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { DashboardId } from "@/api/index.ts";
 import type { MissionId } from "@/api/index.ts";
 import { computed, nextTick, ref } from "vue";
 import { useRemoteQuery } from "@/api";
@@ -12,7 +13,7 @@ import { searchObservables } from "./observables.ts";
  */
 const props = defineProps<{
   missionId: MissionId;
-  dashboardId: string;
+  dashboardId: DashboardId;
   baseVersion: number;
   fields: WidgetFields;
   limit: number;

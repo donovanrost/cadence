@@ -14,6 +14,14 @@ runs:
       with:
         path: ~/.cache/ms-playwright
         key: playwright-chromium-v1-${{ runner.os }}-${{ steps.version.outputs.playwright }}
+    # --with-deps runs apt-get update, and the runner image ships a packages.microsoft.com source
+    # that nothing here needs; when Microsoft's repository answers 403 or loses its signature, the
+    # update fails before any test runs (#920, #964). Drop that source first.
+    - shell: bash
+      run: |
+        # Actions runs bash with -eo pipefail: no match (grep exits 1) must not fail the step.
+        { grep -l -r 'packages\.microsoft\.com' /etc/apt/sources.list.d 2>/dev/null || true; } \
+          | xargs -r sudo rm -f -v
     # --with-deps installs the system libraries every run; the browser download is skipped on a hit.
     - shell: bash
       working-directory: frontend

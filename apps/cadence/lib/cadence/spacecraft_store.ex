@@ -11,6 +11,7 @@ defmodule Cadence.SpacecraftStore do
 
   alias Cadence.Listing
   alias Cadence.Missions
+  alias Cadence.Platform.PassPredictionJobs
   alias Cadence.Repo
   alias Cadence.Spacecraft
   alias Cadence.SpacecraftStore.SpacecraftRow
@@ -304,7 +305,7 @@ defmodule Cadence.SpacecraftStore do
              limit > 0 do
     from(row in SpacecraftRow,
       where: row.organization_id == ^organization_id and row.mission_id == ^mission_id,
-      order_by: [asc: row.display_name, asc: row.spacecraft_id],
+      order_by: [asc: fragment(~s(? COLLATE "C"), row.display_name), asc: row.spacecraft_id],
       limit: ^limit,
       select: %{"id" => row.spacecraft_id, "name" => row.display_name, "scid" => row.scid}
     )
@@ -319,7 +320,8 @@ defmodule Cadence.SpacecraftStore do
       where(
         query,
         [row],
-        row.display_name > ^name or (row.display_name == ^name and row.spacecraft_id > ^id)
+        fragment(~s(? COLLATE "C" > ? COLLATE "C"), row.display_name, ^name) or
+          (row.display_name == ^name and row.spacecraft_id > ^id)
       )
 
   @doc "Scoped identity-only subquery for composing paged searches without materializing the fleet."
@@ -454,7 +456,8 @@ defmodule Cadence.SpacecraftStore do
 
   @doc """
   Archives a spacecraft (#49/#50): it leaves the mission's lists, fleet and planning targets but
-  keeps its id, SCID and history. Reads by id still find it.
+  keeps its id, SCID and history. Reads by id still find it. Its future predicted passes go
+  (#891): the archive stages a pass-prediction run for it (`Cadence.Platform.PassPredictionJobs`).
   """
   @spec archive_spacecraft(binary(), binary(), binary(), map()) ::
           {:ok, Spacecraft.t()} | {:error, :spacecraft_not_found}
@@ -476,8 +479,14 @@ defmodule Cadence.SpacecraftStore do
         |> SpacecraftRow.archive_changeset(actor)
         |> Repo.update()
         |> case do
-          {:ok, archived} -> {:ok, SpacecraftRow.to_domain(archived)}
-          {:error, reason} -> {:error, reason}
+          {:ok, archived} ->
+            {:ok, _job} =
+              PassPredictionJobs.stage_spacecraft(organization_id, mission_id, [spacecraft_id])
+
+            {:ok, SpacecraftRow.to_domain(archived)}
+
+          {:error, reason} ->
+            {:error, reason}
         end
     end
   end

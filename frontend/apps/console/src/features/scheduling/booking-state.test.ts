@@ -103,6 +103,10 @@ describe("K1 per-contact booking (api 8e)", () => {
       }).text,
     ).toBe("marked not booked by Mira K. at 10:52Z");
     expect(reasonWords("provider_declined").text).toBe('the provider answered "declined"');
+    expect(reasonWords("mission_provider_archived")).toEqual({
+      text: "this mission's provider for that station is archived",
+      next: "setup",
+    });
   });
 
   it("treats a plan that has gone out for booking as booking, not a draft (qa #52)", () => {
