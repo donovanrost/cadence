@@ -159,6 +159,18 @@ defmodule Cadence.Runtime.MonitoringPlanCacheTest do
     assert MonitoringPlanCache.loaded(server) == 1
   end
 
+  test "a cache that is not running, even behind a registry that is not, gives an index of its own decode" do
+    registry = Module.concat(__MODULE__, "NoSuchRegistry#{System.unique_integer([:positive])}")
+
+    for missing <- [
+          Module.concat(__MODULE__, "NoSuchCache"),
+          {:via, Registry, {registry, :cache}}
+        ] do
+      assert {:ok, index} = MonitoringPlanCache.acquire(missing, plans("m", 3))
+      assert [%{parameter_id: "q1"}] = PlanIndex.monitoring_for(index, "q1")
+    end
+  end
+
   test "no monitoring and no algorithms is an empty index; a plan without an id is decoded privately",
        %{server: server} do
     assert {:ok, empty} = MonitoringPlanCache.acquire(server, %{})

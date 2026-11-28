@@ -62,9 +62,9 @@ defmodule Cadence.Runtime.MonitoringPlanCache do
   def acquire(server, runtime_plans) when is_map(runtime_plans) do
     registry = RegisteredRegistry.configured()
 
-    case GenServer.whereis(server) && plan_key(runtime_plans, registry) do
+    case running?(server) && plan_key(runtime_plans, registry) do
       # No cache process (a host that does not start one): an index over its own decode.
-      nil ->
+      false ->
         {:ok, runtime_plans |> PlanDecoder.decode(registry) |> PlanIndex.from_plan()}
 
       :empty ->
@@ -87,6 +87,14 @@ defmodule Cadence.Runtime.MonitoringPlanCache do
 
         {:ok, PlanIndex.from_cache(table, key, empty?)}
     end
+  end
+
+  # A named cache that is not started (a host without one, a `--no-start` test), or a `:via` name
+  # whose registry is not running either.
+  defp running?(server) do
+    GenServer.whereis(server) != nil
+  rescue
+    ArgumentError -> false
   end
 
   @doc "How many plans the cache holds right now (a diagnostic, and for tests)."
