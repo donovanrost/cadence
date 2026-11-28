@@ -24,7 +24,7 @@ defmodule Mix.Tasks.Cadence.Extensions.CheckTest do
     assert summary =~ "7 widget types"
     assert summary =~ "4 source adapters"
     assert summary =~ "2 catalog importers"
-    assert summary =~ "action, status, surface, and reference providers valid"
+    assert summary =~ "status providers valid"
   end
 
   test "rejects unexpected arguments" do

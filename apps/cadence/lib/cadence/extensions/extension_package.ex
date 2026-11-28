@@ -48,7 +48,6 @@ defmodule Cadence.Extensions.ExtensionPackage do
 
   @type compatibility_contract ::
           :cadence_application_contract
-          | :cadence_surface_contract
           | :cadence_capability_abi
           | :cadence_configuration_contract
           | :cadence_transport_kind_contract
@@ -59,7 +58,6 @@ defmodule Cadence.Extensions.ExtensionPackage do
 
   @supported_compatibility %{
     cadence_application_contract: 1,
-    cadence_surface_contract: 1,
     cadence_capability_abi: 1,
     cadence_configuration_contract: 1,
     cadence_transport_kind_contract: 1,

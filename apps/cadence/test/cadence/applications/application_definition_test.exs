@@ -2,135 +2,34 @@ defmodule Cadence.Applications.ApplicationDefinitionTest do
   use ExUnit.Case, async: true
 
   alias Cadence.Applications.{
-    ActionDefinition,
     ApplicationDefinition,
-    LifecycleContract,
     ResourceClaimDefinition,
-    ResourceContract,
-    SurfaceDefinition
+    ResourceContract
   }
 
-  alias Cadence.Extensions.Presentation.ReferenceDefinition
-
-  test "accepts a bounded application definition with declared surface actions" do
+  test "accepts a bounded application definition" do
     assert :ok = ApplicationDefinition.validate(valid_application())
   end
 
-  test "bounds application action vocabularies at 128" do
-    application = valid_application()
-    [action] = application.actions
-
-    actions = [
-      action
-      | Enum.map(1..127, fn index -> %ActionDefinition{action | action_id: "action-#{index}"} end)
-    ]
-
-    over_bound = %ActionDefinition{action | action_id: "action-129"}
-
-    assert :ok =
-             ApplicationDefinition.validate(%ApplicationDefinition{
-               application
-               | actions: actions
-             })
-
-    assert {:error, :invalid_application_definition} =
-             ApplicationDefinition.validate(%ApplicationDefinition{
-               application
-               | actions: actions ++ [over_bound]
-             })
-  end
-
-  test "rejects surface actions that are absent from both application contracts" do
-    application = valid_application()
-    [surface] = application.surfaces
-    surface = %SurfaceDefinition{surface | actions: ["not_declared"]}
-
-    assert {:error, :invalid_application_definition} =
-             ApplicationDefinition.validate(%ApplicationDefinition{
-               application
-               | surfaces: [surface]
-             })
-  end
-
-  test "rejects domain actions that collide with host lifecycle identities" do
-    application = valid_application()
-    [action] = application.actions
-    action = %ActionDefinition{action | action_id: "disable"}
-
-    assert {:error, :invalid_application_definition} =
-             ApplicationDefinition.validate(%ApplicationDefinition{
-               application
-               | actions: [action],
-                 lifecycle_contract: %LifecycleContract{actions: ["disable"]}
-             })
-  end
-
-  test "refuses an optional app that declares domain or lifecycle actions (#669 b)" do
-    application = %ApplicationDefinition{valid_application() | installation_policy: :optional}
-
-    assert {:error, :invalid_application_definition} = ApplicationDefinition.validate(application)
-
-    [surface] = application.surfaces
-
-    lifecycle_only = %ApplicationDefinition{
-      application
-      | actions: [],
-        lifecycle_contract: %LifecycleContract{actions: ["disable"]},
-        surfaces: [%SurfaceDefinition{surface | actions: ["disable"]}]
+  test "an optional application is valid on its installable scopes" do
+    application = %ApplicationDefinition{
+      valid_application()
+      | installation_policy: :optional,
+        installable_scopes: [:mission, :spacecraft]
     }
 
-    assert {:error, :invalid_application_definition} =
-             ApplicationDefinition.validate(lifecycle_only)
-
-    assert :ok =
-             ApplicationDefinition.validate(%ApplicationDefinition{
-               lifecycle_only
-               | installation_policy: :platform
-             })
-
-    assert :ok =
-             ApplicationDefinition.validate(%ApplicationDefinition{
-               application
-               | actions: [],
-                 surfaces: [%SurfaceDefinition{surface | actions: []}]
-             })
-  end
-
-  test "requires every installation scope of an app with surfaces to have a host workspace" do
-    application = valid_application()
-    [workspace] = application.surfaces
-    dock = %SurfaceDefinition{workspace | placement: :ops_dock, actions: []}
-
-    assert {:error, :invalid_application_definition} =
-             ApplicationDefinition.validate(%ApplicationDefinition{
-               application
-               | surfaces: [dock]
-             })
-
-    assert {:error, :invalid_application_definition} =
-             ApplicationDefinition.validate(%ApplicationDefinition{
-               application
-               | installable_scopes: [:mission, :spacecraft]
-             })
-
-    assert :ok =
-             ApplicationDefinition.validate(%ApplicationDefinition{
-               application
-               | availability: :roadmap,
-                 surfaces: [dock]
-             })
-  end
-
-  test "a headless app (no surfaces) is valid without a workspace (#669)" do
-    application = %ApplicationDefinition{valid_application() | surfaces: []}
-
-    assert ApplicationDefinition.headless?(application)
-    refute ApplicationDefinition.headless?(valid_application())
     assert :ok = ApplicationDefinition.validate(application)
-    assert Cadence.Applications.Registry.workspace_surfaces(application, :mission) == []
+    refute ApplicationDefinition.platform?(application, :mission)
+  end
 
-    assert {:error, :unknown_surface} =
-             Cadence.Applications.Registry.fetch_default_surface(application, :mission)
+  test "rejects unknown or duplicate installable scopes" do
+    for scopes <- [[], [:mission, :mission], [:galaxy]] do
+      assert {:error, :invalid_application_definition} =
+               ApplicationDefinition.validate(%ApplicationDefinition{
+                 valid_application()
+                 | installable_scopes: scopes
+               })
+    end
   end
 
   test "rejects duplicate resource claim identities" do
@@ -145,75 +44,7 @@ defmodule Cadence.Applications.ApplicationDefinitionTest do
              ResourceContract.validate(%ResourceContract{claims: [claim, claim]})
   end
 
-  test "surface definitions reject unbounded reference and presentation metadata" do
-    [surface] = valid_application().surfaces
-
-    invalid_reference = %ReferenceDefinition{
-      provider_id: "cadence.telemetry.points",
-      version: 1,
-      mode: :search,
-      result_limit: 51
-    }
-
-    assert {:error, :invalid_application_surface_definition} =
-             SurfaceDefinition.validate(%SurfaceDefinition{
-               surface
-               | references: %{"point_id" => invalid_reference}
-             })
-
-    assert {:error, :invalid_application_surface_definition} =
-             SurfaceDefinition.validate(%SurfaceDefinition{
-               surface
-               | navigation: %{label: "Manage", class: "application-owned-css"}
-             })
-  end
-
-  test "accepts a host-owned Ops Dock placement without replacing workspace coverage" do
-    application = valid_application()
-    [workspace] = application.surfaces
-
-    dock = %SurfaceDefinition{
-      workspace
-      | surface_id: "activity",
-        purpose: :activity,
-        placement: :ops_dock,
-        navigation: %{label: "Activity", order: 30},
-        data_contract: %{query_id: "cadence.example.activity", version: 1},
-        actions: []
-    }
-
-    application = %ApplicationDefinition{application | surfaces: [workspace, dock]}
-
-    assert :ok = ApplicationDefinition.validate(application)
-  end
-
   defp valid_application do
-    action = %ActionDefinition{
-      action_id: "save_configuration",
-      version: 1,
-      intent: :configuration,
-      scope: :mission,
-      input_contract: %{schema_id: "cadence.example.input", version: 1},
-      result_contract: %{schema_id: "cadence.example.configuration", version: 1},
-      required_permission: "operate_mission",
-      effect: :durable,
-      execution: :immediate,
-      concurrency: %{strategy: :append_version}
-    }
-
-    surface = %SurfaceDefinition{
-      surface_id: "manage",
-      version: 1,
-      purpose: :configuration,
-      scope: :mission,
-      placement: :application_workspace,
-      navigation: %{label: "Manage", order: 10},
-      data_contract: %{query_id: "cadence.example.manage", version: 1},
-      actions: [action.action_id],
-      refresh: :after_action,
-      renderer: {:declarative, "cadence.host.surface.v1"}
-    }
-
     %ApplicationDefinition{
       application_key: "example",
       version: 1,
@@ -223,9 +54,7 @@ defmodule Cadence.Applications.ApplicationDefinitionTest do
       installation_policy: :platform,
       availability: :available,
       installable_scopes: [:mission],
-      configuration_contract: %{schema_id: "cadence.example.configuration", version: 1},
-      actions: [action],
-      surfaces: [surface]
+      configuration_contract: %{schema_id: "cadence.example.configuration", version: 1}
     }
   end
 end

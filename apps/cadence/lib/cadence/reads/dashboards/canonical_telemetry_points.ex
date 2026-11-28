@@ -1,27 +1,20 @@
-defmodule Cadence.Reads.ApplicationSurfaces.ReferenceProviders.CanonicalTelemetryPoints do
+defmodule Cadence.Reads.Dashboards.CanonicalTelemetryPoints do
   @moduledoc """
-  Mission-scoped canonical point choices from the operator point catalog: the active decom's packet
+  Mission-scoped canonical point choices from the operator point catalog, for the dashboards'
+  observable picker (`Cadence.Reads.Dashboards.ObservableChoices`): the active decom's packet
   fields and the active revision's derived parameters (#451 T4b, T4d). A derived point's value is
   its parameter's semantic id, labelled by its qualified name.
   """
 
-  @behaviour Cadence.Reads.ApplicationSurfaces.ReferenceProvider
-
-  alias Cadence.Applications.HostContext
   alias Cadence.Auth.Scope
-  alias Cadence.Extensions.Presentation.{ReferenceDefinition, ReferenceOption, ReferencePage}
   alias Cadence.Ops.PointCatalog
 
-  @provider_id "cadence.telemetry.canonical_points"
+  @type option :: %{value: binary(), label: binary(), description: binary()}
+  @type page :: %{query: binary(), options: [option()], more?: boolean()}
 
-  @impl true
-  def search(
-        %Scope{organization_id: organization_id},
-        %HostContext{placement: :mission, mission_id: mission_id},
-        %ReferenceDefinition{provider_id: @provider_id, version: 1},
-        query,
-        limit
-      )
+  @doc "Up to `limit` choices in the mission matching `query`, sorted by value."
+  @spec search(Scope.t(), binary(), binary(), pos_integer()) :: {:ok, page()}
+  def search(%Scope{organization_id: organization_id}, mission_id, query, limit)
       when is_binary(organization_id) and is_binary(mission_id) and is_binary(query) and
              is_integer(limit) and limit > 0 do
     options =
@@ -41,18 +34,15 @@ defmodule Cadence.Reads.ApplicationSurfaces.ReferenceProviders.CanonicalTelemetr
       |> Enum.filter(&matches?(&1, query))
 
     {:ok,
-     %ReferencePage{
+     %{
        query: query,
        options: Enum.take(matches, limit),
        more?: length(matches) > limit
      }}
   end
 
-  def search(%Scope{}, %HostContext{}, %ReferenceDefinition{}, _query, _limit),
-    do: {:error, :unsupported_reference_scope}
-
   defp option(%{source: :derived} = point) do
-    %ReferenceOption{
+    %{
       value: point.point_id,
       label: point.qualified_name || point.point_id,
       description: describe(["Derived telemetry", point.unit && "Unit: #{point.unit}"])
@@ -60,7 +50,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.ReferenceProviders.CanonicalTelemetr
   end
 
   defp option(point) do
-    %ReferenceOption{
+    %{
       value: point.point_id,
       label: point.point_id,
       description:

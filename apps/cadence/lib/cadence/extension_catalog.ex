@@ -595,7 +595,7 @@ defmodule Cadence.ExtensionCatalog do
   end
 
   defp validate_contribution(
-         %ExtensionPackage{} = package,
+         %ExtensionPackage{},
          %ApplicationContribution{} = contribution
        ) do
     with {:ok, definition} <-
@@ -604,10 +604,7 @@ defmodule Cadence.ExtensionCatalog do
              contribution.application_version
            ),
          true <- definition.application_key == contribution.application_key,
-         true <- definition.version == contribution.application_version,
-         true <-
-           definition.surfaces == [] or
-             Map.has_key?(package.compatibility, :cadence_surface_contract) do
+         true <- definition.version == contribution.application_version do
       :ok
     else
       _invalid -> {:error, :invalid_application_contribution}

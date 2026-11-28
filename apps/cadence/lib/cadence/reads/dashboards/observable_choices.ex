@@ -1,7 +1,5 @@
 defmodule Cadence.Reads.Dashboards.ObservableChoices do
   @moduledoc "Authorized, bounded observable choices for the displayed dashboard draft."
-  alias Cadence.Applications.HostContext
-
   alias Cadence.Dashboards.{
     Authoring,
     AuthoringInput,
@@ -11,8 +9,7 @@ defmodule Cadence.Reads.Dashboards.ObservableChoices do
     OperationalObservable
   }
 
-  alias Cadence.Extensions.Presentation.ReferenceDefinition
-  alias Cadence.Reads.ApplicationSurfaces.ReferenceProviders.CanonicalTelemetryPoints
+  alias Cadence.Reads.Dashboards.CanonicalTelemetryPoints
 
   @limit 50
 
@@ -84,18 +81,9 @@ defmodule Cadence.Reads.Dashboards.ObservableChoices do
   end
 
   defp choices(scope, document, query, fields) do
-    context = %HostContext{placement: :mission, mission_id: document.mission_id}
-
-    definition = %ReferenceDefinition{
-      provider_id: "cadence.telemetry.canonical_points",
-      version: 1
-    }
-
-    with {:ok, page} <- CanonicalTelemetryPoints.search(scope, context, definition, query, @limit) do
-      options =
-        page.options
-        |> Enum.filter(&supported?(document, fields, &1.value))
-        |> Enum.map(&Map.take(&1, [:value, :label, :description]))
+    with {:ok, page} <-
+           CanonicalTelemetryPoints.search(scope, document.mission_id, query, @limit) do
+      options = Enum.filter(page.options, &supported?(document, fields, &1.value))
 
       {:ok, options, page.more?}
     end

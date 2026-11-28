@@ -192,7 +192,7 @@ defmodule Cadence.Architecture.PlaneAndContextBoundaryTest do
 
   test "packet declaration values are shared while configuration and rows retain management authority" do
     for name <-
-          ~w(packet_binding packet_binding_configuration packet_binding_resource mission_binding_contribution surface_query_contribution surface_elements/packet_bindings surface_elements/packet_binding_group surface_elements/packet_binding_resource) do
+          ~w(packet_binding packet_binding_configuration packet_binding_resource mission_binding_contribution) do
       path = "lib/cadence/applications/#{name}.ex"
       assert PlaneBoundary.classify(path) == :shared
 
@@ -207,10 +207,6 @@ defmodule Cadence.Architecture.PlaneAndContextBoundaryTest do
   end
 
   test "host providers have their actual owners" do
-    path = "lib/cadence/applications/ops_console/action_provider.ex"
-    assert PlaneBoundary.classify(path) == :adapter
-    assert ContextBoundary.classify(path) == :adapter
-
     assert PlaneBoundary.classify("lib/cadence/notifications/store.ex") == :platform
 
     assert [%{kind: :context_direction}] =

@@ -1,4 +1,4 @@
-defmodule Cadence.Reads.ApplicationSurfaces.ReferenceProviders.CanonicalTelemetryPointsTest do
+defmodule Cadence.Reads.Dashboards.CanonicalTelemetryPointsTest do
   @moduledoc """
   #451 T4d: the canonical point choices (the dashboards' observable picker) list the active
   revision's derived parameters from the operator point catalog (#1124), by semantic id and
@@ -6,14 +6,11 @@ defmodule Cadence.Reads.ApplicationSurfaces.ReferenceProviders.CanonicalTelemetr
   """
   use Cadence.DataCase, async: false
 
-  alias Cadence.Applications.HostContext
   alias Cadence.Auth.Scope
   alias Cadence.DerivedPointFixtures, as: Fixtures
-  alias Cadence.Extensions.Presentation.{ReferenceDefinition, ReferenceOption}
-  alias Cadence.Reads.ApplicationSurfaces.ReferenceProviders.CanonicalTelemetryPoints
+  alias Cadence.Reads.Dashboards.CanonicalTelemetryPoints
 
   @org "org-canonical-points"
-  @definition %ReferenceDefinition{provider_id: "cadence.telemetry.canonical_points", version: 1}
 
   setup do
     mission = "mission-canonical-#{System.unique_integer([:positive])}"
@@ -25,7 +22,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.ReferenceProviders.CanonicalTelemetr
     assert {:ok, page} = search(c.mission, "")
     derived = Enum.find(page.options, &(&1.value == c.model.derived_id))
 
-    assert %ReferenceOption{label: label, description: description} = derived
+    assert %{label: label, description: description} = derived
     assert label == Fixtures.derived_name()
     assert description =~ "Derived telemetry"
     assert description =~ "Unit: V"
@@ -39,12 +36,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.ReferenceProviders.CanonicalTelemetr
   end
 
   defp search(mission, query) do
-    CanonicalTelemetryPoints.search(
-      %Scope{organization_id: @org},
-      HostContext.mission(mission),
-      @definition,
-      query,
-      50
-    )
+    CanonicalTelemetryPoints.search(%Scope{organization_id: @org}, mission, query, 50)
   end
 end

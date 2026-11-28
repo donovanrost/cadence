@@ -1,13 +1,12 @@
 defmodule Mix.Tasks.Cadence.Extensions.Check do
   @moduledoc """
-  Validates the complete compiled extension catalog, application host provider
-  bindings, and prints the composed inventory.
+  Validates the complete compiled extension catalog and the application status
+  providers, and prints the composed inventory.
 
   Unlike tolerant runtime discovery, this check fails when any compiled package
   is structurally invalid, has an unresolved typed contribution, duplicates a
   package identifier, duplicates contribution ownership, or leaves a declared
-  action, status, surface, or reference contract without exactly one
-  valid plane-owned provider binding.
+  application status query without exactly one valid provider binding.
 
   ## Usage
 
@@ -16,11 +15,8 @@ defmodule Mix.Tasks.Cadence.Extensions.Check do
 
   use Mix.Task
 
-  alias Cadence.Applications.ActionDispatcher
   alias Cadence.ExtensionCatalog
   alias Cadence.Reads.Applications, as: ApplicationReads
-  alias Cadence.Reads.ApplicationSurfaces
-  alias Cadence.Reads.ApplicationSurfaces.ReferenceResolver
 
   @shortdoc "Validate the compiled extension host contract"
 
@@ -30,10 +26,7 @@ defmodule Mix.Tasks.Cadence.Extensions.Check do
     Mix.Task.run("compile")
 
     with :ok <- ExtensionCatalog.validate(),
-         :ok <- ActionDispatcher.validate_providers(),
-         :ok <- ApplicationReads.validate_providers(),
-         :ok <- ApplicationSurfaces.validate_providers(),
-         :ok <- ReferenceResolver.validate_providers() do
+         :ok <- ApplicationReads.validate_providers() do
       Mix.shell().info(summary(ExtensionCatalog.inventory()))
     else
       {:error, reason} ->
@@ -62,7 +55,7 @@ defmodule Mix.Tasks.Cadence.Extensions.Check do
       counted(inventory.source_adapters, "source adapter") <>
       "; " <>
       counted(inventory.catalog_importers, "catalog importer") <>
-      "; action, status, surface, and reference providers valid."
+      "; status providers valid."
   end
 
   defp counted(1, singular, _plural), do: "1 #{singular}"
