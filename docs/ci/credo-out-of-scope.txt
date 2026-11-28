@@ -5,12 +5,12 @@
 # (run as: nice -n 19 env ERL_FLAGS="+S 1:1" mise exec -- <command above>)
 # dev/otp_cluster/ is excluded because .credo.exs already covers it (0 findings there).
 # Files outside .credo.exs 'included' must be passed explicitly; passing directories prints nothing.
-# Total: 45 findings in 7 checks (one dropped with its code in #702). No TODO/FIXME tag findings.
+# Total: 32 findings in 7 checks. No TODO/FIXME tag findings.
 #
 # Format: Check | file:line | message
 # The [trigger: ...] suffix is credo's trigger (e.g. the module to alias).
 
-## Credo.Check.Design.AliasUsage (30)
+## Credo.Check.Design.AliasUsage (22)
 Credo.Check.Design.AliasUsage | apps/cadence/plane_test/management/activation_governance_test.exs:15 | Nested modules could be aliased at the top of the invoking module. [trigger: Ecto.Adapters.SQL.Sandbox]
 Credo.Check.Design.AliasUsage | apps/cadence/plane_test/management/activation_governance_test.exs:16 | Nested modules could be aliased at the top of the invoking module. [trigger: Ecto.Adapters.SQL.Sandbox]
 Credo.Check.Design.AliasUsage | apps/cadence/plane_test/management/activation_governance_test.exs:17 | Nested modules could be aliased at the top of the invoking module. [trigger: Ecto.Adapters.SQL.Sandbox]
@@ -32,23 +32,14 @@ Credo.Check.Design.AliasUsage | dev/reflect_orbital/activation.exs:166 | Nested 
 Credo.Check.Design.AliasUsage | dev/reflect_orbital/activation.exs:189 | Nested modules could be aliased at the top of the invoking module. [trigger: Cadence.Auth.Scope]
 Credo.Check.Design.AliasUsage | dev/reflect_orbital/configuration.exs:23 | Nested modules could be aliased at the top of the invoking module. [trigger: Cadence.Contacts.ProviderScheduling]
 Credo.Check.Design.AliasUsage | dev/reflect_orbital/live_contacts.exs:48 | Nested modules could be aliased at the top of the invoking module. [trigger: Cadence.Runtime.MissionRuntime]
-Credo.Check.Design.AliasUsage | dev/reflect_orbital/seed.exs:48 | Nested modules could be aliased at the top of the invoking module. [trigger: Cadence.Dev.ReflectOrbital.Configuration]
-Credo.Check.Design.AliasUsage | dev/reflect_orbital/seed.exs:225 | Nested modules could be aliased at the top of the invoking module. [trigger: Cadence.Comms.TransportStore]
-Credo.Check.Design.AliasUsage | dev/reflect_orbital/seed.exs:231 | Nested modules could be aliased at the top of the invoking module. [trigger: Cadence.Management.Transports]
-Credo.Check.Design.AliasUsage | dev/reflect_orbital/seed.exs:327 | Nested modules could be aliased at the top of the invoking module. [trigger: Cadence.Contacts.ProviderScheduling]
 Credo.Check.Design.AliasUsage | dev/sre_observability_demo.exs:1007 | Nested modules could be aliased at the top of the invoking module. [trigger: Cadence.Telemetry.Profiler]
 
-## Credo.Check.Readability.AliasOrder (6)
+## Credo.Check.Readability.AliasOrder (3)
 Credo.Check.Readability.AliasOrder | apps/cadence_web/browser_test/cadence_web/assets/federation_browser_smoke_test.exs:9 | The alias `Ecto.Adapters.SQL.Sandbox` is not alphabetically ordered among its group. [trigger: Ecto.Adapters.SQL.Sandbox]
 Credo.Check.Readability.AliasOrder | apps/cadence_web/browser_test/cadence_web/assets/settings_browser_test.exs:5 | The alias `Cadence.Applications.TelemetryDecomFixtures` is not alphabetically ordered among its group. [trigger: Cadence.Applications.TelemetryDecomFixtures]
-Credo.Check.Readability.AliasOrder | dev/reflect_orbital/seed.exs:3 | The alias `Cadence.Dev.ReflectOrbital.Fixture` is not alphabetically ordered among its group. [trigger: Cadence.Dev.ReflectOrbital.Fixture]
-Credo.Check.Readability.AliasOrder | dev/reflect_orbital/seed.exs:19 | The alias `Cadence.GroundNetworks.ProviderAccounts` is not alphabetically ordered among its group. [trigger: ProviderAccounts]
-Credo.Check.Readability.AliasOrder | dev/reflect_orbital/seed.exs:26 | The alias `Cadence.SourceEndpoints.SourceEndpoint` is not alphabetically ordered among its group. [trigger: Cadence.SourceEndpoints.SourceEndpoint]
 Credo.Check.Readability.AliasOrder | dev/sre_observability_demo.exs:5 | The alias `` is not alphabetically ordered among its group.
 
-## Credo.Check.Warning.IoInspect (4)
-Credo.Check.Warning.IoInspect | dev/chaos/scripts/seed.exs:13 | There should be no calls to `IO.inspect/1`. [trigger: IO.inspect]
-Credo.Check.Warning.IoInspect | dev/chaos/scripts/seed.exs:22 | There should be no calls to `IO.inspect/1`. [trigger: IO.inspect]
+## Credo.Check.Warning.IoInspect (1)
 Credo.Check.Warning.IoInspect | dev/reflect_orbital_activate.exs:21 | There should be no calls to `IO.inspect/1`. [trigger: IO.inspect]
 
 ## Credo.Check.Readability.PreferImplicitTry (2)

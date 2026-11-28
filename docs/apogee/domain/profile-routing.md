@@ -243,8 +243,8 @@ is promoted to a named profile ("EARENDIL-389 framing (migrated)"). Note: synthe
 silently drop the base profile's `applications`. The migration preview lists those spacecraft as a
 HOLD.
 
-**D. Seed and fixtures:** `dev/reflect_orbital/seed.exs` seeds a profile rule per block instead of
-2 rules per spacecraft. `verify!` keeps asserting ready routes. `RoutingRuleStore.create_routing_rule`
+**D. Seed and fixtures:** `dev/seed/earendil.exs` creates the shared profile, per-site transports,
+and spacecraft routes through the REST change-set API. `RoutingRuleStore.create_routing_rule`
 stays for `origin: spacecraft` and for tests until P3.
 
 ## 7. Placement

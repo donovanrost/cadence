@@ -46,7 +46,7 @@ plumbing. Two are decisions (**D1**, **D2**).
 
    The provider binding's `ingress_transport_binding_id` points back at the gateway, which
    lets CLCWs reach FOP.
-5. **Seed** (`dev/reflect_orbital/seed.exs`): one provider-managed uplink transport per site,
+5. **Seed** (`dev/seed/earendil.exs`): one provider-managed uplink transport per site,
    and one primary outbound route per craft at its primary site. That's all
    `UplinkResolution` (#41) needs.
 6. **Verifiers** for a handful of demo commands (`SET_MODE` checks `HK.sc_mode`, plus
