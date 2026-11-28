@@ -151,26 +151,6 @@ const expected = [
         ["apply_filters", "apply_question"],
       ],
       [
-        "data_operations",
-        "operations",
-        "mission",
-        "ops_workspace",
-        "Data Operations",
-        10,
-        "cadence.ops.data_operations",
-        [],
-      ],
-      [
-        "data_operations_manage",
-        "operations",
-        "mission",
-        "ops_workspace",
-        "Manage Data Operations",
-        10,
-        "cadence.ops.data_operations_manage",
-        [],
-      ],
-      [
         "data_sources",
         "configuration",
         "mission",
@@ -331,7 +311,8 @@ describe("first-party federated manifest parity", () => {
     // Sweep row 2: spacecraft's new / profile_new / edit forms left (40 → 37); the
     // organization-admin notifications page left (37 → 36); the ops-console
     // activation_requests surface left (36 → 35). #671: the Mission Catalog (8) and Spacecraft (9)
-    // remotes left (35 → 18).
-    expect(surfaceCount).toBe(18);
+    // remotes left (35 → 18). #702: the ops-console data_operations and data_operations_manage
+    // surfaces left (18 → 16).
+    expect(surfaceCount).toBe(16);
   });
 });

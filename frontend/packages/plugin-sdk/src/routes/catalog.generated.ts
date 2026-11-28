@@ -1,27 +1,6 @@
 // Generated from apps/host/src/routes.json by tools/generate-route-types.mjs. Do not edit.
 // Run `corepack pnpm routes:generate` after changing the route catalog.
 export const routeCatalog = {
-  "/missions/:mission_id/ops/data-operations": {
-    kind: "ops_module",
-    layer: "ops",
-    scope: "mission",
-    title: "Data Operations",
-    queryKeys: [
-      "group",
-      "page",
-      "audit_page",
-      "jobs_page",
-      "origins_page",
-      "bindings_page",
-      "binding_q",
-    ],
-    header: {
-      kind: "collection",
-      breadcrumbs: true,
-      eyebrow: false,
-      description: null,
-    },
-  },
   "/missions/:mission_id/ops/planning": {
     kind: "ops_module",
     layer: "ops",
@@ -211,27 +190,6 @@ export const routeCatalog = {
     scope: "mission",
     title: "Commands",
     queryKeys: ["status", "target", "query", "focus_command_id", "page"],
-    header: {
-      kind: "collection",
-      breadcrumbs: true,
-      eyebrow: false,
-      description: null,
-    },
-  },
-  "/missions/:mission_id/ops/data-operations/manage": {
-    kind: "ops_module",
-    layer: "ops",
-    scope: "mission",
-    title: "Data Operations",
-    queryKeys: [
-      "group",
-      "page",
-      "audit_page",
-      "jobs_page",
-      "origins_page",
-      "bindings_page",
-      "binding_q",
-    ],
     header: {
       kind: "collection",
       breadcrumbs: true,
