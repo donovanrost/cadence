@@ -43,7 +43,7 @@ defmodule Cadence.SemanticRuntime.AlgorithmPlan do
       triggers: value(attrs, :triggers, []),
       missing_input: attrs |> value(:missing_input, :skip) |> decode(:missing_input),
       maximum_age_ms: value(attrs, :maximum_age_ms),
-      quality_policy: attrs |> quality_policy() |> decode(:quality_policy),
+      quality_policy: attrs |> value(:quality_policy, :worst_input) |> decode(:quality_policy),
       time_basis: attrs |> value(:time_basis, :receipt_time) |> decode(:time_basis),
       implementation: value(attrs, :implementation, %{kind: :expression}),
       space_system_id: value(attrs, :space_system_id),
@@ -62,25 +62,16 @@ defmodule Cadence.SemanticRuntime.AlgorithmPlan do
   defp build_expression(%Expression{} = expression), do: expression
   defp build_expression(attrs), do: Expression.new(attrs)
 
-  # The catalog's compiler and the runtime name some settings differently (the catalog compiles
-  # `time_basis: :receipt` and `quality_propagation: :worst`). Both vocabularies decode here, through
-  # closed maps, so a compiled plan never reaches evaluation with a value the evaluator has no clause
-  # for (an unmapped `:receipt` raised in the staleness check and tripped the partition, #451 T4a).
-  # A value outside the maps is refused here, when the plan is decoded, with the setting named.
+  # The settings decode through closed maps of the runtime's own vocabulary (the compiler writes
+  # these names since #1114), so a compiled plan never reaches evaluation with a value the evaluator
+  # has no clause for: an unmapped `:receipt` once raised in the staleness check and tripped the
+  # partition (#451 T4a). Any other value, an old catalog name included, is refused here, when the
+  # plan is decoded, with the setting named.
   @vocabulary %{
-    time_basis: %{
-      "receipt_time" => :receipt_time,
-      "receipt" => :receipt_time,
-      "generation_time" => :generation_time,
-      "generation" => :generation_time
-    },
-    quality_policy: %{"worst_input" => :worst_input, "worst" => :worst_input},
+    time_basis: %{"receipt_time" => :receipt_time, "generation_time" => :generation_time},
+    quality_policy: %{"worst_input" => :worst_input},
     missing_input: %{"skip" => :skip, "bad_quality" => :bad_quality}
   }
-
-  # `quality_policy` is the runtime's name; the catalog writes `quality_propagation`.
-  defp quality_policy(attrs),
-    do: value(attrs, :quality_policy) || value(attrs, :quality_propagation, :worst_input)
 
   defp decode(value, setting) do
     case Map.fetch(Map.fetch!(@vocabulary, setting), to_string(value)) do

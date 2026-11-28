@@ -1,10 +1,10 @@
 defmodule Cadence.SemanticRuntime.AlgorithmVocabularyTest do
   @moduledoc """
-  #451 T4a: the catalog compiles an algorithm's settings in its own words (`time_basis: :receipt`,
-  `quality_propagation: :worst`, `Catalog.MissionModel.Defaults`), and the runtime decodes them
-  into its own (`:receipt_time`, `quality_policy: :worst_input`). Before, `:receipt` went through
-  unmapped and an algorithm with `maximum_age_ms` raised in the staleness check, tripping the
-  partition.
+  #451 T4a: an algorithm plan's settings decode through closed maps of the runtime's vocabulary,
+  which the catalog compiler writes since #1114 (`time_basis: :receipt_time`,
+  `quality_policy: :worst_input`). An unmapped value once reached evaluation and an algorithm with
+  `maximum_age_ms` raised in the staleness check, tripping the partition; any value outside the
+  maps, an old catalog name included, is now refused at decode with the setting named.
   """
   use ExUnit.Case, async: true
 
@@ -19,9 +19,6 @@ defmodule Cadence.SemanticRuntime.AlgorithmVocabularyTest do
           Declaration.new(%{kind: :algorithm, qualified_name: "/algorithms/sum", definition: %{}})
       })
 
-    assert definition.time_basis == :receipt
-    assert definition.quality_propagation == :worst
-
     plan =
       definition
       |> Map.merge(%{algorithm_id: "algorithm:sum", input_parameter_ids: [], outputs: []})
@@ -31,33 +28,30 @@ defmodule Cadence.SemanticRuntime.AlgorithmVocabularyTest do
     assert plan.missing_input == :skip
   end
 
-  test "both vocabularies decode, as atoms or as text" do
-    for {given, expected} <- [
-          {:receipt, :receipt_time},
-          {"receipt", :receipt_time},
-          {:receipt_time, :receipt_time},
-          {:generation, :generation_time},
-          {"generation_time", :generation_time}
-        ] do
-      assert %AlgorithmPlan{time_basis: ^expected} = plan(%{time_basis: given})
-    end
+  test "the runtime's names decode, as atoms or as text" do
+    assert %AlgorithmPlan{time_basis: :receipt_time} = plan(%{time_basis: "receipt_time"})
+    assert %AlgorithmPlan{time_basis: :generation_time} = plan(%{time_basis: :generation_time})
 
     assert %AlgorithmPlan{quality_policy: :worst_input} =
-             plan(%{"quality_propagation" => "worst"})
+             plan(%{"quality_policy" => "worst_input"})
 
-    assert %AlgorithmPlan{quality_policy: :worst_input} = plan(%{quality_policy: :worst_input})
     assert %AlgorithmPlan{missing_input: :bad_quality} = plan(%{missing_input: "bad_quality"})
   end
 
-  test "a value outside the vocabulary is refused when the plan is decoded, naming the setting" do
-    assert_raise ArgumentError, ~r/time_basis :sometime/, fn -> plan(%{time_basis: :sometime}) end
+  test "any other value, an old catalog name included, is refused at decode, naming the setting" do
+    assert_raise ArgumentError, ~r/time_basis :receipt /, fn -> plan(%{time_basis: :receipt}) end
+
+    assert_raise ArgumentError, ~r/quality_policy :worst /, fn ->
+      plan(%{quality_policy: :worst})
+    end
+
     assert_raise ArgumentError, ~r/missing_input "drop"/, fn -> plan(%{missing_input: "drop"}) end
   end
 
-  test "an algorithm compiled with the catalog's time basis and a maximum age skips a stale input" do
+  test "an algorithm with a maximum age skips a stale input instead of raising" do
     sum =
       plan(%{
-        time_basis: :receipt,
+        time_basis: :receipt_time,
         maximum_age_ms: 100,
         input_parameter_ids: ["parameter:raw", "parameter:other"],
         outputs: [
