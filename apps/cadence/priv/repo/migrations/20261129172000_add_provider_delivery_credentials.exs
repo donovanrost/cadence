@@ -4,12 +4,12 @@ defmodule Cadence.Repo.Migrations.AddProviderDeliveryCredentials do
   def change do
     create table(:provider_delivery_credentials, primary_key: false) do
       add(:credential_ref, :text, primary_key: true)
-      add(:organization_id, :text, null: false)
-      add(:mission_id, :text, null: false)
-      add(:provider_id, :text, null: false)
-      add(:provider_account_id, :text, null: false)
-      add(:provider_account_grant_id, :text, null: false)
-      add(:provider_binding_id, :text, null: false)
+      add(:organization_id, :text, null: false, collation: "C")
+      add(:mission_id, :text, null: false, collation: "C")
+      add(:provider_id, :text, null: false, collation: "C")
+      add(:provider_account_id, :text, null: false, collation: "C")
+      add(:provider_account_grant_id, :text, null: false, collation: "C")
+      add(:provider_binding_id, :text, null: false, collation: "C")
       add(:retired_at, :utc_datetime_usec)
       timestamps(type: :utc_datetime_usec, updated_at: false)
     end
