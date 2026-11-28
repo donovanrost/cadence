@@ -392,17 +392,24 @@ defmodule Cadence.Runtime.MissionCoordinator do
     {:noreply, release_route(state, permit)}
   end
 
-  # An owner this coordinator started went down. A failed initialization backs its partition
-  # off, so the next frame can't start (and fail) another straight away.
-  def handle_info({:DOWN, ref, :process, pid, reason}, state)
-      when is_map_key(state.owner_monitors, pid) do
-    {{^ref, key, started_ms}, monitors} = Map.pop(state.owner_monitors, pid)
-    uptime_ms = System.monotonic_time(:millisecond) - started_ms
-    {:noreply, owner_down(%{state | owner_monitors: monitors}, key, reason, uptime_ms)}
+  # An owner this coordinator started went down. Match its owner monitor; request monitors
+  # for the same PID are handled by check_response below.
+  def handle_info({:DOWN, ref, :process, pid, reason} = message, state) do
+    case state.owner_monitors do
+      %{^pid => {^ref, key, started_ms}} ->
+        monitors = Map.delete(state.owner_monitors, pid)
+        uptime_ms = System.monotonic_time(:millisecond) - started_ms
+        {:noreply, owner_down(%{state | owner_monitors: monitors}, key, reason, uptime_ms)}
+
+      _ ->
+        handle_request_message(message, state)
+    end
   end
 
   @impl true
-  def handle_info(message, state) do
+  def handle_info(message, state), do: handle_request_message(message, state)
+
+  defp handle_request_message(message, state) do
     case :gen_server.check_response(message, state.requests, true) do
       {response, label, requests} ->
         handle_partition_response(response, label, %{state | requests: requests})

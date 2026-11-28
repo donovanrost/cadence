@@ -109,6 +109,8 @@ export const providerOptionsReader = d.object({
     d.object({
       configuration: d.array(row, 64),
       direction_capability: d.knownText(["inbound", "outbound", "bidirectional"] as const),
+      /** #202: a derived listening downlink, which may choose Own or Shared. */
+      listener_eligible: d.boolean,
       provider_version: d.integer,
       summary: d.array(row, 16),
     }),

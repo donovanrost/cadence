@@ -6,6 +6,8 @@ defmodule Cadence.Comms.ListenClaimsTest do
   """
   use Cadence.DataCase, async: false
 
+  alias Ecto.Adapters.SQL.Sandbox
+
   alias Cadence.Comms.{ListenClaims, Transport, TransportStore}
 
   alias Cadence.Contacts.{
@@ -112,6 +114,65 @@ defmodule Cadence.Comms.ListenClaimsTest do
   end
 
   describe "saving a transport" do
+    test "a plaintext shared claim belongs to one stable transport across versions", %{
+      a: a,
+      port: port
+    } do
+      config = %{"listener" => "shared", "framing_mode" => "fixed_size", "frame_size" => 64}
+      assert {:ok, first} = persist_transport(a, port, config)
+
+      assert {:error, {:shared_listener_requires_mtls, %{port: ^port}}} =
+               persist_transport(a, port, config)
+
+      assert {:error, {:shared_listener_requires_mtls, %{port: ^port}}} =
+               persist_transport(a, port)
+
+      assert {:ok, own} =
+               TransportStore.version_transport(
+                 a.organization_id,
+                 a.mission_id,
+                 first.transport_id,
+                 %{
+                   configuration: Map.put(first.configuration, "listener", "own")
+                 }
+               )
+
+      assert own.configuration["listener"] == "own"
+      assert own.materialized_provider_profile_id != first.materialized_provider_profile_id
+      assert {:ok, _other_own} = persist_transport(a, port)
+    end
+
+    test "a plaintext shared claim requires a usable allowlist", %{a: a, port: port} do
+      assert {:error, :shared_listener_requires_allowlist} =
+               persist_transport(a, port, %{
+                 "listener" => "shared",
+                 "framing_mode" => "fixed_size",
+                 "frame_size" => 64,
+                 "expected_peer_addresses" => []
+               })
+    end
+
+    test "the port lock remains held while a shared claim is written", %{a: a, port: port} do
+      config = Map.put(tcp_config(port), "listener", "shared")
+
+      write = fn ->
+        probe =
+          Task.async(fn ->
+            Sandbox.unboxed_run(Repo, fn ->
+              Repo.query!("SELECT pg_try_advisory_xact_lock(hashtext($1))", [
+                "listen_port:#{port}"
+              ]).rows
+            end)
+          end)
+
+        assert [[false]] = Task.await(probe)
+        {:ok, :written}
+      end
+
+      assert {:ok, :written} =
+               ListenClaims.guard(a.mission_id, config, write, {:transport, "owner"})
+    end
+
     test "another mission's transport on the same host:port is refused; its own isn't", %{
       a: a,
       b: b,
@@ -300,7 +361,7 @@ defmodule Cadence.Comms.ListenClaimsTest do
     }
   end
 
-  defp persist_transport(scope, port) do
+  defp persist_transport(scope, port, config \\ %{}) do
     TransportStore.persist_transport(
       scope.organization_id,
       Transport.new(%{
@@ -309,7 +370,7 @@ defmodule Cadence.Comms.ListenClaimsTest do
         transport_kind: :tcp_socket,
         direction_capability: :inbound,
         adapter_key: :tcp_socket,
-        configuration: tcp_config(port)
+        configuration: Map.merge(tcp_config(port), config)
       })
     )
   end

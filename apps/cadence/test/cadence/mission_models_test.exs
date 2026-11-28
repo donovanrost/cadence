@@ -13,10 +13,8 @@ defmodule Cadence.MissionModelsTest do
   alias Cadence.Management.Activations, as: ManagementActivations
   alias Cadence.MissionModelApproval
   alias Cadence.MissionModelCatalogNaming
+  alias Cadence.MissionModelFixtures
   alias Cadence.MissionModels
-  alias Cadence.MissionModels.RevisionRow
-  alias Cadence.Persistence.JsonDocument
-  alias Cadence.Repo
   alias Cadence.Runtime
 
   @organization_id "org-mission-models"
@@ -36,7 +34,7 @@ defmodule Cadence.MissionModelsTest do
     %{mission_id: mission_id}
   end
 
-  test "promotes an approved revision and exact binding set as one runtime generation", %{
+  test "an approved revision and exact binding set apply as one runtime generation", %{
     mission_id: mission_id
   } do
     binding_set = persist_binding_set(mission_id)
@@ -46,7 +44,7 @@ defmodule Cadence.MissionModelsTest do
     approver = user_scope("approver")
 
     assert {:ok, request} =
-             MissionModels.request_promotion(
+             MissionModelFixtures.request_model_activation(
                requester,
                mission_id,
                revision.revision_id,

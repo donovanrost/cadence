@@ -263,16 +263,16 @@ defmodule Cadence.Contacts.ProfileStore do
   end
 
   @doc """
-  Provider profiles (any organization) that mention listen port `port`, each at its latest
+  Provider profiles (any organization) that mention the listen ports, each at its latest
   version, for the node-wide listener claims check.
   """
-  @spec latest_provider_profiles_on_port(pos_integer()) :: [map()]
-  def latest_provider_profiles_on_port(port) when is_integer(port) do
-    port_text = Integer.to_string(port)
+  @spec latest_provider_profiles_on_ports([pos_integer()]) :: [map()]
+  def latest_provider_profiles_on_ports(ports) when is_list(ports) do
+    port_text = Enum.map(ports, &Integer.to_string/1)
 
     candidates =
       from(row in ProviderProfileRow,
-        where: fragment("(?->'value'->>'port') = ?", row.configuration, ^port_text),
+        where: fragment("?->'value'->>'port'", row.configuration) in ^port_text,
         select: %{mission_id: row.mission_id, provider_profile_id: row.provider_profile_id},
         distinct: true
       )

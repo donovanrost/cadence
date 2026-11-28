@@ -1,5 +1,9 @@
 # OrbStack resilience lab
 
+**Paused:** The direct seed command was removed on 2026-11-28 (#1128). The sequences below
+record earlier rehearsals and cannot prepare a fresh lab. See
+[the lab README](../../dev/chaos/README.md) for the REST seed work needed to revive it.
+
 This lab builds Linux OTP releases, deploys three Cadence replicas into the
 `cadence-chaos` namespace, and exercises active synthetic contacts during pod
 failures and rolling replacements. Every Kubernetes command pins the `orbstack`
@@ -40,7 +44,7 @@ docker compose up -d greptimedb tempo loki otel_collector grafana questdb
 python3 dev/chaos/lab.py build
 python3 dev/chaos/lab.py mesh
 python3 dev/chaos/lab.py up --replicas 1
-python3 dev/chaos/lab.py seed
+# Seed step removed; this historical sequence cannot prepare a fresh lab.
 python3 dev/chaos/lab.py warm
 python3 dev/chaos/lab.py scale 2
 python3 dev/chaos/lab.py warm
@@ -52,13 +56,12 @@ python3 dev/chaos/lab.py status
 
 `up` applies infrastructure, runs a one-shot migration Job, then deploys the
 application (three replicas by default; the laptop bootstrap above starts with one).
-`seed` is rerunnable: it migrates the lab QuestDB, seeds the existing
-fixture and submits its extra routes. The seeded second admin reviews and applies the routes
-when independent approval is required. It then activates the exact 500 saved revisions, creates continuous synthetic
-contacts, and starts the persisted mission on each replica. This explicitly
-selects direct activation for the **lab Earendil mission only**. The fixture's
-production escape hatch requires both `CADENCE_CHAOS_LAB=true` and
-`POD_NAMESPACE=cadence-chaos`; neither is set in normal releases.
+The removed `seed` command migrated QuestDB, prepared the fixture, submitted its
+extra routes, activated the fleet, and started synthetic contacts. It also selected
+direct activation for the **lab Earendil mission only**. A revived lab needs
+independent approval through a REST seed instead. The fixture's production escape
+hatch requires both `CADENCE_CHAOS_LAB=true` and `POD_NAMESPACE=cadence-chaos`;
+neither is set in normal releases.
 The lab Dockerfile also appends a guarded runtime configuration that enables
 local provider credentials for the synthetic simulator and sets logging to info.
 This configuration is not part of the normal production release.
@@ -82,7 +85,7 @@ kubectl --context orbstack -n cadence-chaos port-forward service/cadence 14001:4
 
 On a laptop, finish image builds before activating the full fleet or benchmarking.
 Each replica currently recovers the entire mission, so fleet recovery duplicates
-memory and CPU work. Start with `scale 1` before `seed` if memory is constrained,
+memory and CPU work. Start with `scale 1` before any future seed if memory is constrained,
 then scale to three after activation. Keep a surge replica's recovery footprint
 available during rollouts. A build running alongside three recoveries exhausted
 the initial lab's 3 GiB container limit during activation.
@@ -271,7 +274,7 @@ the app and generator, then create a new database without deleting the failed on
 kubectl --context orbstack -n cadence-chaos scale deployment/cadence deployment/traffic --replicas=0
 python3 dev/chaos/lab.py new-dataset
 python3 dev/chaos/lab.py up --replicas 1
-python3 dev/chaos/lab.py seed
+# Seed step removed; this historical sequence cannot prepare a fresh lab.
 python3 dev/chaos/lab.py warm
 python3 dev/chaos/lab.py scale 2
 python3 dev/chaos/lab.py warm

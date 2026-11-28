@@ -6,7 +6,7 @@ defmodule Mix.Tasks.Cadence.Extensions.Check do
   Unlike tolerant runtime discovery, this check fails when any compiled package
   is structurally invalid, has an unresolved typed contribution, duplicates a
   package identifier, duplicates contribution ownership, or leaves a declared
-  action, preflight, status, surface, or reference contract without exactly one
+  action, status, surface, or reference contract without exactly one
   valid plane-owned provider binding.
 
   ## Usage
@@ -16,7 +16,7 @@ defmodule Mix.Tasks.Cadence.Extensions.Check do
 
   use Mix.Task
 
-  alias Cadence.Applications.{ActionDispatcher, ApplicationPreflight}
+  alias Cadence.Applications.ActionDispatcher
   alias Cadence.ExtensionCatalog
   alias Cadence.Reads.Applications, as: ApplicationReads
   alias Cadence.Reads.ApplicationSurfaces
@@ -31,7 +31,6 @@ defmodule Mix.Tasks.Cadence.Extensions.Check do
 
     with :ok <- ExtensionCatalog.validate(),
          :ok <- ActionDispatcher.validate_providers(),
-         :ok <- ApplicationPreflight.validate_providers(),
          :ok <- ApplicationReads.validate_providers(),
          :ok <- ApplicationSurfaces.validate_providers(),
          :ok <- ReferenceResolver.validate_providers() do
@@ -63,7 +62,7 @@ defmodule Mix.Tasks.Cadence.Extensions.Check do
       counted(inventory.source_adapters, "source adapter") <>
       "; " <>
       counted(inventory.catalog_importers, "catalog importer") <>
-      "; action, preflight, status, surface, and reference providers valid."
+      "; action, status, surface, and reference providers valid."
   end
 
   defp counted(1, singular, _plural), do: "1 #{singular}"

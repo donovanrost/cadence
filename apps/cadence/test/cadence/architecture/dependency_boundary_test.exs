@@ -212,12 +212,12 @@ defmodule Cadence.Architecture.DependencyBoundaryTest do
   test "protects application dashboard network and projection rows through owning contexts" do
     graph = %{
       "lib/cadence/accounts.ex" => %{
-        "lib/cadence/applications/application_binding_store/binding_row.ex" => "export",
+        "lib/cadence/applications/spacecraft_configuration/assignment_row.ex" => "export",
         "lib/cadence/dashboards/data_sources/data_source_row.ex" => "export",
         "lib/cadence/ground_networks/provider_accounts/account_row.ex" => "export"
       },
-      "lib/cadence/applications/telemetry_decom.ex" => %{
-        "lib/cadence/applications/application_binding_store/binding_row.ex" => "export"
+      "lib/cadence/applications/spacecraft_configuration/assignments.ex" => %{
+        "lib/cadence/applications/spacecraft_configuration/assignment_row.ex" => "export"
       },
       "lib/cadence/dashboards/data_sources.ex" => %{
         "lib/cadence/dashboards/data_sources/data_source_row.ex" => "export"
@@ -237,7 +237,7 @@ defmodule Cadence.Architecture.DependencyBoundaryTest do
              %{
                kind: :context_schema,
                source: "lib/cadence/accounts.ex",
-               sink: "lib/cadence/applications/application_binding_store/binding_row.ex"
+               sink: "lib/cadence/applications/spacecraft_configuration/assignment_row.ex"
              },
              %{
                kind: :context_schema,

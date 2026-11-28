@@ -4,17 +4,21 @@ set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd -P)
 cd "$root"
 command=${1:-}
-usage='usage: dev/stack up [--no-seed]|down|reset [--no-seed]|seed-rest|status|env'
+usage='usage: dev/stack up [--no-seed] [--review]|down|reset [--no-seed]|seed-rest|status|env'
 case "$command" in up|down|reset|seed-rest|status|env) ;; *) echo "$usage" >&2; exit 2 ;; esac
 shift
 no_seed=false
+review=false
 case "$command" in
   up|reset)
-    case "${1:-}" in
-      '') ;;
-      --no-seed) no_seed=true; shift ;;
-      *) echo "$usage" >&2; exit 2 ;;
-    esac
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --no-seed) no_seed=true ;;
+        --review) if [ "$command" = up ]; then review=true; else echo "$usage" >&2; exit 2; fi ;;
+        *) echo "$usage" >&2; exit 2 ;;
+      esac
+      shift
+    done
     ;;
 esac
 if [ "$#" -ne 0 ]; then echo "$usage" >&2; exit 2; fi
@@ -64,6 +68,98 @@ qilp=$((10200 + slot))
 ingress=$((43000 + slot * 100))
 uplink=$((48000 + slot * 100))
 state=$root/var/stack
+review_file=$state/review.serve
+review_port=$((11400 + slot))
+
+tailscale_cli() {
+  local binary=${CADENCE_TAILSCALE_BIN:-}
+  if [ -z "$binary" ]; then
+    binary=$(command -v tailscale || true)
+  fi
+  if [ -z "$binary" ] && [ -x /Applications/Tailscale.app/Contents/MacOS/Tailscale ]; then
+    binary=/Applications/Tailscale.app/Contents/MacOS/Tailscale
+  fi
+  if [ -z "$binary" ] || [ ! -x "$binary" ]; then
+    echo 'Tailscale CLI is unavailable; set CADENCE_TAILSCALE_BIN or install tailscale' >&2
+    return 1
+  fi
+  TAILSCALE_BE_CLI=1 "$binary" "$@"
+}
+
+review_origin_for_up() {
+  local status_json status_code dns_name origin parsed
+  if status_json=$(tailscale_cli status --json 2>&1); then
+    :
+  else
+    status_code=$?
+    echo "Tailscale status failed (exit $status_code): ${status_json:-no output}" >&2
+    return 1
+  fi
+  dns_name=$(python3 -c '
+import json, sys
+try:
+    status = json.load(sys.stdin)
+    if status.get("BackendState") != "Running":
+        raise ValueError("Tailscale is not running")
+    print((status.get("Self") or {}).get("DNSName", "").rstrip("."))
+except (ValueError, TypeError) as error:
+    sys.exit(str(error))
+' <<< "$status_json") || return 1
+  origin=${CADENCE_DEV_REVIEW_ORIGIN:-https://$dns_name:$review_port}
+  parsed=$(python3 -c '
+import sys
+from urllib.parse import urlsplit
+url = urlsplit(sys.argv[1])
+try:
+    port = url.port if url.port is not None else 443
+except ValueError as error:
+    sys.exit(str(error))
+if not 1 <= port <= 65535:
+    sys.exit("CADENCE_DEV_REVIEW_ORIGIN has an invalid port")
+if (url.scheme != "https" or not url.hostname or
+        not url.hostname.endswith(".ts.net") or
+        url.username or url.password or url.path or url.query or url.fragment):
+    sys.exit("CADENCE_DEV_REVIEW_ORIGIN must be an HTTPS .ts.net origin")
+print(port)
+' "$origin") || return 1
+  review_port=$parsed
+  review_origin=$origin
+}
+
+stop_review_serve() {
+  [ -f "$review_file" ] || return 0
+  local port
+  port=$(sed -n '1p' "$review_file")
+  if ! tailscale_cli serve "--https=$port" off; then
+    echo "could not stop this worktree's Tailscale Serve on port $port" >&2
+    return 1
+  fi
+  rm -f "$review_file"
+}
+
+start_review_serve() {
+  local serve_status
+  if [ ! -f "$review_file" ]; then
+    if ! serve_status=$(tailscale_cli serve status --json 2>&1); then
+      echo "Tailscale Serve status failed: ${serve_status:-no output}" >&2
+      return 1
+    fi
+    if ! python3 -c '
+import json, sys
+try:
+    config = json.load(sys.stdin)
+    port = sys.argv[1]
+    if port in (config.get("TCP") or {}) or any(
+        key.endswith(":" + port) for key in (config.get("Web") or {})
+    ):
+        sys.exit("Tailscale Serve port " + port + " is already in use")
+except (ValueError, TypeError) as error:
+    sys.exit(str(error))
+' "$review_port" <<< "$serve_status"; then return 1; fi
+  fi
+  tailscale_cli serve --bg --yes "--https=$review_port" "http://127.0.0.1:$server_port"
+  printf '%s\n%s\n' "$review_port" "$review_origin" > "$review_file"
+}
 
 set_env() {
   local key=$1 value=$2 file=$root/mise.local.toml
@@ -88,7 +184,16 @@ prepare_env() {
   set_env PHX_URL_PORT "$server_port"
   set_env CADENCE_LIVE_VUE_VITE_PORT "$live_port"
   set_env CONSOLE_VITE_PORT "$console_port"
-  set_env CONSOLE_VITE_ORIGIN "http://127.0.0.1:$console_port"
+  if [ -f "$review_file" ] && [ "$review" = false ]; then
+    review_origin=$(sed -n '2p' "$review_file")
+  fi
+  if [ "$review" = true ] || [ -f "$review_file" ]; then
+    set_env CONSOLE_VITE_ORIGIN ""
+    set_env CADENCE_DEV_REVIEW_ORIGIN "$review_origin"
+  else
+    set_env CONSOLE_VITE_ORIGIN "http://127.0.0.1:$console_port"
+    set_env CADENCE_DEV_REVIEW_ORIGIN ""
+  fi
   set_env BASE_URL "http://127.0.0.1:$server_port"
   set_env EARENDIL_SIMULATOR_PORT "$sim_port"
   set_env EARENDIL_PROVIDER_URL "http://127.0.0.1:$sim_port"
@@ -139,7 +244,9 @@ wait_http() {
   local url=$1 name=$2 code
   for _ in $(seq 1 120); do
     code=$(curl --silent --max-time 2 --output /dev/null --write-out '%{http_code}' "$url" || true)
-    if [ "$name" = simulator ]; then
+    if [ "$name" = review_console ] && [ "$code" = 302 ]; then
+      return
+    elif [ "$name" = simulator ]; then
       if [ "$code" != 000 ] && [ "$code" -lt 500 ]; then return; fi
     elif [ "$code" = 200 ]; then
       return
@@ -164,10 +271,19 @@ questdb_up() {
   run_mix cadence.questdb.migrate
 }
 down() {
+  local review_stop=0
+  local had_review=false
+  if [ -f "$review_file" ]; then had_review=true; fi
+  stop_review_serve || review_stop=1
   stop_process console
   stop_process phoenix
   stop_process simulator
   if docker inspect "$container" >/dev/null 2>&1; then docker stop "$container" >/dev/null; fi
+  if [ "$had_review" = true ] && [ "$review_stop" -eq 0 ]; then
+    set_env CADENCE_DEV_REVIEW_ORIGIN ""
+    set_env CONSOLE_VITE_ORIGIN "http://127.0.0.1:$console_port"
+  fi
+  return "$review_stop"
 }
 status() {
   local qstate dbstate
@@ -179,6 +295,9 @@ status() {
   printf 'postgres=%s\n' "$([ "$dbstate" = 1 ] && echo up || echo absent)"
   printf 'phoenix=http://127.0.0.1:%s (%s)\n' "$server_port" "$(running phoenix && echo up || echo down)"
   printf 'console=http://127.0.0.1:%s (%s)\n' "$console_port" "$(running console && echo up || echo down)"
+  if [ -f "$review_file" ]; then
+    printf 'review=%s/console/\n' "$(sed -n '2p' "$review_file")"
+  fi
   printf 'simulator=http://127.0.0.1:%s (%s)\n' "$sim_port" "$(running simulator && echo up || echo down)"
   printf 'questdb=%s http://127.0.0.1:%s (%s)\n' "$container" "$qhttp" "$qstate"
   printf 'questdb pg=%s ilp=%s ingress=%s uplink=%s\n' "$qpg" "$qilp" "$ingress" "$uplink"
@@ -202,6 +321,17 @@ case "$command" in
     if [ "$no_seed" = true ]; then "$0" up --no-seed; else "$0" up; fi
     ;;
   up)
+    if [ "$review" = true ]; then
+      review_origin_for_up
+      if [ -f "$review_file" ] && [ "$(sed -n '1p' "$review_file")" != "$review_port" ]; then
+        stop_review_serve
+      fi
+      stop_process console
+      stop_process phoenix
+    elif [ -f "$review_file" ]; then
+      stop_review_serve
+      stop_process phoenix
+    fi
     prepare_env
     questdb_up
     run_mix ecto.create -r Cadence.Repo
@@ -209,11 +339,20 @@ case "$command" in
     run_mix run --no-start -e 'Cadence.Secrets.DevelopmentDeliveryTLS.ensure!(System.fetch_env!("CADENCE_DEV_DELIVERY_TLS_DIRECTORY"))'
     start_process simulator "$root/apps/cadence_simulator" mix run --no-start --no-halt ../../dev/reflect_orbital_simulator.exs
     wait_http "http://127.0.0.1:$sim_port" simulator
+    if [ "$review" = true ]; then
+      (cd "$root/frontend" && mise exec -- corepack pnpm install --frozen-lockfile)
+      (cd "$root/frontend" && mise exec -- corepack pnpm --filter @cadence/console build)
+    fi
     start_process phoenix "$root" mise run cadence
     wait_http "http://127.0.0.1:$server_port/health/ready" phoenix
-    (cd "$root/frontend" && mise exec -- corepack pnpm install --frozen-lockfile)
-    start_process console "$root/frontend" corepack pnpm --filter @cadence/console dev --host 127.0.0.1
-    wait_http "http://127.0.0.1:$console_port/console/" console
+    if [ "$review" = true ]; then
+      wait_http "http://127.0.0.1:$server_port/console/" review_console
+      start_review_serve
+    else
+      (cd "$root/frontend" && mise exec -- corepack pnpm install --frozen-lockfile)
+      start_process console "$root/frontend" corepack pnpm --filter @cadence/console dev --host 127.0.0.1
+      wait_http "http://127.0.0.1:$console_port/console/" console
+    fi
     if [ "$no_seed" = false ]; then
       "$0" seed-rest
     fi
@@ -221,7 +360,9 @@ case "$command" in
     ;;
   seed-rest)
     prepare_env
-    for service in phoenix console simulator; do
+    services=(phoenix simulator)
+    if [ ! -f "$review_file" ]; then services+=(console); fi
+    for service in "${services[@]}"; do
       if ! running "$service"; then
         echo "$service is not running; start the stack with dev/stack up --no-seed" >&2
         exit 1

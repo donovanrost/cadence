@@ -26,7 +26,7 @@ defmodule Cadence.Reads.ConfigKindSchema do
   """
 
   alias Cadence.Catalog
-  alias Cadence.Comms.{GroundStationStore, TransportKind, TransportStore}
+  alias Cadence.Comms.{GroundStationStore, ListenerChoice, TransportKind, TransportStore}
   alias Cadence.Reads.ProfileDetail
   alias Cadence.SpacecraftStore
   alias Cadence.SpacecraftType.Schema, as: ProfileSchema
@@ -228,7 +228,7 @@ defmodule Cadence.Reads.ConfigKindSchema do
          default: "tcp_socket",
          enum: Enum.map(TransportKind.all(), &%{value: &1.form_value, label: &1.label})
        )
-     ] ++ configuration_fields()}
+     ] ++ configuration_fields() ++ [listener_field()]}
   end
 
   # #77 stage 1 (domain 5504322a8): one derived point. `point_id` is set on create only;
@@ -313,6 +313,19 @@ defmodule Cadence.Reads.ConfigKindSchema do
       |> Enum.flat_map(& &1.fields)
       |> Enum.map(&configuration_field(&1, definition.form_value))
     end)
+  end
+
+  defp listener_field do
+    field(ListenerChoice.path(), "Listener", :enum,
+      default: "own",
+      enum: enum(ListenerChoice.options()),
+      visible_when: %{
+        all: [
+          %{path: "configuration.mode", equals: "listen"},
+          %{path: "configuration.direction_capability", equals: "inbound"}
+        ]
+      }
+    )
   end
 
   defp configuration_field(definition_field, transport_kind) do

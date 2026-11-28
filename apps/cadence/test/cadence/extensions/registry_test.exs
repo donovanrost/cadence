@@ -1,7 +1,7 @@
 defmodule Cadence.Extensions.RegistryTest do
   use Cadence.UnitCase, async: true
 
-  alias Cadence.Applications.{ActionDispatcher, ApplicationPreflight}
+  alias Cadence.Applications.ActionDispatcher
   alias Cadence.Applications.Registry, as: ApplicationRegistry
   alias Cadence.Capabilities.{DefinitionRegistry, Descriptor}
   alias Cadence.Catalog.Registry, as: CatalogImporterRegistry
@@ -329,7 +329,6 @@ defmodule Cadence.Extensions.RegistryTest do
     definitions = ApplicationRegistry.all()
 
     assert :ok = ActionDispatcher.validate_providers()
-    assert :ok = ApplicationPreflight.validate_providers()
     assert :ok = ApplicationReads.validate_providers()
     assert :ok = ApplicationSurfaces.validate_providers()
     assert :ok = ReferenceResolver.validate_providers()
@@ -337,17 +336,17 @@ defmodule Cadence.Extensions.RegistryTest do
     assert {:error, :invalid_application_action_provider_registry} =
              ActionDispatcher.validate_providers(definitions, %{})
 
-    assert {:error, :invalid_application_preflight_provider_registry} =
-             ApplicationPreflight.validate_providers(definitions, %{})
-
     assert {:error, :invalid_application_status_provider_registry} =
              ApplicationReads.validate_providers(definitions, %{})
 
     assert {:error, :invalid_application_surface_provider_registry} =
              ApplicationSurfaces.validate_providers(definitions, %{})
 
+    # No surface declares a reference (#669), so a registered provider is one nothing uses.
     assert {:error, :invalid_application_reference_provider_registry} =
-             ReferenceResolver.validate_providers(definitions, %{})
+             ReferenceResolver.validate_providers(definitions, %{
+               "cadence.unreferenced" => %{1 => ReferenceResolver}
+             })
   end
 
   test "rejects unresolved contribution versions, kinds, and surface contracts" do

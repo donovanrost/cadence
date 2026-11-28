@@ -2,10 +2,7 @@ defmodule Cadence.Applications.ApplicationInstallationsTest do
   use Cadence.DataCase, async: false
 
   alias Cadence.Applications.{
-    ActionDispatcher,
-    ActionRequest,
     ApplicationInstallations,
-    ConfigurationReference,
     HostContext,
     OpsDock
   }
@@ -70,7 +67,6 @@ defmodule Cadence.Applications.ApplicationInstallationsTest do
     assert installed.scope_kind == :spacecraft
     assert installed.scope_id == @spacecraft_id
     assert installed.lifecycle_state == :installed
-    assert installed.configuration_ref == nil
 
     assert {:ok, same_installation} =
              ApplicationInstallations.install(
@@ -107,29 +103,13 @@ defmodule Cadence.Applications.ApplicationInstallationsTest do
              )
   end
 
-  test "retains configuration across disable, uninstall, and reinstall transitions", context do
+  test "keeps one installation across disable, uninstall, and reinstall transitions", context do
     assert {:ok, installed} =
              ApplicationInstallations.install(
                context.scope,
                context.host_context,
                "telemetry_decom"
              )
-
-    configuration_ref = %ConfigurationReference{
-      kind: "test_configuration",
-      id: "binding-1",
-      version: 3
-    }
-
-    assert {:ok, configured} =
-             ApplicationInstallations.put_configuration_reference(
-               context.scope,
-               context.host_context,
-               "telemetry_decom",
-               configuration_ref
-             )
-
-    assert configured.configuration_ref == configuration_ref
 
     assert {:ok, disabled} =
              ApplicationInstallations.disable(
@@ -156,7 +136,6 @@ defmodule Cadence.Applications.ApplicationInstallationsTest do
 
     assert enabled.application_installation_id == installed.application_installation_id
     assert enabled.lifecycle_state == :installed
-    assert enabled.configuration_ref == configuration_ref
 
     assert {:ok, uninstalled} =
              ApplicationInstallations.uninstall(
@@ -167,21 +146,12 @@ defmodule Cadence.Applications.ApplicationInstallationsTest do
 
     assert uninstalled.application_installation_id == installed.application_installation_id
     assert uninstalled.lifecycle_state == :uninstalled
-    assert uninstalled.configuration_ref == configuration_ref
 
     assert {:error, :application_installation_uninstalled} =
              ApplicationInstallations.fetch_installed(
                context.scope,
                context.host_context,
                "telemetry_decom"
-             )
-
-    assert {:error, :application_installation_uninstalled} =
-             ApplicationInstallations.put_configuration_reference(
-               context.scope,
-               context.host_context,
-               "telemetry_decom",
-               %ConfigurationReference{configuration_ref | version: 4}
              )
 
     assert {:ok, same_uninstalled} =
@@ -202,7 +172,6 @@ defmodule Cadence.Applications.ApplicationInstallationsTest do
 
     assert reinstalled.application_installation_id == installed.application_installation_id
     assert reinstalled.lifecycle_state == :installed
-    assert reinstalled.configuration_ref == configuration_ref
 
     assert {:ok, events} =
              ApplicationInstallations.list_events(
@@ -213,7 +182,6 @@ defmodule Cadence.Applications.ApplicationInstallationsTest do
 
     assert Enum.map(events, & &1.event_type) == [
              :installed,
-             :configuration_updated,
              :disabled,
              :enabled,
              :uninstalled,
@@ -320,40 +288,5 @@ defmodule Cadence.Applications.ApplicationInstallationsTest do
 
     assert Enum.map(installations, & &1.application_key) == ["telemetry_decom"]
     assert {:ok, []} = OpsDock.list(context.scope, @mission_id)
-  end
-
-  test "action dispatch requires an exact installed configuration version", context do
-    request = %ActionRequest{
-      application_key: "telemetry_decom",
-      application_version: 1,
-      action_id: "disable"
-    }
-
-    assert {:error, :application_not_installed} =
-             ActionDispatcher.dispatch(context.scope, context.host_context, request)
-
-    assert {:ok, _installation} =
-             ApplicationInstallations.install(
-               context.scope,
-               context.host_context,
-               "telemetry_decom"
-             )
-
-    assert {:ok, _installation} =
-             ApplicationInstallations.put_configuration_reference(
-               context.scope,
-               context.host_context,
-               "telemetry_decom",
-               %ConfigurationReference{
-                 kind: "test_configuration",
-                 id: "binding-1",
-                 version: 3
-               }
-             )
-
-    stale_request = %ActionRequest{request | expected_configuration_version: 2}
-
-    assert {:error, {:application_configuration_version_conflict, 2, 3}} =
-             ActionDispatcher.dispatch(context.scope, context.host_context, stale_request)
   end
 end

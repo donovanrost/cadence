@@ -7,7 +7,6 @@ defmodule Cadence.Applications.ActionProviderRegistry do
   @max_providers 16
 
   @contributors [
-    Cadence.Applications.TelemetryDecom,
     Cadence.Applications.OpsConsole
   ]
 

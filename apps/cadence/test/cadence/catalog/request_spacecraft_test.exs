@@ -59,16 +59,11 @@ defmodule Cadence.Catalog.RequestSpacecraftTest do
   test "count and ids work for every kind of request metadata", c do
     assert RequestSpacecraft.count(review(c, ["sc-1", "sc-2", "sc-3"])) == 3
     assert RequestSpacecraft.count(change_set(c, "cs-1", ["sc-1"])) == 1
-    assert RequestSpacecraft.count(%{"triggering_spacecraft_id" => "sc-9"}) == 1
-    assert RequestSpacecraft.count(%{"composition" => "mission_applications"}) == nil
+    assert RequestSpacecraft.count(%{}) == nil
 
     assert RequestSpacecraft.ids(c.org, c.mission, review(c, ["sc-2", "sc-1"])) == [
              "sc-1",
              "sc-2"
-           ]
-
-    assert RequestSpacecraft.ids(c.org, c.mission, %{"triggering_spacecraft_id" => "sc-9"}) == [
-             "sc-9"
            ]
 
     assert RequestSpacecraft.ids(c.org, c.mission, %{}) == []
@@ -82,15 +77,14 @@ defmodule Cadence.Catalog.RequestSpacecraftTest do
         %{metadata: review(c, ["sc-1", "sc-2"])},
         %{metadata: review(c, ["sc-3"])},
         %{metadata: change_set(c, "cs-1", ["sc-2"])},
-        %{metadata: %{"triggering_spacecraft_id" => "sc-2"}},
-        %{metadata: %{"composition" => "mission_applications"}}
+        %{metadata: %{}}
       ]
 
     touches = RequestSpacecraft.touching(c.org, c.mission, requests, "sc-2")
-    assert Enum.map(requests, touches) == [true, false, true, true, true]
+    assert Enum.map(requests, touches) == [true, false, true, true]
 
     touches = RequestSpacecraft.touching(c.org, c.mission, requests, "sc-3")
-    assert Enum.map(requests, touches) == [false, true, false, false, true]
+    assert Enum.map(requests, touches) == [false, true, false, true]
   end
 
   test "describe counts from the reference alone and loads ids only when asked", c do

@@ -85,6 +85,61 @@ defmodule Cadence.Dashboards.DataSourceRegistry do
     end
   end
 
+  @doc """
+  `opts` carrying ONE read of the mission's registry (#1058): its data sources, bindings and source
+  health statuses, for a resolve that asks the registry once per source request and stage (capability
+  context, execution policy, facts, resolve: four times per request, three queries each, before).
+  Only when the persisted registry is on and the caller gave neither a snapshot nor registry
+  options of its own; otherwise `opts` come back unchanged. A snapshot answers the current-time
+  resolution; a historical one (`source_binding` at a time) still reads its own intervals.
+  """
+  @spec with_snapshot(keyword(), binary() | nil, binary() | nil) :: keyword()
+  def with_snapshot(opts, organization_id, mission_id) when is_list(opts) do
+    if persisted?(opts) and not Keyword.has_key?(opts, :registry_snapshot) and
+         not Keyword.has_key?(opts, :data_sources) and
+         not Keyword.has_key?(opts, :data_bindings) and is_binary(organization_id) and
+         is_binary(mission_id) do
+      Keyword.put(opts, :registry_snapshot, %{
+        organization_id: organization_id,
+        mission_id: mission_id,
+        data_sources: DataSources.list_data_sources(organization_id, mission_id),
+        data_bindings: DataSources.list_data_bindings(organization_id, mission_id),
+        health_statuses: SourceHealth.list_source_health_statuses(organization_id, mission_id)
+      })
+    else
+      opts
+    end
+  end
+
+  defp snapshot_for(%PlannedSourceRequest{} = request, opts) do
+    case Keyword.get(opts, :registry_snapshot) do
+      %{organization_id: org, mission_id: mission} = snapshot
+      when org == request.organization_id and mission == request.mission_id ->
+        snapshot
+
+      _none_or_another_mission ->
+        nil
+    end
+  end
+
+  # What `persisted_registry_data/1` reads, from the snapshot: the same sources, bindings with the
+  # defaults a mission has not configured, and the statuses of the request's logical source.
+  defp snapshot_registry_data(%PlannedSourceRequest{} = request, snapshot) do
+    if snapshot.data_sources == [] and snapshot.data_bindings == [] do
+      {:current, default_data_sources(), default_data_bindings(), []}
+    else
+      {data_sources, data_bindings} =
+        augment_registry_defaults(snapshot.data_sources, snapshot.data_bindings)
+
+      logical_source = to_string(request.logical_source)
+
+      statuses =
+        Enum.filter(snapshot.health_statuses, &(to_string(&1.logical_source) == logical_source))
+
+      {:current, data_sources, data_bindings, statuses}
+    end
+  end
+
   defp registry_data(%PlannedSourceRequest{} = request, opts) do
     cond do
       Keyword.has_key?(opts, :data_sources) or Keyword.has_key?(opts, :data_bindings) ->
@@ -94,6 +149,9 @@ defmodule Cadence.Dashboards.DataSourceRegistry do
 
       persisted?(opts) and source_binding_at(opts) ->
         persisted_registry_data_at(request, opts)
+
+      persisted?(opts) and snapshot_for(request, opts) ->
+        snapshot_registry_data(request, snapshot_for(request, opts))
 
       persisted?(opts) ->
         persisted_registry_data(request)

@@ -143,7 +143,6 @@ describe("the decide panel after a refused Approve (U95)", () => {
   const detail: ActivationDetail = {
     id: "act_1",
     kind: "spacecraft_configuration",
-    app: null,
     summary: "Spacecraft configuration for EARENDIL-004",
     binding_set: { id: "bs_1", version: 4 },
     requested_by: { kind: "user", id: "u1", name: "Mira K." },

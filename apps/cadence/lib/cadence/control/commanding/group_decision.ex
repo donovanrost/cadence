@@ -217,6 +217,9 @@ defmodule Cadence.Control.Commanding.GroupDecision do
 
   defp members_as_submitted(_group, _decision, _members), do: :ok
 
+  # The token is what commands resolve against (#1107), not the activation as a whole, so a
+  # monitoring-only generation leaves a pending GO valid. Any change to a command plan, a
+  # configuration revision or a binding still refuses it.
   defp same_basis(group, snapshot) do
     if group.basis["token"] == snapshot.token,
       do: :ok,

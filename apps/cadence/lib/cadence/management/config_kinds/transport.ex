@@ -13,7 +13,7 @@ defmodule Cadence.Management.ConfigKinds.Transport do
   A **provider-managed** transport stages its provider (`mission_provider_id`,
   `mission_provider_version`) and exact profile refs (`service_profile_ref`,
   `delivery_profile_ref`: `{"id", "version"}`); its configuration and direction are derived
-  from the delivery profile and replace anything staged there. Validation runs the same
+  from the delivery profile, with the listener choice owned by Cadence. Validation runs the same
   derivation an apply does (`Cadence.Management.Transports.derive/3`), so a preview that passes
   applies. This kind is composition, not Comms, because that crosses Ground Networks and Comms
   (comms parity 2).
@@ -24,11 +24,13 @@ defmodule Cadence.Management.ConfigKinds.Transport do
   alias Cadence.Comms.{
     GroundStationStore,
     ListenClaims,
+    ListenerChoice,
     Transport,
     TransportKind,
     TransportStore
   }
 
+  alias Cadence.Configuration.Document
   alias Cadence.Management.Transports
   alias Cadence.Platform.ConfigFields, as: F
 
@@ -71,7 +73,16 @@ defmodule Cadence.Management.ConfigKinds.Transport do
         ) ++
         F.map(document, "configuration") ++ F.map(document, "metadata")
 
-    F.result(document, errors)
+    with {:ok, document} <- F.result(document, errors),
+         {:ok, _choice} <- ListenerChoice.parse(ListenerChoice.value(document["configuration"])) do
+      {:ok, document}
+    else
+      {:error, :invalid_listener_choice} ->
+        {:error, [ListenerChoice.field_error(:invalid_listener_choice)]}
+
+      {:error, _errors} = error ->
+        error
+    end
   end
 
   def normalize(_action, _id, _document),
@@ -116,17 +127,12 @@ defmodule Cadence.Management.ConfigKinds.Transport do
         _organization_id,
         mission_id,
         _action,
-        _entity_id,
+        entity_id,
         _previous,
         %{"origin" => "direct"} = doc
       ) do
-    kind = Enum.find(Transport.transport_kinds(), &(Atom.to_string(&1) == doc["transport_kind"]))
-
-    with {:ok, entry} <- TransportKind.fetch(kind),
-         {:ok, configuration} <- entry.module.normalize_config(doc["configuration"]) do
-      listen_claim(mission_id, configuration)
-    else
-      _invalid -> {:error, [F.error("configuration", "Transport settings are not valid")]}
+    with {:ok, configuration} <- direct_configuration(doc) do
+      listen_claim(mission_id, entity_id, configuration)
     end
   end
 
@@ -136,30 +142,60 @@ defmodule Cadence.Management.ConfigKinds.Transport do
         organization_id,
         mission_id,
         _action,
-        _entity_id,
+        entity_id,
         _previous,
         %{"origin" => "provider_managed"} = doc
       ) do
     case Transports.derive(organization_id, mission_id, doc) do
-      {:ok, derived} -> listen_claim(mission_id, derived.configuration)
-      {:error, errors} -> {:error, Enum.map(errors, &F.error(&1.path, &1.message))}
+      {:ok, derived} -> listen_claim(mission_id, entity_id, derived.configuration)
+      {:error, errors} -> {:error, Enum.map(errors, &validation_error/1)}
     end
   end
 
   def validate(_organization_id, _mission_id, _action, _entity_id, _previous, _proposed), do: :ok
 
+  defp validation_error(error) do
+    if error.path == ListenerChoice.path(), do: error, else: F.error(error.path, error.message)
+  end
+
   # SAFETY: a listen host:port is one mission's (listener guard); the store refuses it too, at
   # write. Both origins check here: a provider-managed transport's derived configuration listens
   # too (provider_connects), so it's refused at validate like a direct one.
-  defp listen_claim(mission_id, configuration) do
-    case ListenClaims.check(mission_id, ListenClaims.endpoint(configuration)) do
-      :ok ->
-        :ok
-
-      {:error, {:listen_endpoint_claimed, _endpoint}} ->
-        {:error, [F.error("configuration.port", ListenClaims.message())]}
+  defp listen_claim(mission_id, entity_id, configuration) do
+    case ListenClaims.check_configuration(mission_id, configuration, {:transport, entity_id}) do
+      :ok -> :ok
+      {:error, {reason, _endpoint}} -> {:error, [claim_error(reason)]}
     end
   end
+
+  defp direct_configuration(doc) do
+    kind = Enum.find(Transport.transport_kinds(), &(Atom.to_string(&1) == doc["transport_kind"]))
+    input = doc["configuration"]
+
+    with %{} <- input,
+         :ok <- TransportStore.check_direct_delivery_auth(input),
+         {:ok, entry} <- TransportKind.fetch(kind),
+         {:ok, configuration} <- entry.module.normalize_config(input) do
+      {:ok, configuration}
+    else
+      {:error, reason} ->
+        {:error, [direct_validation_error(reason, input)]}
+
+      _invalid ->
+        {:error, [direct_validation_error(nil, input)]}
+    end
+  end
+
+  defp direct_validation_error(:delivery_binding_unavailable, input) do
+    if ListenerChoice.shared?(input),
+      do: ListenerChoice.field_error(:shared_listener_unavailable_mtls),
+      else: F.error("configuration", "Transport settings are not valid")
+  end
+
+  defp direct_validation_error(reason, _input),
+    do:
+      ListenerChoice.field_error(reason) ||
+        F.error("configuration", "Transport settings are not valid")
 
   @impl true
   def write(organization_id, mission_id, :create, id, nil, proposed, _options) do
@@ -207,6 +243,74 @@ defmodule Cadence.Management.ConfigKinds.Transport do
   end
 
   def stage_check(_organization_id, _mission_id, _action, _entity_id, _deleting), do: :ok
+
+  @impl true
+  def stage_conflicts(org, mission, staged, prepared) do
+    request =
+      for {%{kind: "transport", entity_id: id}, index} <- Enum.with_index(prepared),
+          do: {index, {:transport, id}}
+
+    proposals =
+      (staged ++ prepared)
+      |> Enum.filter(&(&1.kind == "transport"))
+      |> Enum.group_by(& &1.entity_id)
+
+    current = load(org, mission, Map.keys(proposals))
+
+    documents =
+      Map.new(proposals, fn {id, ops} ->
+        {{:transport, id}, Enum.reduce(ops, current[id], &apply_staged/2)}
+      end)
+
+    results = stage_configurations(org, mission, documents)
+
+    with :ok <- check_staged_fields(request, results) do
+      configs = for {owner, {:ok, config}} <- results, do: {owner, config}
+
+      case ListenClaims.check_staged(mission, configs, request) do
+        :ok ->
+          :ok
+
+        {:error, index, {reason, _endpoint}} ->
+          {:error, {:invalid_op, index, [claim_error(reason)]}}
+      end
+    end
+  end
+
+  defp apply_staged(%{action: "create", payload: %{"document" => document}}, _document),
+    do: document
+
+  defp apply_staged(%{action: "update", payload: %{"changes" => changes}}, document),
+    do: Document.patch(document, changes)
+
+  defp apply_staged(%{action: "delete"}, _document), do: nil
+
+  defp stage_configurations(org, mission, documents) do
+    {managed, other} =
+      Enum.split_with(documents, fn {_owner, doc} ->
+        match?(%{"origin" => "provider_managed"}, doc)
+      end)
+
+    derived = Transports.derive_many(org, mission, Map.new(managed))
+
+    Map.new(other ++ Map.to_list(derived), fn
+      {owner, {:ok, derived}} -> {owner, {:ok, derived.configuration}}
+      {owner, {:error, _errors} = error} -> {owner, error}
+      {owner, nil} -> {owner, {:ok, nil}}
+      {owner, doc} -> {owner, direct_configuration(doc)}
+    end)
+  end
+
+  defp check_staged_fields(request, results) do
+    Enum.find_value(request, :ok, fn {index, owner} ->
+      with {:error, errors} <- Map.fetch!(results, owner),
+           [_ | _] = listener_errors <- Enum.filter(errors, &(&1.path == ListenerChoice.path())) do
+        {:error, {:invalid_op, index, listener_errors}}
+      else
+        _accepted -> nil
+      end
+    end)
+  end
 
   # The refusal carries what was archived and what uses it, as {:in_use, %{entity, uses}} (api).
   defp in_use(entity, uses) do
@@ -265,20 +369,26 @@ defmodule Cadence.Management.ConfigKinds.Transport do
 
   # The store's own refusal (it holds the port's lock, so it can catch what validate raced past,
   # and a provider-managed transport's derived port) in the same words, on the port field.
-  defp stored({:error, {:listen_endpoint_claimed, _endpoint}}),
-    do: {:error, [F.error("configuration.port", ListenClaims.message())]}
+  defp stored({:error, {reason, %{port: _port}}}), do: {:error, [claim_error(reason)]}
 
-  defp stored({:error, {:listen_endpoint_mode_mismatch, _endpoint}}),
+  defp stored({:error, reason}) do
+    case ListenerChoice.field_error(reason) do
+      nil -> {:error, reason}
+      error -> {:error, [error]}
+    end
+  end
+
+  defp claim_error(:listen_endpoint_claimed),
+    do: F.error("configuration.port", ListenClaims.message())
+
+  defp claim_error(:listen_endpoint_mode_mismatch),
     do:
-      {:error,
-       [
-         F.error(
-           "configuration.port",
-           "Listeners on one endpoint must use the same authentication mode."
-         )
-       ]}
+      F.error(
+        "configuration.port",
+        "Listeners on one endpoint must use the same authentication mode."
+      )
 
-  defp stored({:error, reason}), do: {:error, reason}
+  defp claim_error(reason), do: ListenerChoice.field_error(reason)
 
   defp document(%Transport{} = transport) do
     %{

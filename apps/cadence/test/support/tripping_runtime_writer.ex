@@ -8,8 +8,7 @@ defmodule Cadence.Test.TrippingRuntimeWriter do
 
   `configure(mission_id, trip: kinds, notify: pid)`: `kinds` is a list of
   `:initialized` / `:timer_handled` (runtime records whose capability record has that event kind)
-  and `:semantic_timer` (semantic timer results). Each trip sends `{:tripped, kind, mission_id}`
-  and, after it, `{:tripped_by, pid}` (the process that tripped, so a test can wait for its exit).
+  and `:semantic_timer` (semantic timer results). Each trip sends `{:tripped, kind, mission_id}`.
   """
 
   alias Cadence.Platform.ReplayId
@@ -42,7 +41,6 @@ defmodule Cadence.Test.TrippingRuntimeWriter do
     case Map.get(:persistent_term.get(key(mission_id), %{}), :notify) do
       pid when is_pid(pid) ->
         send(pid, {:tripped, kind, mission_id})
-        send(pid, {:tripped_by, self()})
 
       _none ->
         :ok

@@ -44,9 +44,8 @@ export const requestStates = [
 const row = d.object({
   id: d.token,
   // knownText: a new kind still renders its server summary (fe-ops, Now).
-  // null: a mission activation that's neither (api activations.md).
-  kind: d.nullable(d.knownText(["telemetry_decom", "spacecraft_configuration"] as const)),
-  app: d.nullable(d.object({ key: d.token, name: d.string })),
+  // null: any other mission activation (api activations.md).
+  kind: d.nullable(d.knownText(["spacecraft_configuration"] as const)),
   // free-text: the server's sentence for what the request activates.
   summary: d.string,
   binding_set: d.object({ id: d.token, version: d.integer }),
