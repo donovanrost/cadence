@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { useOpsHeader } from "@cadence/plugin-sdk/page-header";
 import { navigateAttrs } from "../../../auth-and-navigation";
 import { workspaceGroups } from "../../shared/destinations";
 import { readWorkspaceLanding } from "./contracts";
@@ -28,9 +27,6 @@ const descriptions: Record<string, string> = {
   plan: "Coordinate requirements, contact plans and scheduled passes.",
   system: "Inspect source health and manage historical data workflows.",
 };
-useOpsHeader("/missions/:mission_id/ops", {
-  description: "Choose a workspace to observe, plan or act on this mission.",
-});
 </script>
 
 <template>

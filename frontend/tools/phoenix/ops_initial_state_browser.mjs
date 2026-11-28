@@ -4,8 +4,11 @@ import { chromium } from "playwright";
 import { readFile, writeFile } from "node:fs/promises";
 import { createInterface } from "node:readline";
 import { signInThroughConsole } from "./console_sign_in.mjs";
-const [base, mission, user, out] = process.argv.slice(2);
-assert.ok(base && mission && user && out, "Expected endpoint, mission, user and output directory");
+const [base, orgSlug, missionSlug, mission, user, out] = process.argv.slice(2);
+assert.ok(
+  base && orgSlug && missionSlug && mission && user && out,
+  "Expected endpoint, organization and mission slugs, mission, user and output directory",
+);
 const manifest = fixtureRecord(
   JSON.parse(
     await readFile(
@@ -41,10 +44,8 @@ page.on("response", (response) => {
 });
 const prefix = base + "/missions/" + mission;
 const routes = [
-  "/ops",
   // L8a/L8b: every legacy dashboards page redirects to the console; L11 the data-sources pages;
   // L1-L3 the planning policy and contact requirement pages (DECISIONS #79).
-  "/ops/commands",
   "/ops/explore",
   "/ops/alarms",
   "/ops/timeline",
@@ -59,8 +60,11 @@ try {
     base,
     email: user,
     password: fixtureString(fixtureRecord(secret).password),
-    path: `/missions/${mission}/ops`,
+    // The mission's Ops entry is the console's Now; the legacy pages below are visited from it.
+    path: `/console/${orgSlug}/${missionSlug}/now`,
   });
+  await page.locator("main h1").first().waitFor();
+  await page.goto(prefix + routes[0]);
   await page.waitForFunction(() => document.querySelector("[data-phx-main].phx-connected"));
   // Loading the Phoenix-digested entry must reuse the same hashed runtime and connection.
   const connection = await page.evaluateHandle(() =>

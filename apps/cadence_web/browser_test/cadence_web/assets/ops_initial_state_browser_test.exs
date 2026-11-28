@@ -45,6 +45,8 @@ defmodule CadenceWeb.Assets.OpsInitialStateBrowserTest do
             __DIR__
           ),
           "http://127.0.0.1:#{port}",
+          org.slug,
+          mission.slug,
           mission.mission_id,
           user.email,
           output_dir

@@ -56,20 +56,6 @@
     }
   },
   {
-    "path": "/missions/:mission_id/ops",
-    "kind": "ops_workspace",
-    "workspacePage": "landing",
-    "scope": "mission",
-    "mountId": "ops-workspace-landing-component",
-    "queryKeys": [],
-    "queryAliases": {},
-    "viewClass": "contents",
-    "metadata": {
-      "page_title": "Mission Operations",
-      "ops_nav_item": "workspace"
-    }
-  },
-  {
     "path": "/missions/:mission_id/ops/data-operations",
     "scope": "mission",
     "mountId": "ops-data-operations-component",

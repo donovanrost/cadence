@@ -24,7 +24,6 @@ const snapshotFields = object({
   path: string,
   context: readHostContext,
   ops_page: maybe(contributedPage),
-  ops_landing_page: featurePayload,
   timeline_page: featurePayload,
 });
 export type HostSnapshot = ReturnType<typeof snapshotFields>;
