@@ -138,6 +138,70 @@ defmodule Cadence.CommandingDispatcherTest do
     assert transport_action_request_count == 2
   end
 
+  # #1041: a group's lanes are woken after its commit by one message, not a drain per lane inside
+  # the request.
+  test "kick_lanes wakes the lane and returns at once; the lane releases on its own", %{
+    dispatcher_scope: dispatcher_scope,
+    event_bus: event_bus,
+    process_namespace: process_namespace,
+    source_endpoint: source_endpoint,
+    command_model: command_model
+  } do
+    requests = enqueue_two!(dispatcher_scope, command_model, source_endpoint, process_namespace)
+
+    persist_active_uplink_contact(event_bus, dispatcher_scope, source_endpoint.source_endpoint_id)
+    start_dispatch_supervisor!(process_namespace)
+
+    assert :ok =
+             Dispatcher.kick_lanes(
+               process_namespace,
+               dispatcher_scope.organization_id,
+               dispatcher_scope.mission_id,
+               [source_endpoint.source_endpoint_id, source_endpoint.source_endpoint_id]
+             )
+
+    assert_released(dispatcher_scope, requests)
+  end
+
+  test "a kick that is never delivered: the dispatcher's own reconcile still releases the group",
+       %{
+         dispatcher_scope: dispatcher_scope,
+         event_bus: event_bus,
+         process_namespace: process_namespace,
+         source_endpoint: source_endpoint,
+         command_model: command_model
+       } do
+    requests = enqueue_two!(dispatcher_scope, command_model, source_endpoint, process_namespace)
+    persist_active_uplink_contact(event_bus, dispatcher_scope, source_endpoint.source_endpoint_id)
+
+    # No dispatcher is running when the kick is sent: it is dropped, harmlessly.
+    assert :ok =
+             Dispatcher.kick_lanes(
+               process_namespace,
+               dispatcher_scope.organization_id,
+               dispatcher_scope.mission_id,
+               [source_endpoint.source_endpoint_id]
+             )
+
+    assert Cadence.Commanding.list_command_release_attempts(
+             dispatcher_scope.organization_id,
+             dispatcher_scope.mission_id
+           ) == []
+
+    # What recovers it: the dispatcher (here, booting) finds every lane with a pending entry.
+    start_supervised!(
+      {DispatchSupervisor,
+       process_namespace: process_namespace,
+       safety_poll_interval_ms: @lane_safety_poll_interval_ms,
+       lane_safety_poll_interval_ms: @lane_safety_poll_interval_ms,
+       requeue_release_pending_fun: fn -> 0 end,
+       run_on_boot?: true,
+       auto_schedule?: false}
+    )
+
+    assert_released(dispatcher_scope, requests)
+  end
+
   test "dispatcher retries pending commands until an uplink contact becomes available", %{
     dispatcher_scope: dispatcher_scope,
     event_bus: event_bus,
@@ -478,4 +542,52 @@ defmodule Cadence.CommandingDispatcherTest do
 
   defp fetch_command_id(command_model, command_name),
     do: Cadence.MissionModelFixtures.command_id!(command_model, command_name)
+
+  defp enqueue_two!(dispatcher_scope, command_model, source_endpoint, _process_namespace) do
+    for {priority, label} <- [{5, "low"}, {1, "high"}] do
+      request =
+        persist_safe_command_request(
+          dispatcher_scope,
+          command_model,
+          source_endpoint,
+          priority,
+          %{
+            "label" => label
+          }
+        )
+
+      {:ok, _} =
+        Cadence.CommandMemberFixtures.enqueue(
+          dispatcher_scope.organization_id,
+          dispatcher_scope.mission_id,
+          request.command_request_id,
+          %{"user_id" => "queue-operator"},
+          admin_mode: false
+        )
+
+      request
+    end
+  end
+
+  # The lane releases on its own, so wait for it (it isn't asked to answer).
+  defp assert_released(dispatcher_scope, requests, tries \\ 100) do
+    attempts =
+      Cadence.Commanding.list_command_release_attempts(
+        dispatcher_scope.organization_id,
+        dispatcher_scope.mission_id
+      )
+
+    cond do
+      length(attempts) == length(requests) ->
+        assert Enum.sort(Enum.map(attempts, & &1.command_request_id)) ==
+                 Enum.sort(Enum.map(requests, & &1.command_request_id))
+
+      tries > 0 ->
+        Process.sleep(50)
+        assert_released(dispatcher_scope, requests, tries - 1)
+
+      true ->
+        flunk("expected #{length(requests)} release attempts, saw #{length(attempts)}")
+    end
+  end
 end
