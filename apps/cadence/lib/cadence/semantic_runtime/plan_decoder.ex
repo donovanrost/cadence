@@ -12,13 +12,13 @@ defmodule Cadence.SemanticRuntime.PlanDecoder do
         |> Map.get(:algorithm)
         |> plan_items("algorithms", :algorithms)
         |> Enum.map(&decode_algorithm(&1, registry)),
-      monitoring:
-        plans
-        |> Map.get(:monitoring)
-        |> plan_items("policies", :policies)
-        |> Enum.map(&MonitoringPlan.new/1)
+      monitoring: decode_monitoring(Map.get(plans, :monitoring))
     }
   end
+
+  # The compiled monitoring plan's entries, one policy per parameter per scope (#451, 12-01).
+  defp decode_monitoring(plan),
+    do: plan |> plan_items("policies", :policies) |> Enum.map(&MonitoringPlan.new/1)
 
   @spec validate(%{optional(atom()) => RuntimePlan.t()}, map()) :: :ok | {:error, term()}
   def validate(plans, registry \\ RegisteredRegistry.configured()) do

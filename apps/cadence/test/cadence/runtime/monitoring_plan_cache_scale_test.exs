@@ -5,11 +5,12 @@ defmodule Cadence.Runtime.MonitoringPlanCacheScaleTest do
   and algorithm for every update; the cached path is one index lookup per update. Excluded by
   default; `mix test --include scale`.
   """
-  use ExUnit.Case, async: false
+  use Cadence.DataCase, async: false
 
   @moduletag :scale
 
   alias Cadence.Catalog.MissionModel.{Expression, RuntimePlan}
+  alias Cadence.MonitoringPlanFixtures
   alias Cadence.Runtime.MonitoringPlanCache
   alias Cadence.SemanticRuntime
   alias Cadence.SemanticRuntime.{PlanDecoder, State, Update}
@@ -139,5 +140,66 @@ defmodule Cadence.Runtime.MonitoringPlanCacheScaleTest do
   defp self_cache do
     {:ok, cache} = MonitoringPlanCache.start_link()
     cache
+  end
+
+  # Policy entries with a per-craft override, through the real compiler (#451 T2b, the 12-01
+  # shape): every parameter has a mission entry and an override for sc-1, so each update resolves its
+  # craft's effective policy (read the mission key and the craft's key, pick by rule_id) before it
+  # evaluates. Compared with the plain plan's per-batch cost above. The compile takes a few seconds
+  # and is not part of the measurement.
+  defp entry_plans do
+    mission = "mission-scale-#{System.unique_integer([:positive])}"
+    persist_mission_scope("org-scale", mission)
+
+    catalog = for i <- 0..(@parameters - 1), do: {"limit-#{i}", "/parameters/p#{i}", above: 10}
+
+    authored =
+      for i <- 0..(@parameters - 1),
+          do: {:override, "limit-#{i}", "limit-#{i}-sc-1", ["sc-1"], above: 15}
+
+    MonitoringPlanFixtures.compile!("org-scale", mission, catalog, authored)
+  end
+
+  # The batch's updates on the compiled parameter ids (a hash per qualified name), as sc-1's.
+  defp craft_batch(n, parameter_ids) do
+    for update <- batch(n) do
+      index = update.parameter_id |> String.trim_leading("p") |> String.to_integer()
+      parameter = elem(parameter_ids, rem(index, tuple_size(parameter_ids)))
+      %{update | parameter_id: parameter, metadata: %{mission_id: "m", spacecraft_id: "sc-1"}}
+    end
+  end
+
+  test "per-batch cost with policy entries and a per-craft override: each update resolves its spacecraft's policy" do
+    plans = entry_plans()
+
+    parameter_ids =
+      plans
+      |> PlanDecoder.decode()
+      |> Map.fetch!(:monitoring)
+      |> Enum.map(& &1.parameter_id)
+      |> Enum.uniq()
+      |> List.to_tuple()
+
+    {:ok, cache} = MonitoringPlanCache.start_link()
+    {:ok, index} = MonitoringPlanCache.acquire(cache, plans)
+    listed = plans |> PlanDecoder.decode()
+
+    # The batches are built outside the timing.
+    batches = for n <- 0..(@batches - 1), do: craft_batch(n, parameter_ids)
+    run = fn plan, updates -> SemanticRuntime.process(%State{}, updates, plan) end
+
+    for updates <- batches, do: assert(run.(index, updates) == run.(listed, updates))
+
+    times =
+      for updates <- batches, do: elem(:timer.tc(fn -> run.(index, updates) end), 0) / 1_000
+
+    sorted = Enum.sort(times)
+
+    IO.puts(
+      "SEMANTIC BATCH WITH ENTRIES of #{@batch} updates, #{@parameters} parameters x " <>
+        "(1 mission entry + 1 craft override): cached index p50 " <>
+        "#{Float.round(Enum.at(sorted, div(@batches, 2)), 3)} ms / p99 " <>
+        "#{Float.round(Enum.at(sorted, @batches - 2), 3)} ms"
+    )
   end
 end

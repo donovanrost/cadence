@@ -62,12 +62,30 @@ defmodule Cadence.SemanticRuntime.PlanIndex do
   @spec empty?(t()) :: boolean()
   def empty?(%__MODULE__{empty?: empty?}), do: empty?
 
-  @spec monitoring_for(t(), binary()) :: [MonitoringPlan.t()]
-  def monitoring_for(%__MODULE__{table: nil, monitoring: monitoring}, parameter_id),
-    do: Map.get(monitoring, parameter_id, [])
+  @doc """
+  The monitoring policies of a parameter as `spacecraft_id` runs them (`MonitoringPlan.resolve/2`).
 
-  def monitoring_for(%__MODULE__{table: table, plan_id: plan_id}, parameter_id),
-    do: lookup(table, {plan_id, :monitoring, parameter_id})
+  From the cache this is one or two reads and no resolution: the cache stores, per parameter,
+  `{plan, :monitoring, parameter_id, :mission}` (the mission entries, which is what every craft
+  without an override of its own runs) and, for each spacecraft that has entries of its own,
+  `{plan, :monitoring, parameter_id, spacecraft_id}` (that craft's resolved set, computed once when
+  the plan is loaded). An update reads its craft's key, else the mission key, never another craft's.
+  From a decoded plan map it resolves per call, as the lists always were scanned.
+  """
+  @spec monitoring_for(t(), binary(), binary() | nil) :: [MonitoringPlan.t()]
+  def monitoring_for(index, parameter_id, spacecraft_id \\ nil)
+
+  def monitoring_for(%__MODULE__{table: nil, monitoring: monitoring}, parameter_id, craft),
+    do: monitoring |> Map.get(parameter_id, []) |> MonitoringPlan.resolve(craft)
+
+  def monitoring_for(%__MODULE__{table: table, plan_id: plan_id}, parameter_id, craft) do
+    own = if craft, do: lookup(table, {plan_id, :monitoring, parameter_id, craft}), else: []
+
+    case own do
+      [] -> lookup(table, {plan_id, :monitoring, parameter_id, :mission})
+      resolved -> resolved
+    end
+  end
 
   @doc "The algorithms that read `parameter_id` as an input (the caller applies their triggers)."
   @spec algorithms_for_input(t(), binary()) :: [AlgorithmPlan.t()]
@@ -89,9 +107,12 @@ defmodule Cadence.SemanticRuntime.PlanIndex do
   # reads back. One definition of the grouping for both forms.
   @spec entries(term(), [AlgorithmPlan.t()], [MonitoringPlan.t()]) :: [{tuple(), list()}]
   def entries(plan_id, algorithms, monitoring) do
+    # Per parameter: the mission entries under `:mission`, and for every spacecraft that has entries
+    # of its own, that craft's resolved set (resolved here, once, not per update).
     monitoring_entries =
-      for {parameter_id, plans} <- Enum.group_by(monitoring, & &1.parameter_id),
-          do: {{plan_id, :monitoring, parameter_id}, plans}
+      for {parameter_id, entries} <- Enum.group_by(monitoring, & &1.parameter_id),
+          {scope_key, resolved} <- monitoring_scopes(entries),
+          do: {{plan_id, :monitoring, parameter_id, scope_key}, resolved}
 
     input_entries =
       for {parameter_id, plans} <- by_input(algorithms),
@@ -102,6 +123,18 @@ defmodule Cadence.SemanticRuntime.PlanIndex do
           do: {{plan_id, :algorithm, algorithm_id}, plans}
 
     monitoring_entries ++ input_entries ++ id_entries
+  end
+
+  defp monitoring_scopes(entries) do
+    crafts =
+      for %MonitoringPlan{scope: :spacecraft, spacecraft_id: id} <- entries,
+          is_binary(id),
+          uniq: true,
+          do: id
+
+    mission = MonitoringPlan.resolve(entries, nil)
+    mission_scope = if mission == [], do: [], else: [{:mission, mission}]
+    mission_scope ++ Enum.map(crafts, &{&1, MonitoringPlan.resolve(entries, &1)})
   end
 
   defp by_input(algorithms) do

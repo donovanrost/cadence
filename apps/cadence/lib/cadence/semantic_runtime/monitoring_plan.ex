@@ -66,6 +66,37 @@ defmodule Cadence.SemanticRuntime.MonitoringPlan do
   def key(%__MODULE__{rule_id: rule_id, scope: scope, spacecraft_id: spacecraft_id}),
     do: {rule_id, scope, spacecraft_id}
 
+  @doc """
+  The entries of a parameter as `spacecraft_id` runs them (#451 T2): per `rule_id`, that craft's
+  spacecraft entry when there is one, else the mission entry; another craft's entries are dropped;
+  a spacecraft entry with a `rule_id` no mission entry has (a policy for one craft only) is that
+  craft's own. An entry with no `rule_id` and no scope (a plan compiled before P3) is kept for every
+  craft; a spacecraft-scoped entry with no `rule_id` is dropped (P3's compiler never produces one,
+  and without a `rule_id` there is nothing for it to replace or be added under). A policy
+  turned off for a craft is its entry with `disabled: true`, which the evaluator reports as
+  `disabled`. Order is the plan's, with an override in the place of the entry it replaces.
+  """
+  @spec resolve([t()], binary() | nil) :: [t()]
+  def resolve(entries, spacecraft_id) when is_list(entries) do
+    {craft, mission} =
+      entries
+      |> Enum.filter(&applies?(&1, spacecraft_id))
+      |> Enum.split_with(&(&1.scope == :spacecraft))
+
+    overrides = craft |> Enum.reject(&is_nil(&1.rule_id)) |> Map.new(&{&1.rule_id, &1})
+    mission_ids = MapSet.new(mission, & &1.rule_id)
+
+    replaced = Enum.map(mission, &Map.get(overrides, &1.rule_id, &1))
+    added = Enum.reject(craft, &(is_nil(&1.rule_id) or MapSet.member?(mission_ids, &1.rule_id)))
+
+    replaced ++ added
+  end
+
+  defp applies?(%__MODULE__{scope: :spacecraft, spacecraft_id: id}, spacecraft_id),
+    do: not is_nil(spacecraft_id) and id == spacecraft_id
+
+  defp applies?(%__MODULE__{}, _spacecraft_id), do: true
+
   @spec new(map()) :: t()
   def new(attrs) when is_map(attrs) do
     %__MODULE__{

@@ -1,0 +1,142 @@
+defmodule Cadence.MonitoringPlanFixtures do
+  @moduledoc """
+  A mission's monitoring plan through the real compiler (ADR-020 P3, #451, `MonitoringLowering`):
+  an imported layer with the parameters and their catalog policies, an authored layer with
+  per-craft overrides, replaces and craft-only policies, compiled by `MissionModels.compile_layers/2`
+  and read back by `MissionModels.fetch_runtime_plans/3`, as the runtime reads it. For the
+  evaluation tests (a DataCase).
+
+  A policy's rules are the evaluator's comparison (`above:` a threshold, `severity:` as declared),
+  so the compiled entries evaluate.
+  """
+
+  alias Cadence.Catalog.MissionModel.{Declaration, Layer}
+  alias Cadence.MissionModels
+
+  @doc """
+  The runtime plans of a revision compiled from `catalog` (the imported policies) and `authored`
+  (the mission's edits), as `%{monitoring: RuntimePlan}`.
+
+  `catalog` is `[{name, parameter, opts}]`; `authored` is a list of `{:replace, name, opts}`,
+  `{:override, target_name, name, craft_ids, opts}` or `{:craft_only, name, parameter, craft_ids, opts}`.
+  `opts`: `above:`, `severity:`, `violations:`, `conformance:`, `disabled:`.
+  """
+  @spec compile!(binary(), binary(), [tuple()], [tuple()]) :: %{monitoring: struct()}
+  def compile!(organization_id, mission_id, catalog, authored \\ []) do
+    imported = imported_layer(organization_id, mission_id, catalog)
+
+    layers = [
+      imported | authored_layers(organization_id, mission_id, imported, catalog, authored)
+    ]
+
+    {:ok, result} = MissionModels.compile_layers(layers)
+
+    {:ok, %{monitoring: monitoring}} =
+      MissionModels.fetch_runtime_plans(organization_id, mission_id, result.revision.revision_id)
+
+    %{monitoring: monitoring}
+  end
+
+  defp imported_layer(organization_id, mission_id, catalog) do
+    parameters =
+      catalog
+      |> Enum.map(&elem(&1, 1))
+      |> Enum.uniq()
+      |> Enum.map(&%{kind: :parameter, qualified_name: &1})
+
+    policies =
+      for {name, parameter, opts} <- catalog do
+        %{
+          kind: :monitoring_policy,
+          qualified_name: policy_name(name),
+          references: [parameter_ref(parameter)],
+          definition: definition(opts)
+        }
+      end
+
+    Layer.new(%{
+      organization_id: organization_id,
+      mission_id: mission_id,
+      name: "bus",
+      declarations: [%{kind: :space_system, qualified_name: "/"} | parameters ++ policies]
+    })
+  end
+
+  defp authored_layers(_org, _mission, _imported, _catalog, []), do: []
+
+  defp authored_layers(organization_id, mission_id, imported, catalog, authored) do
+    by_name = Map.new(imported.declarations, &{&1.qualified_name, &1})
+    parameters = Map.new(catalog, fn {name, parameter, _opts} -> {name, parameter} end)
+
+    declarations =
+      Enum.map(authored, fn
+        {:replace, name, opts} ->
+          catalog_declaration = Map.fetch!(by_name, policy_name(name))
+
+          %{
+            kind: :monitoring_policy,
+            qualified_name: policy_name(name),
+            operation: :replace,
+            expected_fingerprint: Declaration.fingerprint(catalog_declaration),
+            references: [parameter_ref(Map.fetch!(parameters, name))],
+            definition: definition(opts)
+          }
+
+        {:override, target, name, craft_ids, opts} ->
+          %{
+            kind: :monitoring_policy,
+            qualified_name: policy_name(name),
+            references: [
+              parameter_ref(Map.fetch!(parameters, target)),
+              %{
+                expected_kind: :monitoring_policy,
+                source_ref: policy_name(target),
+                role: :overrides
+              }
+            ],
+            definition: Map.put(definition(opts), "spacecraft_ids", craft_ids)
+          }
+
+        {:craft_only, name, parameter, craft_ids, opts} ->
+          %{
+            kind: :monitoring_policy,
+            qualified_name: policy_name(name),
+            references: [parameter_ref(parameter)],
+            definition: Map.put(definition(opts), "spacecraft_ids", craft_ids)
+          }
+      end)
+
+    [
+      Layer.new(%{
+        organization_id: organization_id,
+        mission_id: mission_id,
+        layer_kind: :authored,
+        name: "mission limits",
+        declarations: declarations
+      })
+    ]
+  end
+
+  @doc "The qualified name of the monitoring policy called `name`."
+  @spec policy_name(binary()) :: binary()
+  def policy_name(name), do: "/monitoring/" <> name
+
+  defp parameter_ref(parameter),
+    do: %{expected_kind: :parameter, source_ref: parameter, role: :parameter}
+
+  defp definition(opts) do
+    %{
+      "default_rules" => [
+        %{
+          "kind" => "comparison",
+          "operator" => ">",
+          "value" => Keyword.get(opts, :above, 10),
+          "severity" => Keyword.get(opts, :severity, "critical")
+        }
+      ],
+      "minimum_violations" => Keyword.get(opts, :violations, 1),
+      "minimum_conformance" => Keyword.get(opts, :conformance, 1),
+      "disabled" => Keyword.get(opts, :disabled, false)
+    }
+  end
+end

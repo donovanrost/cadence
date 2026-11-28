@@ -17,6 +17,11 @@ defmodule Cadence.SemanticRuntime.Scope do
     {scope_value(mission_id), scope_value(spacecraft_id)}
   end
 
+  @doc "The spacecraft id of a scope; nil for the mission scope."
+  @spec spacecraft_id(t()) :: binary() | nil
+  def spacecraft_id({_mission, @mission_scope_id}), do: nil
+  def spacecraft_id({_mission, spacecraft}), do: spacecraft
+
   @spec mission() :: t()
   def mission, do: {@mission_scope_id, @mission_scope_id}
 
