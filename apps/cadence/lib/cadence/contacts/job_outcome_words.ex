@@ -12,7 +12,6 @@ defmodule Cadence.Contacts.JobOutcomeWords do
           optional(:source_name) => binary() | nil,
           optional(:operation) => binary() | nil,
           optional(:artifact_name) => binary() | nil,
-          optional(:workflow) => binary() | nil,
           optional(:definition_name) => binary() | nil,
           optional(:definition_count) => non_neg_integer() | nil,
           optional(:span_from) => binary() | nil,
@@ -87,11 +86,6 @@ defmodule Cadence.Contacts.JobOutcomeWords do
     phrases(noun, "in Limits", "record the limit events twice")
   end
 
-  def words(:telemetry_historical_data_workflow, context) do
-    noun = if context[:workflow] == "import", do: "Telemetry import", else: "Backfill"
-    phrases(with_span(noun, context), "in the telemetry for that span", "write the span twice")
-  end
-
   def words(:replay_telemetry_scope, context),
     do:
       phrases(
@@ -112,7 +106,7 @@ defmodule Cadence.Contacts.JobOutcomeWords do
     end
   end
 
-  # §4: 'Backfill 11-13 02:00Z–04:00Z'; across midnight '11-13 23:00Z–11-14 01:00Z'.
+  # §4: 'Replay 11-13 02:00Z–04:00Z'; across midnight '11-13 23:00Z–11-14 01:00Z'.
   defp with_span(noun, context) do
     with {:ok, from} <- datetime(context[:span_from]),
          {:ok, to} <- datetime(context[:span_to]) do

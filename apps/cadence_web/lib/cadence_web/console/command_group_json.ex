@@ -43,15 +43,10 @@ defmodule CadenceWeb.Console.CommandGroupJSON do
   def summary(group), do: encode(group)
 
   @doc """
-  The group read: the summary, its commands, every target and event, and (#795) `targets_page`
-  (`{total, revision, next_cursor}`) and `events_page` (`{total, next_cursor}`) saying how many
-  there are. `show_first_page/1` is the same read with only the first pages; the console moves
-  onto it with its paging.
+  The group read (#795): the summary, its commands, the first targets and the latest events, with
+  `targets_page` (`{total, revision, next_cursor}`) and `events_page` (`{total, next_cursor}`) to
+  page the rest (`GET …/targets`, `GET …/events`).
   """
-  @spec show(map()) :: map()
-  def show(view), do: view |> Page.totals() |> render()
-
-  @doc "`show/1` with the first targets and the latest events, and a cursor to page the rest."
   @spec show_first_page(map()) :: map()
   def show_first_page(view), do: view |> Page.first() |> render()
 

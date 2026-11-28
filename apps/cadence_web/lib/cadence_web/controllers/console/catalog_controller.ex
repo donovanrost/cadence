@@ -9,7 +9,7 @@ defmodule CadenceWeb.Console.CatalogController do
   alias Cadence.Auth.Policy
   alias Cadence.Catalog
   alias Cadence.Catalog.{Artifact, Reimport}
-  alias Cadence.Reads.{CatalogApids, CatalogOverview, CatalogRollout}
+  alias Cadence.Reads.{CatalogApids, CatalogOverview, CatalogRevisionSpacecraft, CatalogRollout}
   alias CadenceWeb.Console.{ConfigJSON, Problem}
 
   def index(conn, params) do
@@ -40,6 +40,41 @@ defmodule CadenceWeb.Console.CatalogController do
       {:error, :catalog_revision_not_found} -> Problem.respond(conn, :catalog_revision_not_found)
     end
   end
+
+  @doc """
+  #678: the spacecraft that use a catalog revision (latest saved configuration, active generation,
+  or both), by name then id, `?cursor=` and `?limit=` (1-500, default 200). Contract: setup.md.
+  """
+  def revision_spacecraft(conn, %{"revision_id" => revision_id} = params) do
+    case CatalogRevisionSpacecraft.page(
+           org_id(conn),
+           mission_id(conn),
+           revision_id,
+           params["cursor"],
+           limit(params["limit"])
+         ) do
+      {:ok, page} ->
+        json(conn, %{
+          data: %{spacecraft: page.spacecraft},
+          meta: %{total: page.total, next_cursor: page.next_cursor}
+        })
+
+      {:error, :catalog_revision_not_found} ->
+        Problem.respond(conn, :catalog_revision_not_found)
+
+      {:error, :invalid_cursor} ->
+        Problem.respond(conn, :invalid_params, %{cursor: "is not a valid cursor"})
+    end
+  end
+
+  defp limit(value) when is_binary(value) do
+    case Integer.parse(value) do
+      {n, ""} -> n
+      _other -> nil
+    end
+  end
+
+  defp limit(_value), do: nil
 
   @doc "K1 (L18): one source file, its revisions and import runs."
   def artifact(conn, %{"artifact_id" => artifact_id}) do

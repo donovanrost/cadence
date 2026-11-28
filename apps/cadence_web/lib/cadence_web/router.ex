@@ -133,10 +133,6 @@ defmodule CadenceWeb.Router do
     live_session :application,
       on_mount: [{CadenceWeb.UserAuth, :require_user_scope}],
       layout: {CadenceWeb.Layouts, :host} do
-      live("/missions/:mission_id/ops/data-operations", HostPageLive, :index,
-        metadata: %{host_policy: :ops}
-      )
-
       live("/missions/:mission_id/ops/planning", HostPageLive, :index,
         metadata: %{host_policy: :ops}
       )
@@ -186,10 +182,6 @@ defmodule CadenceWeb.Router do
 
       live("/missions/:mission_id/ops/explore", HostPageLive, :show,
         metadata: %{host_policy: :ops}
-      )
-
-      live("/missions/:mission_id/ops/data-operations/manage", HostPageLive, :manage,
-        metadata: %{host_policy: :ops_admin}
       )
     end
   end
@@ -365,7 +357,6 @@ defmodule CadenceWeb.Router do
       get("/commands", CommandCatalogController, :index)
       get("/commands/:command_id", CommandCatalogController, :show)
       get("/command-policies", CommandGroupController, :policies)
-      get("/command-endpoints", CommandGroupController, :endpoints)
       # Compose draft (owner: api). Contract: docs/apogee/api/commanding.md §Compose draft
       get("/command-draft", CommandDraftController, :show)
       put("/command-draft", CommandDraftController, :update)
@@ -522,6 +513,8 @@ defmodule CadenceWeb.Router do
       get("/catalog/imports/:import_run_id", CatalogController, :import_run)
       get("/catalog/revisions/:revision_id/rollout", CatalogController, :rollout)
       get("/catalog/revisions/:revision_id/apids", CatalogController, :apids)
+      # #678: the spacecraft whose saved or active configuration uses the revision, paged.
+      get("/catalog/revisions/:revision_id/spacecraft", CatalogController, :revision_spacecraft)
       # L18 source files (owner: api).
       get("/catalog/artifacts/:artifact_id", CatalogController, :artifact)
       post("/catalog/artifacts/:artifact_id/reimport", CatalogController, :reimport)

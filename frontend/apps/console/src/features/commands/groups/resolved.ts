@@ -1,3 +1,4 @@
+import { MAX_TARGETS } from "./bounds.ts";
 import { decoders as d, isKnown, type Decoded } from "@/api/index.ts";
 
 /**
@@ -14,7 +15,7 @@ export const resolvedArgumentReader = d.object({
   sent_value_json: d.nullable(d.string),
   unit: d.nullable(d.string),
   source: d.knownText(sources),
-  spacecraft_ids: d.nullable(d.array(d.token, 2_000)),
+  spacecraft_ids: d.nullable(d.array(d.token, MAX_TARGETS)),
 });
 export type ResolvedArgument = Decoded<typeof resolvedArgumentReader>;
 /** Optional until the server ships R1 everywhere. */

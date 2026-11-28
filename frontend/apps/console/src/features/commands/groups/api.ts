@@ -1,3 +1,4 @@
+import { MAX_TARGETS } from "./bounds.ts";
 import type { MissionId } from "@/api/index.ts";
 import { expiryReader } from "./expiryReader.ts";
 import { resolvedArgumentsReader } from "./resolved.ts";
@@ -74,7 +75,7 @@ const nextContact = d.object({
 export type NextContact = Decoded<typeof nextContact>;
 
 /** A route named by an identity NO-GO (DECISIONS #41), so the screen can link to its routing. */
-/** commanding.md §GET /command-endpoints: why a target has no uplink endpoint. */
+/** commanding.md §POST /command-endpoints: why a target has no uplink endpoint. */
 export const endpointFailures = ["no_uplink_route", "multiple_primary_uplink_routes"] as const;
 export type EndpointFailure = (typeof endpointFailures)[number];
 const endpointFailure = d.nullable(d.knownText(endpointFailures));
@@ -148,7 +149,7 @@ export const checkKeyText = (key: CheckKey | Unrecognized): string =>
 const check = d.object({
   key: d.knownText(checkKeys),
   result,
-  per_target: d.array(perTarget, 1_000),
+  per_target: d.array(perTarget, MAX_TARGETS),
   evidence,
   /** DECISIONS #60: null unless HOLD. false = hard (clear it); true = an operator may ack it. */
   ackable: d.optional(d.nullable(d.boolean)),
@@ -195,7 +196,7 @@ export const preflightReader = d.object({
       /** U51: the revision its commands resolve to; null = unresolved (already a Catalog NO-GO). */
       catalog_revision: d.optional(d.nullable(revision)),
     }),
-    1_000,
+    MAX_TARGETS,
   ),
   checks: d.array(check, 20),
   /** U51: per command (by stack position), how each group of targets verifies it. */
@@ -365,7 +366,7 @@ export async function submitGroup(
   );
 }
 
-/** Compose's endpoint picker (commanding.md §GET /command-endpoints, DECISIONS #41). */
+/** Compose's endpoint picker (commanding.md §POST /command-endpoints, DECISIONS #41). */
 export const targetEndpointsReader = d.object({
   spacecraft_id: d.token,
   resolved_source_endpoint_id: d.nullable(d.token),
@@ -382,18 +383,18 @@ export const targetEndpointsReader = d.object({
   ),
 });
 export type TargetEndpoints = Decoded<typeof targetEndpointsReader>;
-const endpointList = d.object({ spacecraft: d.array(targetEndpointsReader, 1_000) });
+const endpointList = d.object({ spacecraft: d.array(targetEndpointsReader, MAX_TARGETS) });
 
 export async function fetchEndpoints(
   missionId: MissionId,
   spacecraftIds: readonly string[],
   signal?: AbortSignal,
 ): Promise<ApiResult<readonly TargetEndpoints[]>> {
-  const p = new URLSearchParams({ spacecraft_ids: spacecraftIds.join(",") });
+  // #795: the ids go in the body (a fleet's don't fit in a URL); ask for the rows on screen.
   const result = await request(
-    `/missions/${encodeURIComponent(missionId)}/command-endpoints?${p.toString()}`,
+    `/missions/${encodeURIComponent(missionId)}/command-endpoints`,
     endpointList,
-    signal ? { signal } : {},
+    { method: "POST", body: { spacecraft_ids: spacecraftIds }, ...(signal ? { signal } : {}) },
   );
   return result.ok ? { ok: true, value: result.value.spacecraft } : result;
 }

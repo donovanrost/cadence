@@ -23,6 +23,7 @@ Conventions: [README.md](README.md). Requested shapes: `docs/apogee/plans/setup-
 | G1, T1, T2 | `GET /missions/:mission_id/ground-stations`, `/transports`, `/routing-rules` | **implemented** |
 | kind schema | `GET /missions/:mission_id/config/kinds/:kind/schema` | **implemented** |
 | catalog APIDs | `GET /missions/:mission_id/catalog/revisions/:revision_id/apids` | **implemented** (L17) |
+| revision spacecraft | `GET /missions/:mission_id/catalog/revisions/:revision_id/spacecraft` | **implemented** (#678, `Cadence.Reads.CatalogRevisionSpacecraft`) |
 
 ## `GET /api/v1/missions/:mission_id/spacecraft`
 
@@ -365,10 +366,22 @@ by its catalog revision ("catalog rev 4"); the model revision id is Technical de
   - `withdrawn` is final: approve refuses it, and running that model again takes a new revision.
   - The decision is an append-only `mission_model_decisions` record.
   - Every read carries `viewer_can_withdraw` (an approved revision and a viewer who may approve).
-  - Refusals: `422 mission_model_decision_reason_required` / `…_too_long`, `403 forbidden`, `403
-    human_mission_model_approver_required`, `409 mission_model_revision_not_withdrawable` (not
-    approved, or already withdrawn by another operation). A service identity's bearer is refused
-    `403 service_not_allowed` before it reaches the action.
+  - Refusals: `422 mission_model_decision_reason_required` / `…_too_long`, `403 forbidden`, `409
+    mission_model_revision_not_withdrawable` (not approved, or already withdrawn by another
+    operation). A service identity's bearer is refused `403 service_not_allowed` before it reaches
+    the action.
+  - **`affected_groups`** (the CTO's addition, #546): on the withdraw answer and on a withdrawn
+    revision's read, the GO'd command groups still waiting to release on a craft that runs this
+    revision, so the person withdrawing can ask for an abort right away. The shape is
+    `[{group_id, name, state, go_at, spacecraft: [{id, name, scid}], spacecraft_count}]`:
+    - at most 50 groups, newest GO first, with `affected_groups_count` giving the total;
+    - `state` comes from the command group states (today always `queued`);
+    - `spacecraft` holds at most 5 of the group's affected craft by name, and `spacecraft_count`
+      counts them all;
+    - both fields are `null` on a revision that isn't withdrawn.
+    
+    The rest past 50 are at `GET /api/v1/missions/:mission_id/command-groups?withdrawn_revision=<id>&state=queued&stage=queued_for_contact`. A
+    group's page (`…/command-groups/:id`) names all its craft.
   - The same `operation_id` by the same person replays `200` with `replayed: true`.
   - After a withdrawal:
     - staging a pin to that composition is a validation NO-GO with `details.reason: "withdrawn"`
@@ -773,6 +786,26 @@ server-computed effect counts.
 - Profiles: active ones, sorted by name. Spacecraft pinned to a deleted profile aren't counted.
 - Errors: `404 catalog_revision_not_found`.
 - Live: refetch on `invalidate` with `catalog` or `spacecraft`.
+
+## `GET /api/v1/missions/:mission_id/catalog/revisions/:revision_id/spacecraft` (#678)
+
+The spacecraft that use a catalog revision, paged by name then id. Members of the mission.
+
+- Answers `{data: {spacecraft: [{id, name, scid, uses, configuration_version}]}, meta: {total,
+  next_cursor}}`.
+- `uses` is a closed vocabulary: a non-empty subset of `["saved", "active"]`, in that order.
+  - `saved`: the craft's **latest** saved configuration names this revision.
+  - `active`: its active generation runs it.
+- `configuration_version` is the craft's latest saved configuration version, or `null` when it
+  has none.
+- `scid` is `null` for a craft without one, and `name` is the craft's display name.
+- `total` counts every craft that uses the revision. `?limit=` is 1–500 (default 200); a limit
+  outside that range falls back to 200.
+- Pass the previous `meta.next_cursor` as `?cursor=` for the next page; it's `null` on the last
+  page.
+- A fixed number of queries for any fleet size.
+- Errors: `404 catalog_revision_not_found`, and `422 invalid_params` (`details.cursor`) for a cursor
+  the server didn't make.
 
 ## `GET /api/v1/missions/:mission_id/catalog/revisions/:revision_id/apids` (§11 L17)
 

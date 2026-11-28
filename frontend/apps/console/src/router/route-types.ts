@@ -17,6 +17,7 @@ export const spacecraftTabs = [
   "passes",
   "configuration",
   "history",
+  "points",
 ] as const;
 export type SpacecraftTab = (typeof spacecraftTabs)[number];
 export const addSpacecraftSteps = ["source", "identity", "orbit", "review"] as const;

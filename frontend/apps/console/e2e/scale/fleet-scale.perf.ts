@@ -10,6 +10,8 @@ import {
   serveScaledFleet,
 } from "../support/scale.ts";
 import { median } from "../support/scale-fleet.ts";
+import { costOf, recordRequests, type RequestCost } from "../support/requests.ts";
+import { addRequestRow, writeRequestTable } from "../support/request-table.ts";
 
 // #176: the console at fleet scale. Each screen loads three times with a 500- and a
 // 1,000-spacecraft fleet (the seeded demo's 500, then clones; GET /fleet and the live push both
@@ -68,6 +70,8 @@ interface Load {
   /** null when the screen doesn't subscribe to the live fleet push. */
   readonly pushMs: number | null;
   readonly heapMb: number;
+  /** #1037: what the load asked of the server before it was usable. */
+  readonly cost: RequestCost;
 }
 
 /** Runs in the page (Playwright serialises it), so it can't call anything defined here. */
@@ -84,9 +88,11 @@ async function load(
   try {
     if (screen.viewport) await page.setViewportSize(screen.viewport);
     await installScaleProbes(page);
-    const fleet = await serveScaledFleet(page, size);
+    const recorder = recordRequests(page);
+    const fleet = await serveScaledFleet(page, size, (topic) => recorder.join(topic));
     await page.goto(screen.path);
     const readyMs = await readyAt(page);
+    const origin = await page.evaluate(() => performance.timeOrigin);
     // A live screen gets the scaled full snapshot first (missing it fails the load: the fixture
     // or the subscription broke); then one push changes every row.
     let pushMs: number | null = null;
@@ -102,7 +108,9 @@ async function load(
     // Let a task the push started finish before reading the totals.
     await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 500)));
     const tasks = await longTasks(page);
+    await recorder.settle();
     const result: Load = {
+      cost: costOf(recorder, origin + readyMs),
       readyMs,
       longestTaskMs: Math.max(0, ...tasks),
       tasksOver50: tasks.filter((t) => t > 50).length,
@@ -123,9 +131,14 @@ const rounded = (l: Load) => ({
   tasksOver50: l.tasksOver50,
   pushMs: round1(l.pushMs),
   heapMb: round1(l.heapMb),
+  requests: l.cost.requests,
+  joins: l.cost.joins,
+  serialDepth: l.cost.serialDepth,
+  bytes: l.cost.bytes,
 });
 
 test.describe("Console at fleet scale", () => {
+  test.afterAll(() => writeRequestTable());
   for (const size of SIZES) {
     for (const screen of SCREENS) {
       const label = `${screen.name} · ${size}`;
@@ -138,7 +151,17 @@ test.describe("Console at fleet scale", () => {
         for (let round = 0; round < LOADS; round++)
           loads.push(await load(context, screen, size, round));
         const pushes = loads.flatMap((l) => (l.pushMs === null ? [] : [l.pushMs]));
+        // The request shape is the first load's (a cold cache); the counts are the medians.
+        const first = loads[0]?.cost;
+        if (!first) throw new Error("no load ran");
         const result: Load = {
+          cost: {
+            ...first,
+            requests: median(loads.map((l) => l.cost.requests)),
+            joins: median(loads.map((l) => l.cost.joins)),
+            serialDepth: median(loads.map((l) => l.cost.serialDepth)),
+            bytes: median(loads.map((l) => l.cost.bytes)),
+          },
           readyMs: median(loads.map((l) => l.readyMs)),
           longestTaskMs: median(loads.map((l) => l.longestTaskMs)),
           tasksOver50: median(loads.map((l) => l.tasksOver50)),
@@ -153,8 +176,11 @@ test.describe("Console at fleet scale", () => {
             ...rounded(result),
             budget: BUDGET,
             loads: loads.map(rounded),
+            chain: first.chain,
+            repeated: first.repeated,
           })}`,
         );
+        addRequestRow({ screen: screen.name, size, readyMs: result.readyMs, cost: result.cost });
 
         expect
           .soft(result.readyMs, "screen ready (ms, median)")

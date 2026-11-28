@@ -55,8 +55,7 @@ CADENCE_TELEMETRY_CURRENT_VALUE_STORE=postgres mix phx.server
 
 Sign in once and note the email address you use. The demo grants that existing
 user organization-admin access to its generated organization. This is required
-for the Editor, Settings, Sources administration, and Data Operations
-administration stops in the walkthrough.
+for the Editor, Settings, and Sources administration stops in the walkthrough.
 
 ## Start the live fixture
 

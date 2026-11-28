@@ -11,6 +11,7 @@ defmodule Cadence.SpacecraftStore do
 
   alias Cadence.Listing
   alias Cadence.Missions
+  alias Cadence.Persistence.JsonDocument
   alias Cadence.Platform.PassPredictionJobs
   alias Cadence.Repo
   alias Cadence.Spacecraft
@@ -187,6 +188,75 @@ defmodule Cadence.SpacecraftStore do
     )
   end
 
+  @doc """
+  Locks the given mission spacecraft in one statement, in id order (`FOR UPDATE`, so a single-row
+  locker taking the same rows in the same order can't deadlock with it), and returns them by id.
+  `{:error, :spacecraft_not_found}` if any is missing. Call it inside a transaction: the locks last
+  until it ends (admission, #1020).
+  """
+  @spec lock_spacecraft(binary(), binary(), [binary()]) ::
+          {:ok, %{binary() => Spacecraft.t()}} | {:error, :spacecraft_not_found}
+  def lock_spacecraft(organization_id, mission_id, spacecraft_ids)
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(spacecraft_ids) do
+    ids = Enum.uniq(spacecraft_ids)
+
+    rows =
+      from(row in SpacecraftRow,
+        where:
+          row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+            row.spacecraft_id in ^ids,
+        order_by: [asc: row.spacecraft_id],
+        lock: "FOR UPDATE"
+      )
+      |> Repo.all()
+
+    if length(rows) == length(ids),
+      do: {:ok, Map.new(rows, &{&1.spacecraft_id, SpacecraftRow.to_domain(&1)})},
+      else: {:error, :spacecraft_not_found}
+  end
+
+  @doc """
+  Sets many spacecraft's profile pin and metadata in one statement: `updates` is `[%{spacecraft_id,
+  spacecraft_type_id, spacecraft_type_version, metadata}]`. What admitting a review does to each
+  spacecraft, once for the whole review (#1020). Announces the configuration change once.
+  """
+  @spec put_pins(binary(), binary(), [map()]) :: :ok
+  def put_pins(_organization_id, _mission_id, []), do: :ok
+
+  def put_pins(organization_id, mission_id, updates)
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(updates) do
+    ids = Enum.map(updates, & &1.spacecraft_id)
+    types = Enum.map(updates, & &1.spacecraft_type_id)
+    versions = Enum.map(updates, & &1.spacecraft_type_version)
+
+    metadata =
+      Enum.map(updates, &(&1.metadata |> JsonDocument.wrap_value() |> Jason.encode!()))
+
+    from(row in SpacecraftRow,
+      join:
+        pin in fragment(
+          "SELECT * FROM unnest(?::text[], ?::text[], ?::int[], ?::text[]) AS t(spacecraft_id, type_id, type_version, metadata)",
+          type(^ids, {:array, :string}),
+          type(^types, {:array, :string}),
+          type(^versions, {:array, :integer}),
+          type(^metadata, {:array, :string})
+        ),
+      on: pin.spacecraft_id == row.spacecraft_id,
+      where: row.organization_id == ^organization_id and row.mission_id == ^mission_id,
+      update: [
+        set: [
+          spacecraft_type_id: pin.type_id,
+          spacecraft_type_version: pin.type_version,
+          metadata: fragment("?::jsonb", pin.metadata)
+        ]
+      ]
+    )
+    |> Repo.update_all([])
+
+    ScopedReadUpdates.publish(:spacecraft_configuration_changed, organization_id, mission_id)
+    :ok
+  end
+
   @spec fetch_spacecraft(binary(), binary(), binary()) ::
           {:ok, Spacecraft.t()} | {:error, term()}
   def fetch_spacecraft(organization_id, mission_id, spacecraft_id)
@@ -197,23 +267,23 @@ defmodule Cadence.SpacecraftStore do
     end
   end
 
-  @doc """
-  `fetch_spacecrafts/3` over any number of ids, one bounded batch per query (qa #43, #49: a
-  500-spacecraft fleet exceeds one batch). Ids that aren't valid binaries are an error, as there.
-  """
+  @doc "Loads any number of explicitly named spacecraft in bounded fleet batches."
   @spec fetch_spacecrafts_in_batches(binary(), binary(), [binary()]) ::
           {:ok, %{optional(binary()) => Spacecraft.t()}} | {:error, :batch_bounds_exceeded}
   def fetch_spacecrafts_in_batches(organization_id, mission_id, spacecraft_ids)
       when is_list(spacecraft_ids) do
-    spacecraft_ids
-    |> Enum.uniq()
-    |> Enum.chunk_every(@max_batch_size)
-    |> Enum.reduce_while({:ok, %{}}, fn chunk, {:ok, acc} ->
-      case fetch_spacecrafts(organization_id, mission_id, chunk) do
-        {:ok, found} -> {:cont, {:ok, Map.merge(acc, found)}}
-        {:error, reason} -> {:halt, {:error, reason}}
-      end
-    end)
+    if Enum.all?(spacecraft_ids, &(is_binary(&1) and &1 != "")) do
+      spacecraft =
+        spacecraft_ids
+        |> Enum.uniq()
+        |> Enum.chunk_every(1_000)
+        |> Enum.flat_map(&scoped_spacecraft_rows(organization_id, mission_id, &1))
+        |> Map.new(fn row -> {row.spacecraft_id, SpacecraftRow.to_domain(row)} end)
+
+      {:ok, spacecraft}
+    else
+      {:error, :batch_bounds_exceeded}
+    end
   end
 
   @doc "The most spacecraft ids `fetch_spacecrafts/3` takes in one call."
@@ -233,17 +303,18 @@ defmodule Cadence.SpacecraftStore do
         {:ok, %{}}
 
       {:ok, ids} ->
-        rows =
-          SpacecraftRow
-          |> where(
-            [row],
-            row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-              row.spacecraft_id in ^ids
-          )
-          |> Repo.all()
-
+        rows = scoped_spacecraft_rows(organization_id, mission_id, ids)
         {:ok, Map.new(rows, fn row -> {row.spacecraft_id, SpacecraftRow.to_domain(row)} end)}
     end
+  end
+
+  defp scoped_spacecraft_rows(organization_id, mission_id, ids) do
+    from(row in SpacecraftRow,
+      where:
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+          row.spacecraft_id in ^ids
+    )
+    |> Repo.all()
   end
 
   @doc """
@@ -289,6 +360,39 @@ defmodule Cadence.SpacecraftStore do
       select: %{"id" => row.spacecraft_id, "name" => row.display_name}
     )
     |> Repo.all()
+  end
+
+  @doc """
+  One page of `spacecraft_ids` (the mission's only), as `%{"id", "name", "scid"}` sorted by name
+  then id after `after_key` (`{name, id}` or nil), and how many of the ids are the mission's: a
+  keyset page over an id set however large (#678).
+  """
+  @spec names_page_of(binary(), binary(), [binary()], {binary(), binary()} | nil, pos_integer()) ::
+          {[map()], non_neg_integer()}
+  def names_page_of(_organization_id, _mission_id, [], _after_key, _limit), do: {[], 0}
+
+  def names_page_of(organization_id, mission_id, spacecraft_ids, after_key, limit)
+      when is_integer(limit) and limit > 0 do
+    scoped =
+      from(row in SpacecraftRow,
+        where:
+          row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+            row.spacecraft_id in ^spacecraft_ids
+      )
+
+    rows =
+      scoped
+      |> order_by([row], asc: row.display_name, asc: row.spacecraft_id)
+      |> limit(^limit)
+      |> select([row], %{
+        "id" => row.spacecraft_id,
+        "name" => row.display_name,
+        "scid" => row.scid
+      })
+      |> after_name(after_key)
+      |> Repo.all()
+
+    {rows, Repo.aggregate(scoped, :count)}
   end
 
   @doc """
@@ -397,39 +501,6 @@ defmodule Cadence.SpacecraftStore do
     )
     |> select([row], row.scid)
     |> distinct(true)
-    |> Repo.all()
-  end
-
-  @doc "Whether another spacecraft of the mission already uses `scid`."
-  @spec scid_taken?(binary(), binary(), non_neg_integer()) :: boolean()
-  def scid_taken?(organization_id, mission_id, scid)
-      when is_binary(organization_id) and is_binary(mission_id) and is_integer(scid) do
-    SpacecraftRow
-    |> where(
-      [row],
-      row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-        row.scid == ^scid
-    )
-    |> Repo.exists?()
-  end
-
-  @doc """
-  The OTHER missions of the organization with an active spacecraft flying `scid` (the same-SCID
-  HOLD, ux U81 §1). Never across organizations.
-  """
-  @spec missions_flying_scid(binary(), non_neg_integer(), binary()) :: [binary()]
-  def missions_flying_scid(organization_id, scid, except_mission_id)
-      when is_binary(organization_id) and is_integer(scid) and is_binary(except_mission_id) do
-    SpacecraftRow
-    |> where(
-      [row],
-      row.organization_id == ^organization_id and row.scid == ^scid and
-        row.mission_id != ^except_mission_id
-    )
-    |> active()
-    |> distinct(true)
-    |> select([row], row.mission_id)
-    |> order_by([row], asc: row.mission_id)
     |> Repo.all()
   end
 

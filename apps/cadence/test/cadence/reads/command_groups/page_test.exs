@@ -17,12 +17,17 @@ defmodule Cadence.Reads.CommandGroups.PageTest do
             spacecraft_id: "sc-#{i}",
             name: "SAT #{i}",
             stage: Enum.at(@stages, rem(i, 3)),
+            blocked: if(rem(i, 50) == 1, do: %{reason: :lane_release_uncertain}),
             members: []
           }
         end,
       events:
         for i <- 1..events do
-          %{id: "ev-#{i}", kind: :member_failed, at: DateTime.add(at, i, :second)}
+          %{
+            id: "ev-#{i}",
+            kind: if(rem(i, 10) == 0, do: :hold_acknowledged, else: :member_failed),
+            at: DateTime.add(at, i, :second)
+          }
         end
     }
   end
@@ -81,6 +86,63 @@ defmodule Cadence.Reads.CommandGroups.PageTest do
              Page.targets(view, %{"stage" => "verified,release_failed", "q" => "sc-2"})
   end
 
+  test "needs_you holds the failed and uncertain targets and the ones blocked on a held lane" do
+    view = view()
+
+    # Stages in the fixture cycle queued_for_contact, verified, release_failed by index; the
+    # blocked ones are indexes 1, 51, 101, 151 and 201 (stage verified, so they'd be missed by a
+    # stage filter alone).
+    assert {:ok, %{total: total, targets: targets}} =
+             Page.targets(view, %{"needs_you" => "true", "limit" => "500"})
+
+    failed = Enum.count(view.targets, &(&1.stage == :release_failed))
+    blocked = Enum.count(view.targets, &(&1.blocked != nil and &1.stage != :release_failed))
+    assert total == failed + blocked
+    assert Enum.all?(targets, &(&1.stage == :release_failed or &1.blocked != nil))
+    assert Enum.any?(targets, &(&1.index == 51))
+
+    # It combines with the other filters, and pages with a cursor like any other read.
+    assert {:ok, %{total: ^failed}} =
+             Page.targets(view, %{"needs_you" => "true", "stage" => "release_failed"})
+
+    assert Enum.map(all_targets(view, %{"needs_you" => "true", "limit" => "7"}), & &1.index) ==
+             Enum.map(targets, & &1.index)
+
+    assert {:ok, %{total: 250}} = Page.targets(view, %{"needs_you" => "false"})
+
+    assert {:error, {:invalid_params, %{"needs_you" => _}}} =
+             Page.targets(view, %{"needs_you" => "1"})
+  end
+
+  test "events can be read by kind, and a cursor pages the filtered list" do
+    view = view()
+
+    assert {:ok, %{total: 12, events: events, next_cursor: nil}} =
+             Page.events(view, %{"kind" => "hold_acknowledged"})
+
+    assert Enum.all?(events, &(&1.kind == :hold_acknowledged))
+
+    assert {:ok, %{total: 108}} = Page.events(view, %{"kind" => "member_failed,note"})
+
+    assert {:ok, %{total: 120}} =
+             Page.events(view, %{"kind" => "member_failed,hold_acknowledged"})
+
+    {:ok, first} = Page.events(view, %{"kind" => "hold_acknowledged", "limit" => "5"})
+
+    {:ok, second} =
+      Page.events(view, %{
+        "kind" => "hold_acknowledged",
+        "limit" => "5",
+        "cursor" => first.next_cursor
+      })
+
+    assert length(first.events ++ second.events) == 10
+    assert Enum.all?(second.events, &(&1.kind == :hold_acknowledged))
+
+    assert {:error, {:invalid_params, %{"kind" => _}}} = Page.events(view, %{"kind" => "nope"})
+    assert {:error, {:invalid_params, %{"kind" => _}}} = Page.events(view, %{"kind" => ""})
+  end
+
   test "following the events cursor reads older events until none are left" do
     view = view()
     {:ok, first} = Page.events(view, %{"limit" => "50"})
@@ -132,6 +194,24 @@ defmodule Cadence.Reads.CommandGroups.PageTest do
 
     assert {:error, {:invalid_params, %{"q" => _}}} =
              Page.targets(view(), %{"q" => String.duplicate("a", 101)})
+  end
+
+  test "the revision moves when anything a page of targets shows does" do
+    base = %{view() | targets: view().targets}
+    same = Page.first(base).targets_page.revision
+
+    blocked = %{
+      base
+      | targets:
+          List.update_at(base.targets, 2, &%{&1 | blocked: %{reason: :lane_release_uncertain}})
+    }
+
+    refute Page.first(blocked).targets_page.revision == same
+
+    # A member's own facts, with the stage unchanged.
+    member = %{failure_reason: :verify_failed, timed_out_at: ~U[2026-11-28 00:00:00Z]}
+    with_member = %{base | targets: List.update_at(base.targets, 3, &%{&1 | members: [member]})}
+    refute Page.first(with_member).targets_page.revision == same
   end
 
   test "the revision moves when a target's stage does, and not otherwise" do

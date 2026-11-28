@@ -59,7 +59,7 @@ defmodule CadenceWeb.Console.CommandGroupChannel do
 
     case CommandGroups.get(scope.organization_id, mission, id, viewer(scope)) do
       {:ok, view} ->
-        {:noreply, maybe_push(assign(socket, :timer, nil), CommandGroupJSON.show(view))}
+        {:noreply, maybe_push(assign(socket, :timer, nil), CommandGroupJSON.push(view))}
 
       {:error, _reason} ->
         {:noreply, assign(socket, :timer, nil)}

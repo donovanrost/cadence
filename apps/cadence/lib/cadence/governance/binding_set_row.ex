@@ -15,32 +15,55 @@ defmodule Cadence.Governance.BindingSetRow do
     field(:organization_id, :string)
     field(:binding_set_id, :string)
     field(:version, :integer)
+    # #447: 'rows' (instances and rules as rows) or 'membership' (artifacts plus members, with the
+    # hash its expansion must match). Written once with the version; a trigger refuses changes.
+    # Not on the BindingSet struct (#108).
+    field(:storage_form, :string, default: "rows")
+    field(:content_sha256, :string)
+    # A membership version's member count and the hash of its sorted endpoint/artifact pairs,
+    # written with it (a trigger refuses changes): admission recomputes both from the members it
+    # reads (#450, commanding). Null for the rows form.
+    field(:member_count, :integer)
+    field(:members_sha256, :string)
 
     timestamps()
   end
 
   @required_fields [:mission_id, :binding_set_id, :version]
 
-  @spec changeset(BindingSet.t()) :: Ecto.Changeset.t()
-  def changeset(%BindingSet{} = binding_set) do
+  @spec changeset(BindingSet.t(), map()) :: Ecto.Changeset.t()
+  def changeset(%BindingSet{} = binding_set, storage \\ %{}) do
     %__MODULE__{}
     |> cast(
-      %{
-        organization_id: binding_set.organization_id,
-        mission_id: binding_set.mission_id,
-        binding_set_id: binding_set.binding_set_id,
-        version: binding_set.version
-      },
+      Map.merge(
+        %{
+          organization_id: binding_set.organization_id,
+          mission_id: binding_set.mission_id,
+          binding_set_id: binding_set.binding_set_id,
+          version: binding_set.version
+        },
+        storage
+      ),
       all_fields()
     )
     |> OrganizationScope.put_organization_id()
     |> validate_required(@required_fields)
+    |> validate_inclusion(:storage_form, ["rows", "membership"])
     |> unique_constraint([:mission_id, :binding_set_id, :version],
       name: :governed_binding_sets_scope_idx
     )
   end
 
   defp all_fields do
-    [:organization_id, :mission_id, :binding_set_id, :version]
+    [
+      :organization_id,
+      :mission_id,
+      :binding_set_id,
+      :version,
+      :storage_form,
+      :content_sha256,
+      :member_count,
+      :members_sha256
+    ]
   end
 end

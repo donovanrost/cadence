@@ -204,6 +204,157 @@ defmodule Cadence.Activations.FleetConfigurationTest do
     end
   end
 
+  # #1020: approving a fleet review admits every spacecraft inside one transaction. It used to run
+  # about six queries and a row lock per spacecraft there, and failed (the 15 s transaction limit)
+  # somewhere between 500 and 1,000. Now the reads are in bulk, so the cost is a number of queries
+  # that doesn't grow with the fleet (the spacecraft rows come in chunks, a handful per hundred).
+  @tag timeout: 900_000
+  test "approving a review costs a number of queries that doesn't grow per spacecraft; 1,000 pass (#1020)" do
+    {small, small_pins} = approve_fleet("org-admit-100", "mission-admit-100", 100)
+    {large, large_pins} = approve_fleet("org-admit-1000", "mission-admit-1000", 1_000)
+
+    IO.puts("admit: #{small} queries for 100 craft, #{large} for 1,000")
+    assert small_pins == 100 and large_pins == 1_000
+    # Growth is the chunked reads, not per craft (the old loop: about 6 per craft, 5,400 more).
+    assert large - small <= 25, "#{small} queries for 100 craft, #{large} for 1,000"
+    assert large < 100, "#{large} queries for 1,000 craft"
+  end
+
+  test "a stale spacecraft in the middle of a large review refuses the whole review and writes nothing (#1020)" do
+    c = fleet_context("org-admit-stale", "mission-admit-stale")
+    {fleet, _tokens, request} = pending_review(c, 60)
+    reviewer = Fixtures.user_scope(c.org, "reviewer")
+
+    # A draft saved after the review: that spacecraft's token no longer matches.
+    middle = Enum.at(Enum.sort_by(fleet, & &1.spacecraft_id), 30)
+    save(c, middle, false)
+
+    assert {:error, :spacecraft_configuration_changed} =
+             ControlActivations.approve(reviewer, request.activation_request_id, "Looked")
+
+    # Nothing was admitted: no spacecraft carries a reviewed revision, and the request is pending.
+    assert [] == pinned_revisions(c) |> Enum.reject(&is_nil(elem(&1, 1)))
+
+    assert {:ok, %{state: :approval_pending}} =
+             Activations.fetch(c.scope, request.activation_request_id)
+  end
+
+  test "each spacecraft's protocol decides its pin in one review: its own profile, or none (#1020)" do
+    c = fleet_context("org-admit-protocol", "mission-admit-protocol")
+    second = Fixtures.persist_spacecraft!(c.org, c.mission.mission_id, display_name: "Fleet 2")
+    third = Fixtures.persist_spacecraft!(c.org, c.mission.mission_id, display_name: "Fleet 3")
+
+    protocol = fn frame_size ->
+      %{
+        "downlink" => "tm",
+        "uplink" => "tc",
+        "frame_size" => frame_size,
+        "secondary_header_length" => 0,
+        "insert_zone_length" => 0,
+        "ocf_length" => 0,
+        "truncated_primary_header" => false
+      }
+    end
+
+    tokens = %{
+      c.first.spacecraft_id => save(c, c.first, true, %{"protocol" => protocol.(1024)}),
+      second.spacecraft_id => save(c, second, true, %{"protocol" => protocol.(2048)}),
+      third.spacecraft_id => save(c, third, true, %{"protocol" => nil})
+    }
+
+    assert {:ok, request} = Review.request_many(c.scope, c.mission.mission_id, tokens)
+    reviewer = Fixtures.user_scope(c.org, "reviewer")
+
+    assert {:ok, _, _, _} =
+             ControlActivations.approve(reviewer, request.activation_request_id, "ok")
+
+    stored =
+      Map.new(
+        Cadence.SpacecraftStore.list_spacecraft(c.org, c.mission.mission_id),
+        &{&1.spacecraft_id, &1}
+      )
+
+    latest = Drafts.latest_many(c.org, c.mission.mission_id, Map.keys(stored))
+
+    for {craft, frame_size} <- [{c.first, 1024}, {second, 2048}] do
+      row = latest[craft.spacecraft_id]
+      current = stored[craft.spacecraft_id]
+
+      assert current.spacecraft_type_id ==
+               "spacecraft_configuration_profile_#{row.configuration_revision_id}"
+
+      assert current.spacecraft_type_version == 1
+      assert {:ok, pinned} = Cadence.SpacecraftStore.fetch_pinned_profile(c.mission, current)
+
+      assert SpacecraftConfigurationInput.from_profile(pinned) ==
+               protocol.(frame_size)
+
+      assert current.metadata["spacecraft_configuration_revision_id"] ==
+               row.configuration_revision_id
+    end
+
+    assert %{spacecraft_type_id: nil, spacecraft_type_version: nil} = stored[third.spacecraft_id]
+  end
+
+  defp fleet_context(org, mission_id) do
+    {first, revision, _endpoint} = Fixtures.setup_imported_mission!(org, mission_id)
+    {:ok, mission} = Cadence.Missions.fetch_mission(org, mission_id)
+    scope = Fixtures.user_scope(org, "operator")
+    policy = ActivationPolicy.load(org, mission_id)
+
+    {:ok, _} =
+      ActivationPolicy.save(scope, mission_id, policy.token, %{
+        "value" => %{"approval_requirement" => "independent"}
+      })
+
+    %{org: org, mission: mission, scope: scope, first: first, revision: revision}
+  end
+
+  defp pending_review(c, count) do
+    fleet = [
+      c.first
+      | Enum.map(2..count, fn i ->
+          Fixtures.persist_spacecraft!(c.org, c.mission.mission_id, display_name: "Fleet #{i}")
+        end)
+    ]
+
+    tokens = Map.new(fleet, &{&1.spacecraft_id, save(c, &1)})
+    assert {:ok, request} = Review.request_many(c.scope, c.mission.mission_id, tokens)
+    assert request.state == :approval_pending
+    {fleet, tokens, request}
+  end
+
+  # Approves a pending review of `count` spacecraft (the queries the approval ran, admission
+  # included) and returns them with how many spacecraft ended up pinned to their reviewed revision.
+  defp approve_fleet(org, mission_id, count) do
+    c = fleet_context(org, mission_id)
+    {_fleet, _tokens, request} = pending_review(c, count)
+    reviewer = Fixtures.user_scope(org, "reviewer")
+
+    {result, queries, _rows} =
+      count_queries(fn ->
+        ControlActivations.approve(reviewer, request.activation_request_id, "Reviewed fleet")
+      end)
+
+    assert {:ok, _request, _decision, _approved} = result
+
+    latest = Drafts.latest_many(org, mission_id, Enum.map(pinned_revisions(c), &elem(&1, 0)))
+
+    pinned =
+      Enum.count(pinned_revisions(c), fn {id, revision} ->
+        revision != nil and revision == latest[id].configuration_revision_id
+      end)
+
+    {queries, pinned}
+  end
+
+  # {spacecraft_id, the reviewed revision id its metadata carries (nil before admission)}.
+  defp pinned_revisions(c) do
+    c.org
+    |> Cadence.SpacecraftStore.list_spacecraft(c.mission.mission_id)
+    |> Enum.map(&{&1.spacecraft_id, &1.metadata["spacecraft_configuration_revision_id"]})
+  end
+
   @tag timeout: 300_000
   test "a 550-spacecraft fleet is one review: there is no batch cap (#734)", c do
     fleet = [
@@ -364,16 +515,18 @@ defmodule Cadence.Activations.FleetConfigurationTest do
     end
   end
 
-  defp save(c, craft, commanding \\ true) do
+  defp save(c, craft, commanding \\ true, overrides \\ %{}) do
     current = Drafts.snapshot(c.mission, craft)
 
     document =
-      Map.merge(SpacecraftConfigurationInput.empty(), %{
+      SpacecraftConfigurationInput.empty()
+      |> Map.merge(%{
         "catalog_revision_id" => c.revision.catalog_revision_id,
         "telemetry_enabled" => true,
         "commanding_enabled" => commanding,
         "handled_apids" => [42]
       })
+      |> Map.merge(overrides)
 
     :ok =
       Fixtures.change_set_switches!(

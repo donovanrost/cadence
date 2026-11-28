@@ -60,12 +60,17 @@ defmodule CadenceWeb.Console.CommandGroupChannelTest do
 
   test "pushes the group on join and again when it changes", c do
     {:ok, _reply, _socket} = subscribe_and_join(c.socket, topic(c), %{})
-    assert_push("group", %{seq: 1, group: %{state: "queued"}}, 2_000)
+    assert_push("group", %{seq: 1, group: %{state: "queued"} = pushed}, 2_000)
+    # #795: the push carries the page totals, never the targets or events themselves.
+    refute Map.has_key?(pushed, :targets) or Map.has_key?(pushed, :events)
+    assert %{total: _, revision: _, next_cursor: _} = pushed.targets_page
+    assert %{total: _, next_cursor: _} = pushed.events_page
 
     {:ok, _} =
       GroupAbort.abort(c.scope, c.mission.mission_id, c.group.command_group_id, "Stand down")
 
-    assert_push("group", %{seq: 2, group: %{state: "aborted"}}, 3_000)
+    assert_push("group", %{seq: 2, group: %{state: "aborted"} = aborted}, 3_000)
+    refute Map.has_key?(aborted, :targets) or Map.has_key?(aborted, :events)
   end
 
   test "an unknown group or another organization's mission is refused", c do

@@ -2,7 +2,7 @@
 import { computed } from "vue";
 import { targetVerifyTime } from "../groups/verifyTimes.ts";
 import { layoutMatrix, type FleetSpacecraft } from "@/features/fleet/index.ts";
-import type { Group } from "../groups/show.ts";
+import type { Group, GroupTarget } from "../groups/show.ts";
 import { LOOK_WORDS, legendLooks, targetLook, type CellLook } from "../groups/matrix.ts";
 import { targetStageWord } from "../groups/expiry.ts";
 
@@ -10,13 +10,17 @@ import { targetStageWord } from "../groups/expiry.ts";
  * U1 Targets matrix (CommandFlow C3): one cell per target in plane rows (by slot), its stage as a
  * look, with a legend. Pointer-only and hidden from assistive tech; the target list under it is
  * the accessible path, and a summary sentence says the counts.
+ *
+ * #795: it draws the targets the list has loaded (`targets`), so the cells and the rows under
+ * them always agree; a group of thousands fills in as the list pages.
  */
 const props = defineProps<{
   group: Group;
+  targets: readonly GroupTarget[];
   fleet: readonly FleetSpacecraft[];
 }>();
 const stageOf = computed(
-  () => new Map(props.group.targets.map((t) => [t.spacecraft_id, t.stage] as const)),
+  () => new Map(props.targets.map((t) => [t.spacecraft_id, t.stage] as const)),
 );
 const layout = computed(() => layoutMatrix(props.fleet.filter((sc) => stageOf.value.has(sc.id))));
 const CLASS: Readonly<Record<CellLook, string>> = {
@@ -30,12 +34,12 @@ const CLASS: Readonly<Record<CellLook, string>> = {
   expired: "border border-dashed border-text-3",
   unverifiable: "border border-stale bg-stale-deep",
 };
-const targetOf = computed(() => new Map(props.group.targets.map((t) => [t.spacecraft_id, t])));
+const targetOf = computed(() => new Map(props.targets.map((t) => [t.spacecraft_id, t])));
 const lookOf = (sc: FleetSpacecraft | null) => {
   const t = sc ? targetOf.value.get(sc.id) : undefined;
   return t ? targetLook(t) : null;
 };
-const legend = computed(() => legendLooks(props.group.targets));
+const legend = computed(() => legendLooks(props.targets));
 /** The cell's title: name · stage (an expired one reads 'Expired') · verify time. */
 const titleOf = (sc: FleetSpacecraft) => {
   const t = targetOf.value.get(sc.id);
@@ -46,7 +50,7 @@ const titleOf = (sc: FleetSpacecraft) => {
 const summary = computed(() =>
   legend.value
     .map((l) => {
-      const n = props.group.targets.filter((t) => targetLook(t) === l).length;
+      const n = props.targets.filter((t) => targetLook(t) === l).length;
       return `${n} ${LOOK_WORDS[l].toLowerCase()}`;
     })
     .join(", "),
@@ -55,7 +59,7 @@ const summary = computed(() =>
 
 <template>
   <div v-if="layout.rows.length" class="flex flex-col gap-2 px-4 py-3">
-    <p class="sr-only">Targets by stage: {{ summary }}.</p>
+    <p class="sr-only">Targets shown by stage: {{ summary }}.</p>
     <div aria-hidden="true" class="flex flex-col gap-[3px] overflow-x-auto">
       <div v-for="row in layout.rows" :key="row.key" class="flex items-center gap-2">
         <span class="w-9 flex-none font-mono text-[10px] text-text-4">{{ row.label }}</span>

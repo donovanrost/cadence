@@ -20,7 +20,7 @@ export const opsRoutes: RouteRecordRaw[] = [
     meta: { mode: "ops", nav: "fleet", title: "Fleet" },
   },
   {
-    path: "fleet/:scId(\\d+)/:tab(investigate|telemetry|uplink|passes|configuration|history)?",
+    path: "fleet/:scId(\\d+)/:tab(investigate|telemetry|uplink|passes|configuration|history|points)?",
     name: "ops.spacecraft",
     // Under 768 the on-call paged view (Mobile.md J6) replaces the console layout.
     component: responsive(

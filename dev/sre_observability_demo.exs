@@ -20,7 +20,6 @@ defmodule Cadence.Dev.SreObservabilityDemo do
   alias Cadence.Reads.MissionModels.ActiveBasis
   alias Cadence.Runtime.MissionRuntimeSpec
   alias Cadence.Spacecraft
-  alias Cadence.Telemetry.DataManagement
   alias Cadence.Telemetry.PacketDefinition
   alias Cadence.Telemetry.Profiler
 
@@ -77,8 +76,7 @@ defmodule Cadence.Dev.SreObservabilityDemo do
       command_request_id: "command-sre-demo-#{run_id}",
       command_queue_entry_id: "command-queue-sre-demo-#{run_id}",
       limit_event_id: "limit-event-sre-demo-#{run_id}",
-      nominal_limit_event_id: "limit-event-sre-demo-nominal-#{run_id}",
-      backfill_run_id: "backfill-sre-demo-#{run_id}"
+      nominal_limit_event_id: "limit-event-sre-demo-nominal-#{run_id}"
     }
 
     {:ok, _started} = Application.ensure_all_started(:cadence)
@@ -131,7 +129,6 @@ defmodule Cadence.Dev.SreObservabilityDemo do
          :ok <- persist_alarm_context(ids, now),
          :ok <- persist_command_context(ids, now),
          :ok <- persist_source_health_context(ids, now),
-         :ok <- persist_historical_data_context(ids, now),
          {:ok, management} <- persist_dashboard_management_context(ids, dashboards, now) do
       Observability.log(
         :info,
@@ -761,32 +758,6 @@ defmodule Cadence.Dev.SreObservabilityDemo do
     end
   end
 
-  defp persist_historical_data_context(ids, observed_at) do
-    DataManagement.record_historical_data_workflow_request(
-      :backfill,
-      %{
-        organization_id: ids.organization_id,
-        mission_id: ids.mission_id,
-        data_source_id: "managed_questdb_primary",
-        binding_id: "default_flight_telemetry",
-        realm: :flight,
-        backfill_run_id: ids.backfill_run_id,
-        requested_at: observed_at,
-        requested_by: %{"display_name" => "Telemetry Analyst"},
-        metadata: %{
-          "dashboard_id" => ids.investigation_dashboard_id,
-          "reason" => "Verify completeness around the battery excursion",
-          "demo" => "flight_day_42"
-        }
-      },
-      ["SRE_DEMO_HOUSEKEEPING.battery_voltage"]
-    )
-    |> case do
-      {:ok, _events} -> :ok
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
   defp persist_dashboard_management_context(ids, dashboards, observed_at) do
     runtime_context = %{
       spacecraft_id: ids.spacecraft_id,
@@ -991,7 +962,6 @@ defmodule Cadence.Dev.SreObservabilityDemo do
       Explore:            #{mission_ops_url}/explore
       Timeline:           #{mission_ops_url}/timeline
       Data sources:       #{mission_ops_url}/data-sources
-      Data operations:    #{mission_ops_url}/data-operations
       Activity:           #{mission_ops_url}/dashboards/#{state.dashboard.dashboard_id}/activity
       Diagnostics:        #{mission_ops_url}/dashboards/#{state.dashboard.dashboard_id}/diagnostics
       Editor:             #{mission_ops_url}/dashboards/#{state.dashboard.dashboard_id}/edit

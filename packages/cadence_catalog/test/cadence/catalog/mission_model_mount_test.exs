@@ -14,6 +14,8 @@ defmodule Cadence.Catalog.MissionModelMountTest do
   alias Cadence.Catalog.MissionModel.{Canonical, Compiler, Declaration, Layer}
 
   # Compiled on develop 847a3ea4e, before #444: one import alone must stay byte-identical (#108).
+  # The revision ids are as then. The plan ids are as #443 defines them (from the plan, not the
+  # revision), recomputed once.
   @golden %{
     yaml: %{
       revision_id:
@@ -21,17 +23,17 @@ defmodule Cadence.Catalog.MissionModelMountTest do
       content_sha256: "3e6c81e25696e254b3c08306cd3d8f6fdc29aaf23190f37dae2074b148d1fb32",
       plans: %{
         algorithm:
-          {"mission_model_plan:1822dd9dc18175e126ae0d5e4edf5327e2992508d30335280ced522a6a4aaba0",
-           "1822dd9dc18175e126ae0d5e4edf5327e2992508d30335280ced522a6a4aaba0"},
+          {"mission_model_plan:36db7e86882d7b9629b3384691853db55ff679a5a09a73edd4043259546d9887",
+           "36db7e86882d7b9629b3384691853db55ff679a5a09a73edd4043259546d9887"},
         command:
-          {"mission_model_plan:b2ab7e97449dc1f24e21fe4f2dfb62f71b3f6c0b7d31c59ca38b38da72307b5a",
-           "b2ab7e97449dc1f24e21fe4f2dfb62f71b3f6c0b7d31c59ca38b38da72307b5a"},
+          {"mission_model_plan:78110393fa3e3bd54ddb4170f15a1d077d176a6d2d0b7f6bb303e6d97b18782f",
+           "78110393fa3e3bd54ddb4170f15a1d077d176a6d2d0b7f6bb303e6d97b18782f"},
         monitoring:
-          {"mission_model_plan:f7af4eb8537688244bcf0108aabd524ae7f70119181cb6550fec50d9222de550",
-           "f7af4eb8537688244bcf0108aabd524ae7f70119181cb6550fec50d9222de550"},
+          {"mission_model_plan:f2ae9e2d2513a30e3b69f6bbc7b9fc350b0b36f751d078d1533c3ab896af796a",
+           "f2ae9e2d2513a30e3b69f6bbc7b9fc350b0b36f751d078d1533c3ab896af796a"},
         telemetry:
-          {"mission_model_plan:beec39ad170a1c15738a54b8b30b3a3ce4bf65cfda2acb2e6964970540478e57",
-           "beec39ad170a1c15738a54b8b30b3a3ce4bf65cfda2acb2e6964970540478e57"}
+          {"mission_model_plan:0a170285a78a1438a81bc1a157558b8d80f846bef25e4829a9c55aa41feb8dce",
+           "0a170285a78a1438a81bc1a157558b8d80f846bef25e4829a9c55aa41feb8dce"}
       }
     },
     xtce: %{
@@ -40,17 +42,17 @@ defmodule Cadence.Catalog.MissionModelMountTest do
       content_sha256: "d3db142cd502e85ee9df42575d53306617ec4fa6af3bfbb4dc2f9ff9ec28ebc3",
       plans: %{
         algorithm:
-          {"mission_model_plan:63102f64e2245fc7a315a5c54886a5708d280325181c636a2cca0e1ab7dbb22d",
-           "63102f64e2245fc7a315a5c54886a5708d280325181c636a2cca0e1ab7dbb22d"},
+          {"mission_model_plan:76170c5fa6497d6796c4bfb0b870b5fdb97974b290eb7c862a632596e7ba808b",
+           "76170c5fa6497d6796c4bfb0b870b5fdb97974b290eb7c862a632596e7ba808b"},
         command:
-          {"mission_model_plan:496e3f4bf421a30078636e94d03f7adf011465d898fe971905ed67fa9c73ed58",
-           "496e3f4bf421a30078636e94d03f7adf011465d898fe971905ed67fa9c73ed58"},
+          {"mission_model_plan:370e10394674778a9cc9a02a43a87e1dce88fb78e0465e55e3c45018c3528162",
+           "370e10394674778a9cc9a02a43a87e1dce88fb78e0465e55e3c45018c3528162"},
         monitoring:
-          {"mission_model_plan:1300e92919e9371ab97cc9de034665abdcb86f24fbcc561221efaa919abe3392",
-           "1300e92919e9371ab97cc9de034665abdcb86f24fbcc561221efaa919abe3392"},
+          {"mission_model_plan:f2ae9e2d2513a30e3b69f6bbc7b9fc350b0b36f751d078d1533c3ab896af796a",
+           "f2ae9e2d2513a30e3b69f6bbc7b9fc350b0b36f751d078d1533c3ab896af796a"},
         telemetry:
-          {"mission_model_plan:df41268a64fab4a39630b4f87b8aa47a12f79fa261e1d2ea9faa1a068e403049",
-           "df41268a64fab4a39630b4f87b8aa47a12f79fa261e1d2ea9faa1a068e403049"}
+          {"mission_model_plan:1ce1ef42fd68603c6cd82e0914409e2a5b07d05619a2539c74a69a8cceaa1cdc",
+           "1ce1ef42fd68603c6cd82e0914409e2a5b07d05619a2539c74a69a8cceaa1cdc"}
       }
     }
   }

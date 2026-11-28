@@ -376,6 +376,7 @@ const countdown = computed(() => {
         :mission-id="missionId"
         :pass-id="pass.id"
         :provider-name="pass.source.provider_name"
+        :plan="pass.plan"
       />
       <PassUplinks :mission-id="missionId" :pass-id="pass.id" />
       <ApButton v-if="replan" size="compact" :to="replan">Re-plan</ApButton>

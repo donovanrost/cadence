@@ -9,7 +9,6 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityFirstSeenTest do
   import Cadence.TestSupport.ObservationIdentityFixtures
 
   alias Cadence.Repo
-  alias Cadence.Telemetry.DataManagement
   alias Cadence.Telemetry.Storage
   alias Cadence.Telemetry.Storage.ObservationIdentityStates
 
@@ -258,32 +257,21 @@ defmodule Cadence.Telemetry.Storage.ObservationIdentityFirstSeenTest do
     end
   end
 
-  test "decision items carry the observation through data management" do
-    envelope = envelope(sample_id: "fs-data-management")
+  test "a decision through the storage facade carries the observation" do
+    envelope = envelope(sample_id: "fs-storage-facade")
     fetch = fetch_sample_fun(self(), {:ok, stored_sample(envelope)})
 
-    item = %{
-      observation_identity_id: envelope.observation_identity_id,
-      point_id: envelope.point_id,
-      sample_id: envelope.sample_id,
-      observed_at: DateTime.to_iso8601(envelope.generation_time)
-    }
-
-    attrs = %{
-      organization_id: envelope.organization_id,
-      mission_id: envelope.mission_id,
-      realm: envelope.realm,
-      data_source_id: envelope.data_source_id,
-      binding_id: envelope.binding_id,
-      decision_reason: "operator_review"
-    }
-
-    assert {:ok, %{results: [result]}} =
-             DataManagement.apply_observation_identity_decisions([item], :mark_conflict, attrs,
-               decision_opts: [fetch_sample_fun: fetch, refresh_latest_value?: false]
+    assert {:ok, state} =
+             Storage.apply_observation_identity_decision(
+               envelope.observation_identity_id,
+               :mark_conflict,
+               decision_opts(envelope,
+                 fetch_sample_fun: fetch,
+                 observed_at: DateTime.to_iso8601(envelope.generation_time)
+               )
              )
 
-    assert result.validity_state == :conflict
+    assert state.validity_state == :conflict
     assert_received {:fetch_sample, _query, false}
   end
 

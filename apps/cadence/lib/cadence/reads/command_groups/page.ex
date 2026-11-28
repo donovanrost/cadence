@@ -13,27 +13,20 @@ defmodule Cadence.Reads.CommandGroups.Page do
   another group, mission or list is `{:error, :invalid_cursor}`.
   """
 
+  alias Cadence.Commanding.Groups.CommandGroupEventRow
+
   @default_targets 100
   @max_targets 500
   @default_events 50
   @max_events 200
   @max_q 100
+  # What "Needs you" lists: a target whose delivery failed or can't be told, and one whose lane is
+  # held by a release of unknown outcome (`blocked`, which sits on a waiting target).
+  @needs_you_stages ~w(verify_failed release_failed indeterminate)a
   @stages ~w(awaiting_go queued_for_contact radiating executed verified no_verifier verify_failed
              release_failed indeterminate canceled rejected excluded)
 
   @type error :: :invalid_cursor | {:invalid_params, map()}
-
-  @doc "The view as it is, with the totals of its targets and events and no cursors."
-  @spec totals(map()) :: map()
-  def totals(view) do
-    view
-    |> Map.put(:targets_page, %{
-      total: length(view.targets),
-      revision: revision(view.targets),
-      next_cursor: nil
-    })
-    |> Map.put(:events_page, %{total: length(view.events), next_cursor: nil})
-  end
 
   @doc "The view with its first pages: the first targets and the latest events, with their totals."
   @spec first(map()) :: map()
@@ -52,8 +45,10 @@ defmodule Cadence.Reads.CommandGroups.Page do
     |> Map.put(:events_page, %{total: events.total, next_cursor: events.next_cursor})
   end
 
-  # Changes whenever any target's stage does, so a live client knows when to refetch its pages.
-  defp revision(targets), do: :erlang.phash2(Enum.map(targets, &{&1.index, &1.stage}))
+  # Changes whenever any target, as a page shows it, does: a live client refetches its pages then.
+  # It covers everything a page of targets shows (stage, `blocked`, each member's times, reasons and
+  # release refusal), not just the stage, so a change a client would see on a page it holds moves it.
+  defp revision(targets), do: :erlang.phash2(targets)
 
   @doc "A page of targets. `params`: `limit`, `cursor`, `stage`, `q` (strings, as on the wire)."
   @spec targets(map(), map()) ::
@@ -63,8 +58,13 @@ defmodule Cadence.Reads.CommandGroups.Page do
     with {:ok, limit} <- limit(params, @default_targets, @max_targets),
          {:ok, stages} <- stages(params["stage"]),
          {:ok, q} <- query(params["q"]),
+         {:ok, needs_you} <- flag(params["needs_you"], "needs_you"),
          {:ok, after_index} <- cursor(view, params["cursor"], "targets") do
-      matching = Enum.filter(view.targets, &(stage?(&1, stages) and named?(&1, q)))
+      matching =
+        Enum.filter(
+          view.targets,
+          &(stage?(&1, stages) and named?(&1, q) and needs_you?(&1, needs_you))
+        )
 
       remaining = Enum.filter(matching, &(after_index == nil or &1.index > after_index))
       page = Enum.take(remaining, limit)
@@ -79,21 +79,26 @@ defmodule Cadence.Reads.CommandGroups.Page do
     end
   end
 
-  @doc "A page of events, newest last. A cursor is the page before the one it came from."
+  @doc """
+  A page of events, newest last, optionally only of some `kind`s (a comma list). A cursor is the
+  page before the one it came from.
+  """
   @spec events(map(), map()) ::
           {:ok, %{events: [map()], total: non_neg_integer(), next_cursor: binary() | nil}}
           | {:error, error()}
   def events(view, params) do
     with {:ok, limit} <- limit(params, @default_events, @max_events),
+         {:ok, kinds} <- kinds(params["kind"]),
          {:ok, before_key} <- cursor(view, params["cursor"], "events") do
-      keyed = Enum.map(view.events, &{key(&1), &1})
+      matching = Enum.filter(view.events, &(kinds == nil or to_string(&1.kind) in kinds))
+      keyed = Enum.map(matching, &{key(&1), &1})
       older = Enum.filter(keyed, fn {k, _event} -> before_key == nil or k < before_key end)
       page = Enum.take(older, -limit)
 
       {:ok,
        %{
          events: Enum.map(page, &elem(&1, 1)),
-         total: length(view.events),
+         total: length(matching),
          next_cursor: if(length(older) > limit, do: encode(view, "events", elem(hd(page), 0)))
        }}
     end
@@ -131,6 +136,32 @@ defmodule Cadence.Reads.CommandGroups.Page do
   end
 
   defp stages(_value), do: invalid("stage", "must be a comma list of target stages")
+
+  defp kinds(nil), do: {:ok, nil}
+
+  defp kinds(value) when is_binary(value) do
+    kinds = String.split(value, ",", trim: true)
+
+    if kinds != [] and Enum.all?(kinds, &(&1 in CommandGroupEventRow.kinds())),
+      do: {:ok, kinds},
+      else:
+        invalid(
+          "kind",
+          "must be a comma list of #{Enum.join(CommandGroupEventRow.kinds(), " | ")}"
+        )
+  end
+
+  defp kinds(_value), do: invalid("kind", "must be a comma list of event kinds")
+
+  defp flag(nil, _field), do: {:ok, false}
+  defp flag("true", _field), do: {:ok, true}
+  defp flag("false", _field), do: {:ok, false}
+  defp flag(_value, field), do: invalid(field, "must be true or false")
+
+  defp needs_you?(_target, false), do: true
+
+  defp needs_you?(target, true),
+    do: target.stage in @needs_you_stages or not is_nil(target.blocked)
 
   defp query(nil), do: {:ok, nil}
 

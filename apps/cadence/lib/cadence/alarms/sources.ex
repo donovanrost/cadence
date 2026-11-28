@@ -11,15 +11,7 @@ defmodule Cadence.Alarms.Sources do
   """
 
   alias Cadence.Limits.Event
-
-  @catalog_levels %{
-    "normal" => :normal,
-    "watch" => :caution,
-    "warning" => :caution,
-    "distress" => :critical,
-    "critical" => :critical,
-    "severe" => :critical
-  }
+  alias Cadence.SemanticRuntime.AlarmLevel
 
   @doc """
   Observation for one catalog monitoring transition. `match` is the rule that opened or escalated
@@ -39,7 +31,7 @@ defmodule Cadence.Alarms.Sources do
       subject_key: evaluation_attrs.parameter_id <> "/" <> evaluation_attrs.policy_id,
       parameter_ref: evaluation_attrs.parameter_id,
       point_name: Map.get(update, :qualified_name),
-      level: Map.get(@catalog_levels, to_state, :ignore),
+      level: AlarmLevel.level(to_state),
       source_state: to_state,
       value: Map.get(update, :value),
       observed_at: observed_at,

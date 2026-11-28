@@ -20,18 +20,14 @@ defmodule Cadence.Spacecraft.ConfigKinds.Spacecraft do
   @behaviour Cadence.Platform.ConfigKind
 
   alias Cadence.Platform.ConfigFields, as: F
-  alias Cadence.Platform.ConfigurationSettings
   alias Cadence.Spacecraft, as: SpacecraftAsset
-  alias Cadence.Spacecraft.ConfigKinds.{ArchiveHolds, ScidHolds}
+  alias Cadence.Spacecraft.ConfigKinds.{ArchiveHolds, ScidHolds, SpacecraftChecks}
   alias Cadence.Spacecraft.StagedScids
   alias Cadence.SpacecraftStore
-  alias Cadence.SpacecraftTypeStore
+  alias Cadence.SpacecraftStore.Bulk
 
   @switches ~w(commanding_enabled telemetry_enabled)
   @fields ~w(display_name scid spacecraft_type_id spacecraft_type_version metadata) ++ @switches
-  @governed_key "spacecraft_configuration_revision_id"
-  @synthetic_prefix "spacecraft_configuration_profile_"
-  @pin_keys ["spacecraft_type_id", "spacecraft_type_version"]
 
   @impl true
   def kind, do: "spacecraft"
@@ -41,12 +37,10 @@ defmodule Cadence.Spacecraft.ConfigKinds.Spacecraft do
 
   @impl true
   def load(organization_id, mission_id, ids) do
-    ids
-    |> Enum.chunk_every(100)
-    |> Enum.flat_map(fn chunk ->
-      {:ok, found} = SpacecraftStore.fetch_spacecrafts(organization_id, mission_id, chunk)
-      Map.values(found)
-    end)
+    {:ok, found} = SpacecraftStore.fetch_spacecrafts_in_batches(organization_id, mission_id, ids)
+
+    found
+    |> Map.values()
     |> Enum.reject(&SpacecraftAsset.archived?/1)
     |> Map.new(&{&1.spacecraft_id, document(&1)})
   end
@@ -74,44 +68,124 @@ defmodule Cadence.Spacecraft.ConfigKinds.Spacecraft do
   @impl true
   def validate(_organization_id, _mission_id, :delete, _entity_id, _previous, nil), do: :ok
 
-  def validate(organization_id, mission_id, _action, _entity_id, previous, proposed) do
-    errors =
-      scid_free(organization_id, mission_id, previous, proposed) ++
-        pin_exists(organization_id, mission_id, previous, proposed) ++
-        governed_rule(organization_id, mission_id, previous, proposed)
+  def validate(organization_id, mission_id, action, entity_id, previous, proposed) do
+    change = %{action: action, id: entity_id, current: previous, proposed: proposed}
+    context = SpacecraftChecks.context(organization_id, mission_id, [change])
 
-    if errors == [], do: :ok, else: {:error, errors}
+    case SpacecraftChecks.check(context, change) do
+      {[], _context} -> :ok
+      {errors, _context} -> {:error, errors}
+    end
+  end
+
+  # The whole consecutive run of spacecraft changes is checked and written together (#1049): the
+  # reads once, one statement per kind of write, whatever the fleet's size.
+  @impl true
+  def batchable?(_op), do: true
+
+  @impl true
+  def load_batch(organization_id, mission_id, ids),
+    do: {load(organization_id, mission_id, ids), nil}
+
+  @impl true
+  def write_batch(organization_id, mission_id, transitions, _context) do
+    {checked, _context} =
+      Enum.map_reduce(
+        transitions,
+        SpacecraftChecks.context(organization_id, mission_id, transitions),
+        fn change, context ->
+          case SpacecraftChecks.check(context, change) do
+            {[], context} -> {{:ok, change}, context}
+            {errors, context} -> {{:invalid, errors}, context}
+          end
+        end
+      )
+
+    passed = for {:ok, change} <- checked, do: Map.put(change, :actor, actor(change.op))
+
+    with {:ok, documents} <- write_changes(organization_id, mission_id, passed) do
+      {:ok,
+       Enum.map(checked, fn
+         {:ok, change} -> {:ok, Map.fetch!(documents, change.id)}
+         {:invalid, errors} -> {:invalid, errors}
+       end)}
+    end
   end
 
   @impl true
-  def write(organization_id, mission_id, :create, id, nil, proposed, _options) do
-    spacecraft = asset(organization_id, mission_id, id, proposed)
+  def write(organization_id, mission_id, action, id, previous, proposed, options) do
+    change = %{
+      action: action,
+      id: id,
+      current: previous,
+      proposed: proposed,
+      actor: actor_in(options)
+    }
 
-    with {:ok, created} <- SpacecraftStore.persist_spacecraft(organization_id, spacecraft) do
-      organization_id
-      |> put_switches(mission_id, id, %{}, proposed, created)
-      |> stored(organization_id, mission_id)
+    with {:ok, documents} <- write_changes(organization_id, mission_id, [change]),
+         do: {:ok, Map.fetch!(documents, id), []}
+  end
+
+  # Deletes archive first (they touch no SCID), then updates (SCIDs that move are cleared before
+  # they are set), then creates, so no SCID is ever held twice on the way to the final state.
+  defp write_changes(organization_id, mission_id, changes) do
+    by_action = Enum.group_by(changes, & &1.action)
+    deletes = Map.get(by_action, :delete, [])
+
+    with :ok <- archive(organization_id, mission_id, deletes),
+         {:ok, updated} <-
+           Bulk.update(
+             organization_id,
+             mission_id,
+             Enum.map(Map.get(by_action, :update, []), &update(organization_id, mission_id, &1))
+           ),
+         {:ok, created} <-
+           Bulk.insert(
+             organization_id,
+             mission_id,
+             Enum.map(Map.get(by_action, :create, []), &create(organization_id, mission_id, &1))
+           ) do
+      archived = Map.new(deletes, &{&1.id, nil})
+
+      Enum.reduce(updated ++ created, archived, &Map.put(&2, &1.spacecraft_id, document(&1)))
+      |> then(&{:ok, &1})
     end
   end
 
-  def write(organization_id, mission_id, :update, id, previous, proposed, _options) do
-    spacecraft = asset(organization_id, mission_id, id, proposed)
-
-    with {:ok, updated} <- SpacecraftStore.update_spacecraft(organization_id, spacecraft) do
-      organization_id
-      |> put_switches(mission_id, id, previous || %{}, proposed, updated)
-      |> stored(organization_id, mission_id)
-    end
+  defp archive(organization_id, mission_id, deletes) do
+    deletes
+    |> Enum.group_by(& &1.actor, & &1.id)
+    |> Enum.reduce_while(:ok, fn {actor, ids}, :ok ->
+      case Bulk.archive(organization_id, mission_id, ids, actor) do
+        :ok -> {:cont, :ok}
+        {:error, _id, _reason} = error -> {:halt, error}
+      end
+    end)
   end
 
-  def write(organization_id, mission_id, :delete, id, _previous, nil, options) do
-    actor = Map.get(options || %{}, :actor) || %{"kind" => "change_set"}
+  defp create(organization_id, mission_id, %{id: id, proposed: proposed}) do
+    switches = switch_changes(%{}, proposed)
 
-    case SpacecraftStore.archive_spacecraft(organization_id, mission_id, id, actor) do
-      {:ok, _archived} -> {:ok, nil, []}
-      {:error, reason} -> {:error, reason}
-    end
+    %{
+      asset(organization_id, mission_id, id, proposed)
+      | commanding_enabled: switches[:commanding_enabled],
+        telemetry_enabled: switches[:telemetry_enabled]
+    }
   end
+
+  defp update(organization_id, mission_id, %{id: id, current: previous, proposed: proposed}) do
+    previous = previous || %{}
+
+    %{
+      spacecraft: asset(organization_id, mission_id, id, proposed),
+      switches: switch_changes(previous, proposed),
+      frees_scid?: is_integer(previous["scid"]) and previous["scid"] != proposed["scid"]
+    }
+  end
+
+  defp actor(op), do: actor_in(Map.get(op.payload, "options"))
+
+  defp actor_in(options), do: Map.get(options || %{}, :actor) || %{"kind" => "change_set"}
 
   # Archiving (#49/#50, L22): what's still ahead of it, and whether it has had traffic. A new
   # SCID another mission of the organization flies through a shared provider account (ux U81).
@@ -152,13 +226,6 @@ defmodule Cadence.Spacecraft.ConfigKinds.Spacecraft do
         do: {String.to_existing_atom(key), proposed[key]}
   end
 
-  defp put_switches(organization_id, mission_id, id, previous, proposed, written) do
-    case switch_changes(previous, proposed) do
-      changes when changes == %{} -> {:ok, written}
-      changes -> SpacecraftStore.put_switches(organization_id, mission_id, id, changes)
-    end
-  end
-
   defp pin_pair(%{"spacecraft_type_id" => id, "spacecraft_type_version" => version})
        when is_nil(id) == is_nil(version),
        do: []
@@ -173,83 +240,6 @@ defmodule Cadence.Spacecraft.ConfigKinds.Spacecraft do
   def stage_conflicts(organization_id, mission_id, staged, prepared),
     do: StagedScids.conflicts(organization_id, mission_id, staged, prepared)
 
-  defp scid_free(_organization_id, _mission_id, _previous, %{"scid" => nil}), do: []
-
-  defp scid_free(_organization_id, _mission_id, %{"scid" => scid}, %{"scid" => scid}), do: []
-
-  defp scid_free(organization_id, mission_id, _previous, %{"scid" => scid}) do
-    if SpacecraftStore.scid_taken?(organization_id, mission_id, scid),
-      do: [F.error("scid", "SCID #{scid} is already used in this mission")],
-      else: []
-  end
-
-  defp scid_free(_organization_id, _mission_id, _previous, _proposed), do: []
-
-  defp pin_exists(_organization_id, _mission_id, _previous, %{"spacecraft_type_id" => nil}),
-    do: []
-
-  defp pin_exists(organization_id, mission_id, previous, %{"spacecraft_type_id" => id} = doc) do
-    cond do
-      same_pin?(previous, doc) ->
-        []
-
-      String.starts_with?(id, @synthetic_prefix) ->
-        [F.error("spacecraft_type_id", "Choose a shared profile")]
-
-      match?(
-        {:ok, %{lifecycle_state: :active}},
-        SpacecraftTypeStore.fetch_spacecraft_type_version(
-          organization_id,
-          mission_id,
-          id,
-          doc["spacecraft_type_version"]
-        )
-      ) ->
-        []
-
-      true ->
-        [F.error("spacecraft_type_id", "That profile version doesn't exist")]
-    end
-  end
-
-  defp pin_exists(_organization_id, _mission_id, _previous, _proposed), do: []
-
-  # With profile framing generations on, the profile takes framing authority, so a spacecraft
-  # configured through per-spacecraft review may be re-pinned (DECISIONS #33).
-  defp governed_rule(organization_id, mission_id, previous, proposed) do
-    if ConfigurationSettings.profile_framing_generations?(organization_id, mission_id),
-      do: governed_key_kept(previous && get_in(previous, ["metadata", @governed_key]), proposed),
-      else: governed(previous, proposed)
-  end
-
-  defp same_pin?(nil, _proposed), do: false
-
-  defp same_pin?(previous, proposed),
-    do: Map.take(previous, @pin_keys) == Map.take(proposed, @pin_keys)
-
-  defp governed(%{"metadata" => %{@governed_key => revision}} = previous, proposed)
-       when is_binary(revision) do
-    errors =
-      if same_pin?(previous, proposed),
-        do: [],
-        else: [
-          F.error(
-            "spacecraft_type_id",
-            "Change framing in Communications and submit it for review"
-          )
-        ]
-
-    errors ++ governed_key_kept(revision, proposed)
-  end
-
-  defp governed(_previous, proposed), do: governed_key_kept(nil, proposed)
-
-  defp governed_key_kept(revision, proposed) do
-    if get_in(proposed, ["metadata", @governed_key]) == revision,
-      do: [],
-      else: [F.error("metadata", "#{@governed_key} is managed by configuration review")]
-  end
-
   defp asset(organization_id, mission_id, id, proposed) do
     SpacecraftAsset.new(%{
       spacecraft_id: id,
@@ -262,11 +252,6 @@ defmodule Cadence.Spacecraft.ConfigKinds.Spacecraft do
       metadata: proposed["metadata"] || %{}
     })
   end
-
-  defp stored({:ok, spacecraft}, _organization_id, _mission_id),
-    do: {:ok, document(spacecraft), []}
-
-  defp stored({:error, reason}, _organization_id, _mission_id), do: {:error, reason}
 
   @doc false
   def document(%SpacecraftAsset{} = spacecraft) do
