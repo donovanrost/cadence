@@ -193,7 +193,11 @@ No side effects. Returns:
   telemetry keeps flowing. One `per_target` row per target; a held one has `reason:
   "model_approval_withdrawn"` and `revision_id`, `kind` (`"withdrawn"`), `decided_by` (`{id, name}`,
   a member by their current name, never an email), `decided_at`, `reason_text` (the reason the deciding
-  person gave) and `composition` (the shared composition object). Evidence `{count, composed}`:
+  person gave) and `composition` (the shared composition object). A target that runs a **head**
+  revision (its composition compiled at the mission's authored layer, ADR-020 P3) has no withdrawal
+  of its own: its approval is its base's, so it is held by the base's withdrawal and `revision_id`
+  (here and in `withdrawn_after_go`, the attention item and the mission's affected list) is the
+  withdrawn base (#1100). Evidence `{count, composed}`:
   how many are held, and whether a held target's composition has more than one catalog.
   `hold_basis` names exactly those craft on exactly those decisions (a hash of each held craft's
   `"<revision_id>:withdrawn:<decided_at>"`), so an acknowledgement doesn't cover another craft on
