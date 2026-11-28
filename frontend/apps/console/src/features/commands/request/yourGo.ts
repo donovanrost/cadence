@@ -72,24 +72,15 @@ export function useYourGo(missionId: Ref<MissionId>, spacecraftId: Ref<string | 
 }
 
 /**
- * ux #237, lead's ruling: a target with no name doesn't block GO. The caution says how many, and
- * Technical details keeps their exact ids (U25: ids live there, never in place of a name).
+ * ux #237, lead's ruling: a target with no name doesn't block GO. The caution says how many across
+ * the whole group (#1064: `targets_page.unnamed`, whatever the page), and Technical details lists
+ * their exact ids from the targets read filtered to them (U25: ids live there, never in place of a
+ * name).
  */
-export function namelessTargets(
-  group: Group,
-): Readonly<{ line: string; ids: readonly string[] }> | null {
-  const ids = group.targets.flatMap((t) => (t.name ? [] : [t.spacecraft_id]));
-  const n = ids.length;
-  if (n === 0) return null;
-  // #795: the read carries the first targets only; say so rather than count past them.
-  const among =
-    group.targets.length < group.targets_page.total
-      ? ` among the first ${formatCount(group.targets.length)}`
-      : "";
-  return {
-    line: `This console can't show the name of ${n} target spacecraft${among}. Check ${n === 1 ? "its id" : "their ids"} in Technical details before you give GO.`,
-    ids,
-  };
+export function namelessLine(group: Group): string | null {
+  const n = group.targets_page.unnamed;
+  if (n <= 0) return null;
+  return `This console can't show the name of ${formatCount(n)} target spacecraft. Check ${n === 1 ? "its id" : "their ids"} in Technical details before you give GO.`;
 }
 
 /** "Low power safe · 4 spacecraft", "Mira K. · T+12m", the release sentence and the stack lines. */

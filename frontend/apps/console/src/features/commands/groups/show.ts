@@ -236,6 +236,8 @@ export type GroupEvent = Decoded<typeof eventReader>;
 /** #795: how many targets there are and a revision that moves with any target's stage. */
 const targetsPage = d.object({
   total: d.integer,
+  /** #1064: the targets with no name across the whole group, whatever the page. */
+  unnamed: d.integer,
   revision: d.integer,
   next_cursor: d.nullable(d.string),
 });
