@@ -245,6 +245,17 @@ defmodule Cadence.Runtime.PartitionTripSupervisionTest do
                Runtime.partition_snapshot(@namespace, @mission, delta)
 
       assert_receive {:tripped, :initialized, @mission}, 2_000
+      assert_receive {:tripped_by, owner}, 2_000
+
+      # The backoff is recorded when the coordinator handles the owner's DOWN, and the trip is
+      # announced from inside the owner before it exits: a second request sent right after the
+      # announcement can reach the coordinator ahead of that DOWN (and start a doomed owner,
+      # `:noproc`) instead of finding the backoff. Wait for the owner's exit, then make the
+      # coordinator drain its mailbox: on one node the exit has already queued the coordinator's
+      # DOWN, so the synchronous call below is handled after it.
+      ref = Process.monitor(owner)
+      assert_receive {:DOWN, ^ref, :process, ^owner, _reason}, 2_000
+      _ = :sys.get_state(ctx.coordinator)
 
       assert {:error, {:partition_initialization_backoff, {:replay_id_conflict, _, _}, _}} =
                Runtime.partition_snapshot(@namespace, @mission, delta)
