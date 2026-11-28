@@ -14,9 +14,7 @@ defmodule Cadence.SemanticRuntime.AlarmRules do
   evaluated or replayed under; recovered commits are scoped to its `runtime_basis_sha256`.
   """
 
-  alias Cadence.SemanticRuntime.{MonitoringEvaluator, PlanDecoder, Result}
-
-  @alarm_states [:watch, :warning, :distress, :critical, :severe]
+  alias Cadence.SemanticRuntime.{AlarmLevel, MonitoringEvaluator, PlanDecoder, Result}
 
   @spec for_result(map(), Result.t() | nil) :: %{optional({binary(), binary()}) => map()}
   def for_result(runtime_plans, %Result{monitoring_results: results} = result)
@@ -47,6 +45,6 @@ defmodule Cadence.SemanticRuntime.AlarmRules do
   defp monitoring(runtime_plans),
     do: PlanDecoder.decode(%{monitoring: Map.get(runtime_plans, :monitoring)}).monitoring
 
-  defp alarming?(%{transition: %{to: to}}), do: to in @alarm_states
+  defp alarming?(%{transition: %{to: to}}), do: AlarmLevel.alarming?(to)
   defp alarming?(_result), do: false
 end

@@ -172,6 +172,7 @@ defmodule Cadence.Architecture.PlaneBoundary do
     "lib/cadence/contact_planning/fleet_run_repairs.ex" => :control,
     "lib/cadence/applications/telemetry_decom_catalog_contribution.ex" => :composition,
     "lib/cadence/semantic_runtime.ex" => :shared,
+    "lib/cadence/semantic_runtime/alarm_level.ex" => :shared,
     "lib/cadence/semantic_runtime/algorithm_plan.ex" => :shared,
     "lib/cadence/semantic_runtime/expression_evaluator.ex" => :shared,
     "lib/cadence/semantic_runtime/monitoring_evaluator.ex" => :shared,

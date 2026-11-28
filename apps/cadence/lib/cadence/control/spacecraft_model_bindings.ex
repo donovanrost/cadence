@@ -12,11 +12,38 @@ defmodule Cadence.Control.SpacecraftModelBindings do
 
   def validate(organization_id, mission_id, metadata) do
     with {:ok, entries} <- FleetSnapshot.entries(metadata),
-         :ok <-
-           Enum.reduce_while(entries, :ok, fn {spacecraft_id, entry}, :ok ->
-             validate_entry(organization_id, mission_id, spacecraft_id, entry)
-           end) do
+         :ok <- validate_entries(organization_id, mission_id, entries) do
       validate_models(organization_id, mission_id, entries)
+    end
+  end
+
+  # Each entry's spacecraft exists, its catalog is the model's (or a linked composition's), and its
+  # source endpoints are its own. The spacecraft and endpoints are read once for the whole fleet and
+  # each distinct catalog once, so an approval of a large review runs a number of queries that does
+  # not grow per spacecraft (#1020); the checks and their order per entry are unchanged.
+  defp validate_entries(organization_id, mission_id, entries) do
+    ids = entries |> Map.keys() |> Enum.sort()
+
+    with {:ok, spacecraft} <-
+           SpacecraftStore.fetch_spacecrafts_in_batches(organization_id, mission_id, ids) do
+      endpoints =
+        SourceEndpoints.list_source_endpoints_for_spacecrafts(organization_id, mission_id, ids)
+
+      context = %{spacecraft: spacecraft, endpoints: endpoints}
+      each_entry(ids, entries, {organization_id, mission_id}, context)
+    end
+  end
+
+  defp each_entry(ids, entries, scope, context) do
+    Enum.reduce_while(ids, {:ok, %{}}, fn id, {:ok, memo} ->
+      case validate_entry(scope, id, entries[id], context, memo) do
+        {:ok, memo} -> {:cont, {:ok, memo}}
+        {:error, _reason} = error -> {:halt, error}
+      end
+    end)
+    |> case do
+      {:ok, _memo} -> :ok
+      error -> error
     end
   end
 
@@ -32,23 +59,46 @@ defmodule Cadence.Control.SpacecraftModelBindings do
     end)
   end
 
-  defp validate_entry(organization_id, mission_id, spacecraft_id, entry) do
-    with {:ok, _spacecraft} <-
-           SpacecraftStore.fetch_spacecraft(organization_id, mission_id, spacecraft_id),
-         {:ok, catalog} <-
-           Catalog.fetch_revision(organization_id, mission_id, entry["catalog_revision_id"]),
-         true <-
-           catalog_model?(
-             organization_id,
-             mission_id,
-             catalog,
-             entry["mission_model"]["revision_id"]
-           ),
-         :ok <- validate_endpoints(organization_id, mission_id, spacecraft_id, entry) do
-      {:cont, :ok}
+  defp validate_entry({organization_id, mission_id}, spacecraft_id, entry, context, memo) do
+    catalog_id = entry["catalog_revision_id"]
+    model_id = entry["mission_model"]["revision_id"]
+
+    with :ok <- spacecraft_exists(context.spacecraft, spacecraft_id),
+         {:ok, catalog, memo} <- catalog(organization_id, mission_id, catalog_id, memo),
+         {:ok, true, memo} <- catalog_model(organization_id, mission_id, catalog, model_id, memo),
+         :ok <- validate_endpoints(context.endpoints, spacecraft_id, entry) do
+      {:ok, memo}
     else
-      false -> {:halt, {:error, :spacecraft_catalog_model_mismatch}}
-      {:error, reason} -> {:halt, {:error, reason}}
+      {:ok, false, _memo} -> {:error, :spacecraft_catalog_model_mismatch}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp spacecraft_exists(spacecraft, id),
+    do: if(is_map_key(spacecraft, id), do: :ok, else: {:error, :spacecraft_not_found})
+
+  defp catalog(organization_id, mission_id, catalog_id, memo) do
+    case memo do
+      %{{:catalog, ^catalog_id} => catalog} ->
+        {:ok, catalog, memo}
+
+      _ ->
+        with {:ok, catalog} <- Catalog.fetch_revision(organization_id, mission_id, catalog_id),
+             do: {:ok, catalog, Map.put(memo, {:catalog, catalog_id}, catalog)}
+    end
+  end
+
+  # Each distinct (catalog, model revision) pair is decided once.
+  defp catalog_model(organization_id, mission_id, catalog, model_id, memo) do
+    key = {:model, catalog.catalog_revision_id, model_id}
+
+    case memo do
+      %{^key => answer} ->
+        {:ok, answer, memo}
+
+      _ ->
+        answer = catalog_model?(organization_id, mission_id, catalog, model_id)
+        {:ok, answer, Map.put(memo, key, answer)}
     end
   end
 
@@ -153,12 +203,11 @@ defmodule Cadence.Control.SpacecraftModelBindings do
 
   defp profile_framing(_entry), do: nil
 
-  defp validate_endpoints(organization_id, mission_id, spacecraft_id, entry) do
-    Enum.reduce_while(entry["source_endpoint_ids"], :ok, fn id, :ok ->
-      case SourceEndpoints.fetch_source_endpoint(organization_id, mission_id, id) do
-        {:ok, %{spacecraft_id: ^spacecraft_id}} -> {:cont, :ok}
-        _ -> {:halt, {:error, :spacecraft_model_source_mismatch}}
-      end
-    end)
+  defp validate_endpoints(endpoints, spacecraft_id, entry) do
+    own = endpoints |> Map.get(spacecraft_id, []) |> MapSet.new(& &1.source_endpoint_id)
+
+    if Enum.all?(entry["source_endpoint_ids"], &MapSet.member?(own, &1)),
+      do: :ok,
+      else: {:error, :spacecraft_model_source_mismatch}
   end
 end

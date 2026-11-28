@@ -8,9 +8,10 @@ defmodule Cadence.SemanticRuntime.MonitoringEvaluator do
 
   @spec evaluate(MonitoringPlan.t(), Update.t(), map(), map()) :: {MonitoringResult.t(), map()}
   def evaluate(%MonitoringPlan{} = plan, %Update{} = update, latest, prior) do
+    {prior, rule_changed} = apply_rule_digest(plan, prior)
     {rules, context_name} = select_rules(plan, latest)
     evaluated = evaluated_state(plan, update, rules)
-    next = advance_state(plan, evaluated, prior)
+    next = plan |> advance_state(evaluated, prior) |> put_rule_digest(plan)
 
     result = %MonitoringResult{
       policy_id: plan.policy_id,
@@ -22,11 +23,44 @@ defmodule Cadence.SemanticRuntime.MonitoringEvaluator do
       transition: transition(Map.get(prior, :effective_state, :normal), next.effective_state),
       matched_context: context_name,
       violation_count: next.violation_count,
-      conformance_count: next.conformance_count
+      conformance_count: next.conformance_count,
+      metadata: rule_changed_metadata(rule_changed)
     }
 
     {result, next}
   end
+
+  # A change of the rules in force (#451 T2, contract 6): the persistence counters start again, the
+  # effective state is kept (an open alarm survives a threshold edit and is judged anew by the next
+  # sample), and the result says `rule_changed`. A state with no digest yet (first evaluation, or one
+  # written before plans carried digests) adopts the plan's without a reset, and a plan with no
+  # digest changes nothing, so legacy results, state and snapshots stay as they were. The change is
+  # in `metadata`, never a struct field: partition replay verifies results by equality.
+  defp apply_rule_digest(%MonitoringPlan{rule_digest: nil}, prior), do: {prior, nil}
+
+  defp apply_rule_digest(%MonitoringPlan{rule_digest: digest}, prior) do
+    case Map.get(prior, :rule_digest) do
+      nil ->
+        {prior, nil}
+
+      ^digest ->
+        {prior, nil}
+
+      previous ->
+        reset =
+          Map.merge(prior, %{violation_count: 0, conformance_count: 0, candidate_state: nil})
+
+        {reset, %{from: previous, to: digest}}
+    end
+  end
+
+  defp put_rule_digest(next, %MonitoringPlan{rule_digest: nil}), do: next
+
+  defp put_rule_digest(next, %MonitoringPlan{rule_digest: digest}),
+    do: Map.put(next, :rule_digest, digest)
+
+  defp rule_changed_metadata(nil), do: %{}
+  defp rule_changed_metadata(change), do: %{rule_changed: change}
 
   @doc """
   The rule behind an update's evaluated state, for the alarm hook (flight events):
