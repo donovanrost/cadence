@@ -172,9 +172,16 @@ defmodule Cadence.Projections.DataSources.Watermarks do
       |> Map.merge(%{source_binding_id: nil, realm: nil, replay_run_id: nil, dataset: nil})
       |> SourceWatermarkEvent.source_watermark_key()
 
-    case fetch_source_watermark_status(exact_key) do
-      {:ok, status} -> {:ok, status}
-      {:error, :source_watermark_status_not_found} -> fetch_source_watermark_status(source_key)
+    # One statement for both keys, the exact one preferred (#1058; it was a read, then a second).
+    rows =
+      StatusRow
+      |> where([row], row.source_watermark_key in ^Enum.uniq([exact_key, source_key]))
+      |> Repo.all()
+
+    case Enum.find(rows, &(&1.source_watermark_key == exact_key)) ||
+           Enum.find(rows, &(&1.source_watermark_key == source_key)) do
+      nil -> {:error, :source_watermark_status_not_found}
+      row -> {:ok, StatusRow.to_domain(row)}
     end
   end
 

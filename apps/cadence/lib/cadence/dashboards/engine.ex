@@ -16,6 +16,7 @@ defmodule Cadence.Dashboards.Engine do
     DashboardContract,
     DashboardResolveRequest,
     DashboardResolveResult,
+    DataSourceRegistry,
     FrameMaterializer,
     HydratedResolveRequest,
     LimitSelectedClockAudit,
@@ -53,8 +54,11 @@ defmodule Cadence.Dashboards.Engine do
   @spec resolve_hydrated(HydratedResolveRequest.t(), keyword()) :: DashboardResolveResult.t()
   def resolve_hydrated(%HydratedResolveRequest{} = hydrated_request, opts \\ [])
       when is_list(opts) do
-    plan_result = plan_hydrated(hydrated_request, opts)
     request = HydratedResolveRequest.unwrap(hydrated_request)
+
+    # One read of the registry for the whole resolve (#1058).
+    opts = DataSourceRegistry.with_snapshot(opts, request.organization_id, request.mission_id)
+    plan_result = plan_hydrated(hydrated_request, opts)
 
     request
     |> execute_plan(plan_result, opts)
