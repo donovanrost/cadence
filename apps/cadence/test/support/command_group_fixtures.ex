@@ -188,7 +188,7 @@ defmodule Cadence.CommandGroupFixtures do
         number = head.revision_number + 1
 
         {:ok, _version} =
-          AuthoredVersions.record(c.org, c.mission, layer.layer_id, set.change_set_id, number)
+          AuthoredVersions.record(c.org, c.mission, layer.layer_id, set, number)
 
         {:ok, _revision} =
           Ledger.record(
