@@ -237,33 +237,43 @@ defmodule Cadence.Runtime.PartitionTripSupervisionTest do
 
   test "a trip in initialization exits with a shutdown and is backed off, never restarted", ctx do
     delta = key("delta")
+    reason = {:replay_id_conflict, :managed_action_request, "trip-test-initialized"}
+    shutdown = {:shutdown, {:partition_initialization_failed, reason}}
     TrippingRuntimeWriter.configure(@mission, trip: [:initialized], notify: self())
     starts = count_recoveries(delta)
+    test_pid = self()
+
+    # Observe the state returned by the coordinator when it handles the owner's DOWN.
+    # A second request from the test could arrive before backoff starts or after it expires.
+    notify_on_shutdown = fn
+      :coordinator, {:noreply, %{partition_backoff: %{^delta => entry}}}, _server ->
+        send(test_pid, {:backoff_recorded, entry})
+        :done
+
+      :pool, {:in, {:EXIT, _owner, ^shutdown}}, _server ->
+        send(test_pid, :owner_shutdown_received)
+        :done
+
+      source, _event, _server ->
+        source
+    end
+
+    :ok = :sys.install(ctx.coordinator, {notify_on_shutdown, :coordinator})
+    :ok = :sys.install(ctx.pool, {notify_on_shutdown, :pool})
 
     capture_log(fn ->
       assert {:error, {:partition_unavailable, _}} =
                Runtime.partition_snapshot(@namespace, @mission, delta)
 
-      assert_receive {:tripped, :initialized, @mission}, 2_000
-      assert_receive {:tripped_by, owner}, 2_000
-
-      # The backoff is recorded when the coordinator handles the owner's DOWN, and the trip is
-      # announced from inside the owner before it exits: a second request sent right after the
-      # announcement can reach the coordinator ahead of that DOWN (and start a doomed owner,
-      # `:noproc`) instead of finding the backoff. Wait for the owner's exit, then make the
-      # coordinator drain its mailbox: on one node the exit has already queued the coordinator's
-      # DOWN, so the synchronous call below is handled after it.
-      ref = Process.monitor(owner)
-      assert_receive {:DOWN, ^ref, :process, ^owner, _reason}, 2_000
-      _ = :sys.get_state(ctx.coordinator)
-
-      assert {:error, {:partition_initialization_backoff, {:replay_id_conflict, _, _}, _}} =
-               Runtime.partition_snapshot(@namespace, @mission, delta)
+      assert_receive {:backoff_recorded, %{reason: ^reason, at: at, until: until}}, 2_000
+      assert until - at == 250
+      assert_receive :owner_shutdown_received, 2_000
     end)
 
-    Process.sleep(100)
+    # The pool handles the EXIT before replying to this call.
+    assert [{_, beta, :worker, _}] = DynamicSupervisor.which_children(ctx.pool)
+    assert beta == ctx.beta_owner
     assert :counters.get(starts, 1) == 1
-    assert PartitionOwner.lookup(@namespace, @mission, delta) == {:error, :partition_not_running}
     assert_untouched(ctx)
   end
 
