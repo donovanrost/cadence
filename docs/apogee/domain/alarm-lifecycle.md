@@ -135,7 +135,7 @@ assignee: %{id, name} | nil}`. Ground-limit rows always carry `last_evaluated_at
 "evaluated 3m ago" and never implies live). On escalation, the `escalated` event is written
 **before** the ack is cleared, so the log shows why the episode is New again.
 
-`Reads.Alarms` / `Reads.LimitAlarmConditions` keep working for the LiveView pages. The SPA reads
+The legacy alarm pages and `Reads.LimitAlarmConditions` are deleted (#1075); the console reads
 episodes.
 
 ## 5. Placement and migration
