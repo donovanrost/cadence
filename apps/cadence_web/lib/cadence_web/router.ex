@@ -84,6 +84,15 @@ defmodule CadenceWeb.Router do
     plug(:put_secure_browser_headers)
   end
 
+  # Dev only (#745): the mail the Local adapter holds, at /dev/mailbox and /dev/mailbox/json, so a
+  # seed working through the public API can read an invitation link. Compiled in only when
+  # dev.exs sets :dev_routes; there is no such route in test or prod builds.
+  if Application.compile_env(:cadence_web, :dev_routes, false) do
+    scope "/dev" do
+      forward("/mailbox", Plug.Swoosh.MailboxPreview)
+    end
+  end
+
   scope "/", CadenceWeb do
     pipe_through(:frontend_release_artifact)
 
