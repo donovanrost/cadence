@@ -77,8 +77,8 @@ defmodule Cadence.Applications.ProviderRegistryTest do
                @scope,
                @host_context,
                %{
-                 "applicationKey" => "comms",
-                 "queryId" => "cadence.comms.overview"
+                 "applicationKey" => "ops_console",
+                 "queryId" => "cadence.ops.workspace"
                }
              )
   end
@@ -186,15 +186,14 @@ defmodule Cadence.Applications.ProviderRegistryTest do
     providers = SurfaceProviderRegistry.providers()
 
     expected_contribution_counts = %{
-      "comms" => 9,
       "telemetry_decom" => 2,
       "derived_telemetry" => 1,
       "limits" => 2,
       "ops_console" => 15
     }
 
-    assert length(SurfaceProviderRegistry.contributions()) == 29
-    assert map_size(providers) == 29
+    assert length(SurfaceProviderRegistry.contributions()) == 20
+    assert map_size(providers) == 20
 
     assert providers
            |> Map.keys()
@@ -202,9 +201,9 @@ defmodule Cadence.Applications.ProviderRegistryTest do
 
     assert :ok = SurfaceProviderRegistry.validate(definitions, providers)
 
-    assert Map.has_key?(providers, {"comms", "cadence.comms.overview"})
+    assert Map.has_key?(providers, {"ops_console", "cadence.ops.workspace"})
 
-    refute Map.has_key?(providers, {"comms", "cadence.comms.provider_list"})
+    refute Map.has_key?(providers, {"ops_console", "cadence.ops.unknown"})
 
     declared_keys =
       for definition <- definitions,
@@ -222,7 +221,7 @@ defmodule Cadence.Applications.ProviderRegistryTest do
     assert {:error, :invalid_application_surface_provider_registry} =
              SurfaceProviderRegistry.validate(
                definitions,
-               Map.delete(providers, {"comms", "cadence.comms.overview"})
+               Map.delete(providers, {"ops_console", "cadence.ops.workspace"})
              )
 
     assert {:error, :invalid_application_surface_provider_registry} =
@@ -230,8 +229,8 @@ defmodule Cadence.Applications.ProviderRegistryTest do
                definitions,
                Map.put(
                  providers,
-                 {"comms", "cadence.comms.unknown"},
-                 Cadence.Reads.ApplicationSurfaces.Comms
+                 {"ops_console", "cadence.ops.unknown"},
+                 Cadence.Reads.ApplicationSurfaces.OpsConsole
                )
              )
 
@@ -241,13 +240,13 @@ defmodule Cadence.Applications.ProviderRegistryTest do
       purpose: :overview,
       scope: :mission,
       placement: :application_workspace,
-      data_contract: %{query_id: "cadence.comms.optional", version: 1},
-      renderer: {:trusted, "cadence.comms.optional"}
+      data_contract: %{query_id: "cadence.ops.optional", version: 1},
+      renderer: {:trusted, "cadence.ops.optional"}
     }
 
     definitions_with_optional_surface =
       Enum.map(definitions, fn
-        %ApplicationDefinition{application_key: "comms"} = definition ->
+        %ApplicationDefinition{application_key: "ops_console"} = definition ->
           %{definition | surfaces: definition.surfaces ++ [optional_surface]}
 
         definition ->

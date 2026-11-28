@@ -8,7 +8,6 @@ defmodule Cadence.Applications.ApplicationDefinitionTest do
     LifecycleContract,
     ResourceClaimDefinition,
     ResourceContract,
-    StatusPlacement,
     SurfaceDefinition
   }
 
@@ -78,45 +77,6 @@ defmodule Cadence.Applications.ApplicationDefinitionTest do
                application
                | availability: :roadmap,
                  surfaces: []
-             })
-  end
-
-  test "requires status placements to be scoped, distinct, and backed by a status query" do
-    application = valid_application()
-
-    placement = %StatusPlacement{
-      placement: :comms_validation,
-      scope: :mission,
-      required?: true
-    }
-
-    assert :ok =
-             ApplicationDefinition.validate(%ApplicationDefinition{
-               application
-               | status_query_id: "cadence.example.status",
-                 status_placements: [placement]
-             })
-
-    assert {:error, :invalid_application_definition} =
-             ApplicationDefinition.validate(%ApplicationDefinition{
-               application
-               | status_placements: [placement]
-             })
-
-    assert {:error, :invalid_application_definition} =
-             ApplicationDefinition.validate(%ApplicationDefinition{
-               application
-               | status_query_id: "cadence.example.status",
-                 status_placements: [placement, placement]
-             })
-
-    assert {:error, :invalid_application_definition} =
-             ApplicationDefinition.validate(%ApplicationDefinition{
-               application
-               | status_query_id: "cadence.example.status",
-                 status_placements: [
-                   %StatusPlacement{placement | scope: :spacecraft}
-                 ]
              })
   end
 

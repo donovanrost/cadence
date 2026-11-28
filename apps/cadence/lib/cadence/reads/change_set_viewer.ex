@@ -3,8 +3,7 @@ defmodule Cadence.Reads.ChangeSetViewer do
   `viewer: %{can_review, review_blocked_reason}` on a change set (ux U79): whether the person
   looking may approve or send back this set, computed up front with the same test the review
   applies (`reviewer_is_author`: they submitted it or authored one of its changes, on a set that
-  needs approval). For every set. (The conversion's `legacy_conversion` marker is added by the
-  console's config controller, which may call `Control`.)
+  needs approval).
   """
 
   alias Cadence.Auth.Scope

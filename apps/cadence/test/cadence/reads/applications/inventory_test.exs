@@ -49,7 +49,7 @@ defmodule Cadence.Reads.Applications.InventoryTest do
         mission_id: @mission_id,
         scope_kind: "mission",
         scope_id: @mission_id,
-        application_key: "comms",
+        application_key: "ops_console",
         application_version: 1,
         lifecycle_state: "disabled",
         metadata: %{}
@@ -67,7 +67,7 @@ defmodule Cadence.Reads.Applications.InventoryTest do
              declared(
                context.scope,
                context.mission_host,
-               %{"comms" => %{}, "limits" => %{}},
+               %{"ops_console" => %{}, "limits" => %{}},
                definitions
              )
 

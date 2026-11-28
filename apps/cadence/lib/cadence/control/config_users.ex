@@ -9,7 +9,7 @@ defmodule Cadence.Control.ConfigUsers do
   name it needs; `count` is always the full number), except `booked_passes`, which is
   `%{count, next_at}`. `transports` is a station's own (always 0 for a transport).
 
-  - routes: active routing rules of any origin (legacy, profile, extra) on it; a rule without a
+  - routes: active routing rules from profiles and extra routes on it; a rule without a
     station is at its transport's station.
   - profile_routes: the latest version of each profile whose rules name it (a station entry
     without a transport means that station's transport).
@@ -88,12 +88,10 @@ defmodule Cadence.Control.ConfigUsers do
     }
   end
 
-  # A rule being removed beside the archive: a legacy rule, or an extra route's rows.
   defp going?(rule, except),
     do:
-      MapSet.member?(except, {"legacy_routing_rule", rule.routing_rule_id}) or
-        (rule.origin == :spacecraft and
-           MapSet.member?(except, {"spacecraft_route", rule.profile_rule_id}))
+      rule.origin == :spacecraft and
+        MapSet.member?(except, {"spacecraft_route", rule.profile_rule_id})
 
   defp transport_station(ctx, transport_id) do
     case Map.get(ctx.transports, transport_id) do

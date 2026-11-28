@@ -24,27 +24,27 @@ const missionCatalog = {
   },
   applications: [
     {
-      applicationKey: "comms_overview",
+      applicationKey: "spacecraft",
       applicationVersion: 1,
-      displayName: "Communications Overview",
-      description: "Mission communications overview.",
-      package: { packageId: "cadence.comms_overview", version: 1 },
+      displayName: "Spacecraft",
+      description: "Mission spacecraft.",
+      package: { packageId: "cadence.spacecraft", version: 1 },
       surface: {
-        surfaceId: "overview",
+        surfaceId: "list",
         version: 1,
         purpose: "overview",
         scope: "mission",
         placement: "application_workspace",
         navigation: { label: "Overview", order: 10 },
-        dataContract: { id: "cadence.comms.overview", version: 1 },
+        dataContract: { id: "cadence.spacecraft.list", version: 1 },
         actions: [],
         renderer: { kind: "federated-vue", exposedModule: "./LegacyApplication" },
       },
       release: {
         federation: "module_federation",
-        releaseId: "comms-overview-v1",
-        remoteName: "cadence_comms",
-        manifestUrl: "/assets/application-host/comms/mf-manifest.json",
+        releaseId: "spacecraft-v1",
+        remoteName: "cadence_spacecraft",
+        manifestUrl: "/assets/application-host/spacecraft/mf-manifest.json",
         exposedModule: "./LegacyApplication",
       },
     },
@@ -100,15 +100,15 @@ const BoundaryStub = defineComponent({
 });
 
 describe("Phoenix host application", () => {
-  it("mounts the route-selected mission Comms surface with fallback navigation", async () => {
+  it("mounts the route-selected mission Spacecraft surface with fallback navigation", async () => {
     const fetcher = vi.fn(async () => Response.json(missionCatalog));
     const wrapper = mount(PhoenixHostApp, {
       props: {
-        applicationKey: "comms_overview",
-        surfaceId: "overview",
+        applicationKey: "spacecraft",
+        surfaceId: "list",
         missionId: "mission-1",
         catalogUrl: "/api/cadence/application-host/v1/catalog",
-        fallbackHref: "/missions/mission-1/comms",
+        fallbackHref: "/missions/mission-1/spacecraft",
         fetcher: fetcher as typeof fetch,
       },
       global: { stubs: { RemoteApplicationBoundary: BoundaryStub } },
@@ -119,7 +119,7 @@ describe("Phoenix host application", () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(wrapper.find("#remote-boundary-stub").exists()).toBe(true);
     expect(wrapper.findComponent(BoundaryStub).props("fallbackHref")).toBe(
-      "/missions/mission-1/comms",
+      "/missions/mission-1/spacecraft",
     );
     wrapper.unmount();
   });
@@ -163,7 +163,7 @@ describe("Phoenix host application", () => {
     const wrapper = mount(PhoenixHostApp, {
       props: {
         applicationKey: "missing_application",
-        surfaceId: "overview",
+        surfaceId: "list",
         missionId: "mission-1",
         catalogUrl: "/catalog",
         fallbackHref: "/missions/mission-1",
@@ -185,8 +185,8 @@ describe("Phoenix host application", () => {
     );
     const wrapper = mount(PhoenixHostApp, {
       props: {
-        applicationKey: "comms_overview",
-        surfaceId: "overview",
+        applicationKey: "spacecraft",
+        surfaceId: "list",
         missionId: "mission-1",
         catalogUrl: "/catalog",
         fallbackHref: "/missions/mission-1",
@@ -214,8 +214,8 @@ describe("Phoenix host application", () => {
     );
     const wrapper = mount(PhoenixHostApp, {
       props: {
-        applicationKey: "comms_overview",
-        surfaceId: "overview",
+        applicationKey: "spacecraft",
+        surfaceId: "list",
         missionId: "mission-1",
         catalogUrl: "/catalog",
         fallbackHref: "/missions/mission-1",

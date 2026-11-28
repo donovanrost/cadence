@@ -66,14 +66,6 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
     try do
       node = configured_node!()
 
-      comms_build =
-        build_release!(
-          node,
-          "@cadence/comms-overview-plugin",
-          Path.join(app_root, "priv/static/assets/application-host/comms"),
-          Path.join(temp_root, "release-build-comms-overview")
-        )
-
       telemetry_build =
         build_release!(
           node,
@@ -100,13 +92,6 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
           [
             package!(
               node,
-              "comms-n-minus-1",
-              comms_build,
-              comms_metadata(:n_minus_1),
-              temp_root
-            ),
-            package!(
-              node,
               "telemetry-decom-n-minus-1",
               telemetry_build,
               telemetry_metadata(:n_minus_1),
@@ -122,7 +107,6 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
           ] ++ fixture_packages.n_minus_1,
         n:
           [
-            package!(node, "comms-n", comms_build, comms_metadata(:n), temp_root),
             package!(
               node,
               "telemetry-decom-n",
@@ -284,7 +268,7 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
   end
 
   # A release build is a function of the committed frontend tree and node, so a clean tree reuses
-  # an earlier run's checked build (six remotes take about a minute; ApplicationReleaseRegistryTest
+  # an earlier run's checked build (both remotes take about a minute; ApplicationReleaseRegistryTest
   # timed out under load). A dirty frontend tree always rebuilds.
   defp build_release!(node, package_name, publication_directory, output_directory) do
     assert File.dir?(publication_directory),
@@ -566,19 +550,6 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
   defp normalize_timestamp(value) do
     {:ok, datetime, 0} = DateTime.from_iso8601(value)
     normalize_datetime(datetime)
-  end
-
-  defp comms_metadata(slot) do
-    metadata(
-      "comms",
-      "cadence.comms",
-      "overview",
-      "cadence.comms.overview",
-      [],
-      "cadence_comms",
-      "federation-browser-comms-#{slot_name(slot)}",
-      released_at(slot)
-    )
   end
 
   defp telemetry_metadata(slot) do
