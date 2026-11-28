@@ -177,6 +177,20 @@ defmodule Cadence.Reads.FleetStatusScaleTest do
 
       assert per_load <= 9
       assert p99 < 250
+
+      # Where the time goes: the two summary reads alone, 100 each.
+      for {name, fun} <- [
+            {"FleetSummary.load", fn -> FleetSummary.load(@org, @mission) end},
+            {"FleetAlarms.load", fn -> FleetAlarms.load(@org, @mission) end}
+          ] do
+        times = for _ <- 1..100, do: elem(:timer.tc(fun), 0) / 1_000
+        sorted = Enum.sort(times)
+
+        IO.puts(
+          "  of which #{name}, #{label}: p50 #{Float.round(Enum.at(sorted, 49), 1)} ms, " <>
+            "p99 #{Float.round(Enum.at(sorted, 98), 1)} ms"
+        )
+      end
     end
 
     measure.("ground limits only")

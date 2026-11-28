@@ -47,20 +47,30 @@ defmodule Cadence.SemanticObservations.FleetAlarms do
       join: l in LatestAlarmStateRow,
       on: l.id == s.worst_state_id,
       where: s.organization_id == ^organization_id and s.mission_id == ^mission_id,
-      select: {s, l}
+      # Only what the fleet needs of the worst alarm, not its whole row (state_document included).
+      select: %{
+        spacecraft_id: s.spacecraft_id,
+        worst_rank: s.worst_rank,
+        active: s.active,
+        last_received_at: s.last_received_at,
+        parameter_id: l.parameter_id,
+        policy_id: l.policy_id,
+        effective_state: l.effective_state,
+        receipt_time: l.receipt_time
+      }
     )
     |> Repo.all()
-    |> Map.new(fn {summary, worst} ->
-      {summary.spacecraft_id,
+    |> Map.new(fn row ->
+      {row.spacecraft_id,
        %{
-         limit_state: if(summary.worst_rank == 2, do: :critical, else: :caution),
-         active: summary.active,
-         last_received_at: summary.last_received_at,
+         limit_state: if(row.worst_rank == 2, do: :critical, else: :caution),
+         active: row.active,
+         last_received_at: row.last_received_at,
          worst: %{
-           parameter_id: worst.parameter_id,
-           policy_id: worst.policy_id,
-           effective_state: worst.effective_state,
-           receipt_time: worst.receipt_time
+           parameter_id: row.parameter_id,
+           policy_id: row.policy_id,
+           effective_state: row.effective_state,
+           receipt_time: row.receipt_time
          }
        }}
     end)
