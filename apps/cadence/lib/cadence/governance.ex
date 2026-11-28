@@ -10,6 +10,8 @@ defmodule Cadence.Governance do
   alias Ecto.Changeset
   alias Ecto.Multi
 
+  alias Cadence.ApplicationDispatch.BindingSetMembership, as: Membership
+
   alias Cadence.ApplicationDispatch.{
     BindingRule,
     BindingSet,
@@ -490,7 +492,8 @@ defmodule Cadence.Governance do
   defp hydrate_rows(
          %BindingSetRow{} = binding_set_row,
          capability_instance_rows,
-         binding_rule_rows
+         binding_rule_rows,
+         preloaded_packets \\ nil
        ) do
     # Bytewise, not by the database's text collation: the hydrated set is hashed (#56).
     capability_instance_rows = Enum.sort_by(capability_instance_rows, & &1.capability_instance_id)
@@ -498,7 +501,7 @@ defmodule Cadence.Governance do
     binding_rule_rows = Enum.sort_by(binding_rule_rows, &{&1.priority, &1.binding_rule_id})
 
     with {:ok, packet_definitions_by_key} <-
-           fetch_capability_instance_packet_definitions(capability_instance_rows),
+           packet_definitions(preloaded_packets, capability_instance_rows),
          {:ok, capability_instances} <-
            hydrate_capability_instances(capability_instance_rows, packet_definitions_by_key),
          capability_instances_by_id <-
@@ -516,6 +519,118 @@ defmodule Cadence.Governance do
          rules: rules
        }}
     end
+  end
+
+  defp packet_definitions(nil, capability_instance_rows),
+    do: fetch_capability_instance_packet_definitions(capability_instance_rows)
+
+  defp packet_definitions(preloaded, _capability_instance_rows), do: {:ok, preloaded}
+
+  ## #450: the runtime's read of a version
+
+  @doc """
+  The binding set for a runtime admission, named by the hash the caller expects (the activation's):
+  a membership version comes back as a `BindingSetIndex.Membership` built from its templates and
+  members without hydrating the cross product; a rows version (old data) as the hydrated set.
+
+  A membership version is admitted only if all of this holds, otherwise the read is refused (closed,
+  with the reason, never a fallback): its stored `content_sha256` is the expected one
+  (`{:mission_runtime_spec_mismatch, :binding_set_content_sha256}`), its members are exactly what
+  was written with it (`:binding_set_members_mismatch`), every artifact it names exists
+  (`{:binding_artifact_missing, sha}`) and still hashes to its key (`{:binding_artifact_tampered,
+  sha}`). The expansion of the whole is not re-hashed here: it is a function of those, and the
+  storage's write guard and the test verifier prove it equals the rows expansion (#447).
+  """
+  @spec fetch_binding_set_for_runtime(binary(), binary(), binary(), pos_integer(), binary()) ::
+          {:ok, BindingSet.t() | Membership.t()} | {:error, term()}
+  def fetch_binding_set_for_runtime(
+        organization_id,
+        mission_id,
+        binding_set_id,
+        version,
+        expected_sha256
+      )
+      when is_binary(organization_id) and is_binary(mission_id) and is_binary(binding_set_id) and
+             is_integer(version) and version > 0 and is_binary(expected_sha256) do
+    case binding_set_row_for_org(organization_id, mission_id, binding_set_id, version) do
+      nil -> {:error, :binding_set_not_found}
+      %BindingSetRow{storage_form: "membership"} = row -> membership_index(row, expected_sha256)
+      %BindingSetRow{} = row -> hydrate_binding_set(row)
+    end
+  end
+
+  defp membership_index(%BindingSetRow{content_sha256: expected} = row, expected) do
+    with {:ok, %{members: members, templates: templates}} <- BindingSetStorage.load_parts(row),
+         {:ok, packets} <- packets_of(members, templates) do
+      {:ok,
+       %Membership{
+         shell: shell(row),
+         content_sha256: expected,
+         members: Map.new(members, &{&1.source_endpoint_ref, &1.sha}),
+         templates: templates,
+         packets: packets,
+         expand_member: &__MODULE__.expand_member/2,
+         expand_all: &__MODULE__.expand_all/1
+       }}
+    end
+  end
+
+  defp membership_index(%BindingSetRow{}, _expected),
+    do: {:error, {:mission_runtime_spec_mismatch, :binding_set_content_sha256}}
+
+  defp shell(%BindingSetRow{} = row),
+    do: %BindingSet{
+      binding_set_id: row.binding_set_id,
+      organization_id: row.organization_id,
+      mission_id: row.mission_id,
+      version: row.version,
+      capability_instances: [],
+      rules: []
+    }
+
+  # The packet definitions every template references, read once: one expansion per template (any
+  # one of its endpoints) is enough to see which definitions its instances name.
+  defp packets_of(members, templates) do
+    sample =
+      members |> Enum.uniq_by(& &1.sha) |> Enum.map(&Map.take(&1, [:sha, :source_endpoint_ref]))
+
+    with {:ok, {instance_rows, _rule_rows}} <- BindingSetStorage.expand(templates, sample) do
+      fetch_capability_instance_packet_definitions(instance_rows)
+    end
+  end
+
+  @doc false
+  # One endpoint's slice of a membership set (or the mission-scoped one: endpoint nil), hydrated by
+  # the same code a full read uses, from the packet definitions the index already holds.
+  @spec expand_member(Membership.t(), binary() | nil) :: BindingSet.t()
+  def expand_member(%Membership{} = index, endpoint) do
+    case Map.fetch(index.members, endpoint) do
+      {:ok, sha} -> expand_members(index, [%{sha: sha, source_endpoint_ref: endpoint}])
+      :error -> index.shell
+    end
+  end
+
+  @doc false
+  # The whole membership set, as `fetch_binding_set` hydrates it (explicit inspection and replay).
+  @spec expand_all(Membership.t()) :: BindingSet.t()
+  def expand_all(%Membership{} = index) do
+    expand_members(
+      index,
+      Enum.map(index.members, fn {endpoint, sha} -> %{sha: sha, source_endpoint_ref: endpoint} end)
+    )
+  end
+
+  defp expand_members(%Membership{shell: shell} = index, members) do
+    row = %BindingSetRow{
+      binding_set_id: shell.binding_set_id,
+      organization_id: shell.organization_id,
+      mission_id: shell.mission_id,
+      version: shell.version
+    }
+
+    {:ok, {instance_rows, rule_rows}} = BindingSetStorage.expand(index.templates, members)
+    {:ok, set} = hydrate_rows(row, instance_rows, rule_rows, index.packets)
+    set
   end
 
   ## #447: binding-set storage form

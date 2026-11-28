@@ -139,6 +139,7 @@ defmodule Cadence.Architecture.ContextBoundary do
     "lib/cadence/persistence/organization_scope.ex" => :adapter,
     "lib/cadence/application_dispatch/binding_rule.ex" => :catalog,
     "lib/cadence/application_dispatch/binding_set.ex" => :catalog,
+    "lib/cadence/application_dispatch/binding_set_membership.ex" => :catalog,
     "lib/cadence/application_dispatch/capability_config.ex" => :catalog,
     "lib/cadence/application_dispatch/capability_instance.ex" => :catalog,
     "lib/cadence/application_dispatch/selector.ex" => :catalog,

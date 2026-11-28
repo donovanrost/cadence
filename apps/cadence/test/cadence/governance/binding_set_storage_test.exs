@@ -293,6 +293,169 @@ defmodule Cadence.Governance.BindingSetStorageTest do
     end
   end
 
+  describe "the runtime's read of a membership version (#450)" do
+    alias Cadence.ApplicationDispatch.BindingSetMembership
+
+    defp runtime_read(id \\ "fleet", version \\ 1) do
+      {:ok, full} = Governance.fetch_binding_set(@org, @mission, id, version)
+      sha = BindingSet.content_sha256(full)
+      {Governance.fetch_binding_set_for_runtime(@org, @mission, id, version, sha), full, sha}
+    end
+
+    test "builds a compact index that selects and expands exactly as the hydrated set does" do
+      assert {:ok, _} = Governance.persist_binding_set(@org, fleet("fleet", 1, 6))
+      {{:ok, %BindingSetMembership{} = index}, full, sha} = runtime_read()
+
+      assert index.content_sha256 == sha
+      # The whole, for explicit inspection and replay: the set a full read gives.
+      assert BindingSetIndex.materialize(index) == full
+
+      # Every partition: each craft's endpoint, an endpoint nothing uses, and a non-endpoint one.
+      partitions =
+        for(n <- 1..6, do: %PartitionKey{affinity: :source_endpoint, value: endpoint(n)}) ++
+          [
+            %PartitionKey{affinity: :source_endpoint, value: "spacecraft_runtime:nobody"},
+            %PartitionKey{affinity: :mission, value: @mission}
+          ]
+
+      for partition <- partitions do
+        assert BindingSetIndex.select(index, partition) == BindingSetIndex.select(full, partition),
+               "partition #{inspect(partition)} selects differently from the hydrated set"
+      end
+    end
+
+    test "selecting a partition reads nothing from the database" do
+      assert {:ok, _} = Governance.persist_binding_set(@org, fleet("fleet", 1, 12))
+      {{:ok, index}, _full, _sha} = runtime_read()
+
+      {_selected, reads} =
+        counted(fn ->
+          BindingSetIndex.select(index, %PartitionKey{
+            affinity: :source_endpoint,
+            value: endpoint(3)
+          })
+        end)
+
+      assert reads == 0
+    end
+
+    test "is refused when the activation names another hash" do
+      assert {:ok, _} = Governance.persist_binding_set(@org, fleet("fleet", 1, 6))
+
+      assert {:error, {:mission_runtime_spec_mismatch, :binding_set_content_sha256}} =
+               Governance.fetch_binding_set_for_runtime(
+                 @org,
+                 @mission,
+                 "fleet",
+                 1,
+                 "not-its-hash"
+               )
+    end
+
+    test "is refused when a member was added after the version was written" do
+      assert {:ok, _} = Governance.persist_binding_set(@org, fleet("fleet", 1, 6))
+      row = version_row("fleet", 1)
+
+      %{rows: [[sha]]} =
+        Repo.query!("SELECT artifact_sha256 FROM governed_binding_set_members LIMIT 1")
+
+      Repo.insert_all("governed_binding_set_members", [
+        %{
+          binding_set_row_id: row.id,
+          organization_id: @org,
+          mission_id: @mission,
+          artifact_sha256: sha,
+          source_endpoint_ref: endpoint(11),
+          inserted_at: DateTime.utc_now()
+        }
+      ])
+
+      {result, _full, _sha} = runtime_read_unchecked("fleet", 1, row.content_sha256)
+      assert {:error, :binding_set_members_mismatch} = result
+    end
+
+    test "is refused when an artifact no longer hashes to its key, or is missing" do
+      assert {:ok, _} = Governance.persist_binding_set(@org, fleet("fleet", 1, 6))
+      row = version_row("fleet", 1)
+
+      # The trigger refuses an update; the test lifts it for itself (the transaction is rolled back).
+      Repo.query!("ALTER TABLE governed_binding_artifacts DISABLE TRIGGER USER")
+
+      %{rows: [[sha]]} =
+        Repo.query!("SELECT artifact_sha256 FROM governed_binding_artifacts LIMIT 1")
+
+      Repo.query!(
+        "UPDATE governed_binding_artifacts SET template = '{\"instances\": [], \"rules\": []}' WHERE artifact_sha256 = $1",
+        [sha]
+      )
+
+      {tampered, _, _} = runtime_read_unchecked("fleet", 1, row.content_sha256)
+      assert {:error, {:binding_artifact_tampered, ^sha}} = tampered
+
+      Repo.query!("SET LOCAL session_replication_role = replica")
+      Repo.query!("DELETE FROM governed_binding_artifacts WHERE artifact_sha256 = $1", [sha])
+
+      {missing, _, _} = runtime_read_unchecked("fleet", 1, row.content_sha256)
+      assert {:error, {:binding_artifact_missing, ^sha}} = missing
+    end
+
+    test "a rows version (old data) comes back as the hydrated set" do
+      assert :ok = persist_as_rows(fleet("old", 1, 3))
+      {:ok, full} = Governance.fetch_binding_set(@org, @mission, "old", 1)
+      sha = BindingSet.content_sha256(full)
+
+      assert {:ok, ^full} =
+               Governance.fetch_binding_set_for_runtime(@org, @mission, "old", 1, sha)
+    end
+
+    test "reads a 1,000-craft version in a number of queries that does not grow, into a small index" do
+      BindingFleet.persist_endpoints!(@org, @mission, 13..1_000)
+      assert {:ok, _} = Governance.persist_binding_set(@org, fleet("small", 1, 100))
+      assert {:ok, _} = Governance.persist_binding_set(@org, fleet("big", 1, 1_000))
+
+      {_, small_reads, _} = read_counted("small")
+      {{:ok, index}, big_reads, full} = read_counted("big")
+
+      assert big_reads == small_reads
+      assert big_reads <= 8
+      # 21k words against 231k (sharing counted once); against 960k flat.
+      assert :erts_debug.size(index) * 8 < :erts_debug.size(full)
+    end
+
+    defp read_counted(id) do
+      {:ok, full} = Governance.fetch_binding_set(@org, @mission, id, 1)
+      sha = BindingSet.content_sha256(full)
+
+      {result, reads} =
+        counted(fn -> Governance.fetch_binding_set_for_runtime(@org, @mission, id, 1, sha) end)
+
+      {result, reads, full}
+    end
+
+    # The result of `fun` and how many queries this process ran inside it.
+    defp counted(fun) do
+      parent = self()
+      handler = "runtime-read-#{System.unique_integer([:positive])}"
+      counter = :counters.new(1, [])
+
+      :telemetry.attach(
+        handler,
+        [:cadence, :repo, :query],
+        fn _event, _measurements, _metadata, _config ->
+          if self() == parent, do: :counters.add(counter, 1, 1)
+        end,
+        nil
+      )
+
+      result = fun.()
+      :telemetry.detach(handler)
+      {result, :counters.get(counter, 1)}
+    end
+
+    defp runtime_read_unchecked(id, version, sha),
+      do: {Governance.fetch_binding_set_for_runtime(@org, @mission, id, version, sha), nil, sha}
+  end
+
   describe "selection (#38)" do
     test "a frame on one craft's endpoint selects only that craft's instances" do
       assert {:ok, _} = Governance.persist_binding_set(@org, fleet("fleet", 1, 6))

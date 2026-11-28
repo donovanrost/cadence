@@ -281,6 +281,7 @@ defmodule Cadence.Architecture.PlaneBoundary do
     "lib/cadence/applications/telemetry_decom/config.ex" => :management,
     "lib/cadence/application_dispatch/binding_rule.ex" => :shared,
     "lib/cadence/application_dispatch/binding_set.ex" => :shared,
+    "lib/cadence/application_dispatch/binding_set_membership.ex" => :shared,
     "lib/cadence/application_dispatch/capability_config.ex" => :shared,
     "lib/cadence/application_dispatch/capability_instance.ex" => :shared,
     "lib/cadence/application_dispatch/selector.ex" => :shared,
