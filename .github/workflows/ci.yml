@@ -325,15 +325,11 @@ jobs:
       - name: Tune Postgres for throwaway test data
         run: scripts/ci/tune_postgres.sh
       - uses: ./.github/actions/setup-cadence
+        with:
+          node: "false"
       - name: mix test --partitions 2
         working-directory: apps/cadence
         run: mix test --partitions 2 --slowest-modules 10
-      - name: Save pnpm store
-        if: github.event_name == 'push' && matrix.partition == 1
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ env.CADENCE_PNPM_STORE }}
-          key: pnpm-v1-${{ runner.os }}-${{ hashFiles('frontend/pnpm-lock.yaml') }}
 
   test-web:
     name: Web tests (${{ matrix.partition }}/2)
@@ -371,6 +367,8 @@ jobs:
       - name: Tune Postgres for throwaway test data
         run: scripts/ci/tune_postgres.sh
       - uses: ./.github/actions/setup-cadence
+        with:
+          node: "false"
       # cadence_web uses Cadence.Repo but, unlike apps/cadence, has no DB setup alias.
       - name: Create and migrate the cadence test database
         working-directory: apps/cadence
@@ -405,6 +403,12 @@ jobs:
           path: apps/cadence_web/priv/static
           if-no-files-found: error
           retention-days: 1
+      - name: Save pnpm store
+        if: github.event_name == 'push'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.CADENCE_PNPM_STORE }}
+          key: pnpm-v1-${{ runner.os }}-${{ hashFiles('frontend/pnpm-lock.yaml') }}
 
   # #242: the console's Playwright specs (e2e and a11y) against a real stack, one per shard.
   # Required through ci-ok (#409). A flaky spec goes to console to fix; it is not a reason to ungate.
