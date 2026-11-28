@@ -27,16 +27,6 @@ defmodule CadenceWeb.MixProject do
     ]
   end
 
-  def cli do
-    [
-      preferred_envs: [
-        "test.browser": :test,
-        "test.browser.full": :test,
-        "test.browser.federation": :test
-      ]
-    ]
-  end
-
   defp elixirc_paths(:test), do: ["lib", "test/support"]
   defp elixirc_paths(_env), do: ["lib"]
 
@@ -90,111 +80,7 @@ defmodule CadenceWeb.MixProject do
         "phoenix_vite.npm vite build",
         "cmd --cd ../../frontend corepack pnpm@11.22.0 run build:publication",
         "phx.digest"
-      ],
-      "test.browser": [
-        "test.browser.federation"
-      ],
-      "test.browser.full": [
-        "test.browser.federation"
-      ],
-      "test.browser.federation": [
-        &run_browser_contract_tests/1,
-        &build_federation_assets/1,
-        &run_federation_browser_tests/1
       ]
     ]
-  end
-
-  # The federation browser tests. With CADENCE_BROWSER_SHARD=k/n (CI's parallel browser jobs)
-  # only every n-th file from the k-th runs, so the order balances the shards; a shard with no
-  # file has nothing to run.
-  @federation_browser_tests []
-
-  # The node contract tests for the browser harness run once: unsharded, or in shard 1.
-  defp run_browser_contract_tests(_args) do
-    case browser_shard() do
-      {k, _n} when k > 1 ->
-        Mix.shell().info("Browser contract tests run in shard 1")
-
-      _unsharded_or_first ->
-        Mix.Task.reenable("cmd")
-
-        Mix.Task.run("cmd", [
-          "--cd",
-          "../../frontend",
-          "corepack",
-          "pnpm@11.22.0",
-          "run",
-          "test:browser:contract"
-        ])
-    end
-  end
-
-  defp run_federation_browser_tests(_args) do
-    files =
-      case browser_shard() do
-        nil -> @federation_browser_tests
-        {k, n} -> shard_files(@federation_browser_tests, k, n)
-      end
-
-    run_browser_files(files)
-  end
-
-  # `mix test` without files would run every browser_smoke test, so an empty shard runs nothing.
-  defp run_browser_files([]),
-    do: Mix.shell().info("No federation browser test files in this shard")
-
-  defp run_browser_files(files) do
-    Mix.Task.reenable("cmd")
-
-    Mix.Task.run(
-      "cmd",
-      ~w(env CADENCE_BROWSER_PROPS_DIFF=true MIX_ENV=test mix test --include browser_smoke
-         --only browser_smoke --slowest-modules 10) ++ files
-    )
-  end
-
-  defp shard_files(files, k, n),
-    do: for({file, index} <- Enum.with_index(files), rem(index, n) == k - 1, do: file)
-
-  defp browser_shard do
-    case System.get_env("CADENCE_BROWSER_SHARD") do
-      nil ->
-        nil
-
-      shard ->
-        with [k, n] <- String.split(shard, "/"),
-             {k, ""} <- Integer.parse(k),
-             {n, ""} <- Integer.parse(n),
-             true <- k in 1..n//1 do
-          {k, n}
-        else
-          _invalid ->
-            Mix.raise("CADENCE_BROWSER_SHARD must be k/n with 1 <= k <= n, got #{shard}")
-        end
-    end
-  end
-
-  # CI builds these assets once (its browser-assets job) and hands them to the browser jobs,
-  # which set CADENCE_BROWSER_ASSETS_PREBUILT=1. Everywhere else the alias builds them itself.
-  defp build_federation_assets(_args) do
-    if System.get_env("CADENCE_BROWSER_ASSETS_PREBUILT") == "1" do
-      unless File.regular?("priv/static/cache_manifest.json") do
-        Mix.raise(
-          "CADENCE_BROWSER_ASSETS_PREBUILT=1 but priv/static has no digested assets " <>
-            "(cache_manifest.json); build them with mix assets.deploy"
-        )
-      end
-
-      Mix.shell().info("Using prebuilt browser assets (CADENCE_BROWSER_ASSETS_PREBUILT=1)")
-    else
-      Mix.Task.reenable("cmd")
-
-      Mix.Task.run("cmd", [
-        "node",
-        "../../frontend/tools/phoenix/run_federation_publication_build.mjs",
-        "assets.deploy"
-      ])
-    end
   end
 end

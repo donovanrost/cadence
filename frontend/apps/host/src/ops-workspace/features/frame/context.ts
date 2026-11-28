@@ -17,9 +17,10 @@ export function contextSections(context: OpsFrameContext) {
   const root = `/missions/${encodeURIComponent(context.mission.mission_id)}`;
   const focus = context.ops_context?.pinned_focus;
   return (context.ops_context?.modules || []).map((section) => {
-    function presentation<C>(title: string, icon: string, path: string, content: C) {
+    // The alarms summary has no legacy page to open (#143): the console owns alarms.
+    function presentation<C>(title: string, icon: string, path: string | null, content: C) {
       const destination =
-        focus?.kind === "command" && focus.id
+        path !== null && focus?.kind === "command" && focus.id
           ? `${path}?focus_command_id=${encodeURIComponent(focus.id)}`
           : path;
       return {
@@ -45,7 +46,7 @@ export function contextSections(context: OpsFrameContext) {
     }
     if (section.key === "alarms") {
       const data = section.data;
-      return presentation("Alarms", "hero-bell-alert", `${root}/ops/alarms`, {
+      return presentation("Alarms", "hero-bell-alert", null, {
         kind: "alarms" as const,
         active: (data?.active_count ?? 0) > 0,
         badges: [

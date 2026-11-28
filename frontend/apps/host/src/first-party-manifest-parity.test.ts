@@ -140,16 +140,6 @@ const expected = [
         [],
       ],
       [
-        "telemetry_explore",
-        "operations",
-        "mission",
-        "ops_workspace",
-        "Telemetry Explore",
-        10,
-        "cadence.ops.telemetry_explore",
-        ["apply_filters", "apply_question"],
-      ],
-      [
         "data_sources",
         "configuration",
         "mission",
@@ -201,26 +191,6 @@ const expected = [
           "retry-deployment-run",
           "requeue-deployment-run",
         ],
-      ],
-      [
-        "alarms",
-        "operations",
-        "mission",
-        "ops_workspace",
-        "Alarms",
-        10,
-        "cadence.ops.alarms",
-        ["filter", "reset_filters"],
-      ],
-      [
-        "timeline",
-        "activity",
-        "mission",
-        "ops_workspace",
-        "Timeline",
-        10,
-        "cadence.ops.timeline",
-        ["apply_timeline_filters", "clear_timeline_selection"],
       ],
     ] as SurfaceRow[],
   },
@@ -291,7 +261,8 @@ describe("first-party federated manifest parity", () => {
     // activation_requests surface left (36 → 35). #671: the Mission Catalog (8) and Spacecraft (9)
     // remotes left (35 → 18). #702: the ops-console data_operations and data_operations_manage
     // surfaces left (18 → 16). #672: the Organization Admin remote's notifications bell left
-    // (16 → 15).
-    expect(surfaceCount).toBe(15);
+    // (16 → 15). #666/#142/#143: the ops-console timeline, telemetry_explore and alarms surfaces
+    // left (15 → 12).
+    expect(surfaceCount).toBe(12);
   });
 });

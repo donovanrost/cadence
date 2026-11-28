@@ -22,10 +22,6 @@ import {
 } from "./host-navigation";
 import { hostBrowserHistory, ownBrowserHistory } from "./host-browser-history";
 
-const TimelinePage = lazyHostPage(
-  "TimelinePage",
-  () => import("../ops-workspace/features/timeline/TimelinePage.vue"),
-);
 const OpsModulePage = lazyHostPage(
   "OpsModulePage",
   () => import("../ops-workspace/features/module-pages/OpsModulePage.vue"),
@@ -343,17 +339,6 @@ onBeforeUnmount(() => {
           :guard-navigation="guardNavigation"
           :refresh="reconnect"
           :refreshing="pending"
-        />
-        <TimelinePage
-          v-else-if="
-            route.kind === 'ops_workspace' && route.workspacePage === 'timeline' && missionContext
-          "
-          :id="route.mountId"
-          :snapshot="committed.snapshot.timeline_page"
-          :organization-id="missionContext.organizationId"
-          :mission-id="missionContext.missionId"
-          :navigate="navigate"
-          :refresh="reconnect"
         />
         <p v-else id="host-route-unavailable" role="alert">This page is unavailable.</p>
       </div>

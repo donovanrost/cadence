@@ -8,10 +8,6 @@ defmodule Cadence.Reads.OpsWorkspace.TimelineTest do
   alias Cadence.Reads.OpsWorkspace.Timeline
   @org "org-workspace-timeline"
   @mission "mission-workspace-timeline"
-  @probe Path.expand(
-           "../../../../../../frontend/apps/host/src/ops-workspace/features/timeline/producer-consumer-probe.mjs",
-           __DIR__
-         )
 
   setup do
     persist_mission_scope(@org, @mission)
@@ -59,9 +55,6 @@ defmodule Cadence.Reads.OpsWorkspace.TimelineTest do
     refute Map.has_key?(doc["selected"], "actor")
     assert {:ok, exclusive} = Timeline.load(c.scope, @mission, %{"to" => "2026-09-02T00:00:00Z"})
     assert Enum.map(exclusive["events"], & &1["id"]) == ["mission_event:older"]
-    {output, status} = System.cmd("node", [@probe, Jason.encode!(doc)], stderr_to_stdout: true)
-    assert status == 0, output
-    assert output =~ "TIMELINE_CONSUMER_OK"
   end
 
   test "bounded recent rows have deterministic ordering and selected evidence can be older than the window",

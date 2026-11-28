@@ -5,20 +5,16 @@
 # (run as: nice -n 19 env ERL_FLAGS="+S 1:1" mise exec -- <command above>)
 # dev/otp_cluster/ is excluded because .credo.exs already covers it (0 findings there).
 # Files outside .credo.exs 'included' must be passed explicitly; passing directories prints nothing.
-# Total: 32 findings in 7 checks. No TODO/FIXME tag findings.
+# Total: 28 findings in 7 checks. No TODO/FIXME tag findings.
 #
 # Format: Check | file:line | message
 # The [trigger: ...] suffix is credo's trigger (e.g. the module to alias).
 
-## Credo.Check.Design.AliasUsage (22)
+## Credo.Check.Design.AliasUsage (18)
 Credo.Check.Design.AliasUsage | apps/cadence/plane_test/management/activation_governance_test.exs:15 | Nested modules could be aliased at the top of the invoking module. [trigger: Ecto.Adapters.SQL.Sandbox]
 Credo.Check.Design.AliasUsage | apps/cadence/plane_test/management/activation_governance_test.exs:16 | Nested modules could be aliased at the top of the invoking module. [trigger: Ecto.Adapters.SQL.Sandbox]
 Credo.Check.Design.AliasUsage | apps/cadence/plane_test/management/activation_governance_test.exs:17 | Nested modules could be aliased at the top of the invoking module. [trigger: Ecto.Adapters.SQL.Sandbox]
 Credo.Check.Design.AliasUsage | apps/cadence_web/browser_test/cadence_web/assets/command_workspace_browser_test.exs:21 | Nested modules could be aliased at the top of the invoking module. [trigger: Cadence.Auth.Scope]
-Credo.Check.Design.AliasUsage | apps/cadence_web/browser_test/cadence_web/assets/ops_initial_state_browser_test.exs:31 | Nested modules could be aliased at the top of the invoking module. [trigger: Cadence.Dashboards.DocumentCodec]
-Credo.Check.Design.AliasUsage | apps/cadence_web/browser_test/cadence_web/assets/ops_initial_state_browser_test.exs:39 | Nested modules could be aliased at the top of the invoking module. [trigger: Cadence.Dashboards.Documents]
-Credo.Check.Design.AliasUsage | apps/cadence_web/browser_test/cadence_web/assets/ops_initial_state_browser_test.exs:58 | Nested modules could be aliased at the top of the invoking module. [trigger: CadenceWeb.Assets.DashboardRenderedViewportRunner]
-Credo.Check.Design.AliasUsage | apps/cadence_web/browser_test/cadence_web/assets/ops_initial_state_browser_test.exs:63 | Nested modules could be aliased at the top of the invoking module. [trigger: CadenceWeb.Assets.DashboardRenderedViewportRunner]
 Credo.Check.Design.AliasUsage | apps/cadence_web/browser_test/cadence_web/assets/settings_browser_test.exs:21 | Nested modules could be aliased at the top of the invoking module. [trigger: Cadence.Auth.Scope]
 Credo.Check.Design.AliasUsage | apps/cadence_web/browser_test/cadence_web/assets/settings_browser_test.exs:69 | Nested modules could be aliased at the top of the invoking module. [trigger: Cadence.Runtime.Missions]
 Credo.Check.Design.AliasUsage | apps/cadence_web/browser_test/cadence_web/assets/settings_browser_test.exs:71 | Nested modules could be aliased at the top of the invoking module. [trigger: Cadence.Governance.ActivationPolicy]

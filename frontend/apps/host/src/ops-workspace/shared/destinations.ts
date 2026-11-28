@@ -25,16 +25,7 @@ export function workspaceGroups(
   });
   return (
     [
-      [
-        "observe",
-        "Observe",
-        [
-          item("dashboards", "Dashboards", "hero-squares-2x2"),
-          item("explore", "Explore", "hero-magnifying-glass"),
-          item("alarms", "Alarms", "hero-bell-alert"),
-          item("timeline", "Timeline", "hero-clock"),
-        ],
-      ],
+      ["observe", "Observe", [item("dashboards", "Dashboards", "hero-squares-2x2")]],
       ["act", "Act", [item("commands", "Commands", "hero-command-line")]],
       [
         "plan",

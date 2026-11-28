@@ -11,7 +11,6 @@
 /** @typedef {import("./browser-diagnostics.ts").RequestEvidence} RequestEvidence */
 /** @typedef {ReturnType<typeof installDiagnostics>} Diagnostics */
 /** @typedef {SignalOptions & {timeout?:number,generation?:GenerationSelection}} RequestWaitOptions */
-/** @typedef {{beforeRequestIds?:Set<string>,generation?:GenerationSelection}} SocketOptions */
 import { record as isRecord } from "../../packages/plugin-sdk/src/admission.ts";
 /** @typedef {import("./cdp-contract.ts").CdpPort} CdpPort */
 /** @typedef {import("./cdp-contract.ts").ChromeChild} ChildProcess */
@@ -1382,21 +1381,6 @@ export function isIgnoredFavicon(record, expectedOrigin) {
   );
 }
 
-/** @param {RequestIdentity|undefined} record @param {GenerationSelection} generation */
-function matchesRequestGeneration(record, generation) {
-  if (generation === undefined || generation === null) return true;
-  const expectedGeneration = typeof generation === "object" ? generation.id : generation;
-  if (record?.generation !== expectedGeneration) return false;
-  if (typeof generation !== "object") return true;
-  if (generation.requestIds?.has(record.requestId)) return false;
-  return !(
-    typeof record.sequence === "number" &&
-    Number.isFinite(record.sequence) &&
-    Number.isFinite(generation.requestSequence) &&
-    record.sequence <= generation.requestSequence
-  );
-}
-
 /** @param {Pick<CdpPort,"on"|"waitForEvent">} client @param {{expectedOrigin?:string|undefined,secrets?:string[]}} [options] */
 export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}) {
   /** @type {Map<string,RequestState>} */
@@ -2636,128 +2620,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
     return match ? snapshotRecord(match) : undefined;
   };
 
-  /** @param {string} expectedOriginValue @param {{beforeRequestIds?:Set<string>,generation?:GenerationSelection}} [options] */
-  const assertPrivateLiveViewWebSocket = (
-    expectedOriginValue,
-    { beforeRequestIds = new Set(), generation } = {},
-  ) => {
-    const normalizedExpectedOrigin = new URL(expectedOriginValue);
-    assert.ok(
-      ["http:", "https:"].includes(normalizedExpectedOrigin.protocol),
-      `LiveView expected origin must use HTTP(S), got ${normalizedExpectedOrigin.protocol}`,
-    );
-    const requiresCausalGeneration = generation && typeof generation === "object";
-    const currentGeneration = generationStateFor(generation);
-    const causalRequestId = requiresCausalGeneration
-      ? currentGeneration?.causalRequestId
-      : undefined;
-    const causalRequestSequence = requiresCausalGeneration
-      ? currentGeneration?.causalRequestSequence
-      : undefined;
-    const liveViewSockets = [...webSockets.values()].filter((socket) => {
-      try {
-        if (typeof socket.url !== "string") return false;
-        const url = new URL(socket.url);
-        return (
-          ["ws:", "wss:"].includes(url.protocol) &&
-          url.pathname === "/live/websocket" &&
-          socket.boundToRequest === true &&
-          !beforeRequestIds.has(socket.requestId) &&
-          matchesPrivateRequestGeneration(
-            {
-              requestId: socket.requestId,
-              generation: socket.generation,
-              sequence: socket.sequence,
-            },
-            generation,
-          ) &&
-          (!requiresCausalGeneration ||
-            (currentGeneration &&
-              causalRequestId !== undefined &&
-              socket.causalRequestId === causalRequestId &&
-              typeof causalRequestSequence === "number" &&
-              socket.observedSequence >= causalRequestSequence))
-        );
-      } catch {
-        return false;
-      }
-    });
-    assert.ok(
-      liveViewSockets.length > 0,
-      `LiveView did not create a websocket transport for the current generation: ${JSON.stringify(
-        [...webSockets.values()].map((socket) => ({
-          requestId: socket.requestId,
-          generation: socket.generation,
-          observedGeneration: socket.observedGeneration,
-          sequence: socket.sequence,
-          boundToRequest: socket.boundToRequest,
-          observedSequence: socket.observedSequence,
-          causalRequestId: socket.causalRequestId,
-          url: socket.url,
-          closed: socket.closed,
-        })),
-      )}`,
-    );
-
-    const connected = liveViewSockets.find((socket) => {
-      const url = new URL(socket.url ?? "");
-      const originHeader = requestHeader({ request: socket.handshakeRequest }, "origin");
-      const socketOrigin = `${url.protocol === "wss:" ? "https" : "http"}://${url.host}`;
-      return (
-        socketOrigin === normalizedExpectedOrigin.origin &&
-        originHeader === normalizedExpectedOrigin.origin &&
-        socket.handshake?.status === 101 &&
-        socket.closed !== true &&
-        !socket.error
-      );
-    });
-    assert.ok(
-      connected,
-      `LiveView websocket did not complete a same-origin HTTP 101 handshake: ${JSON.stringify(
-        liveViewSockets.map((socket) => ({
-          url: socket.url,
-          origin: requestHeader({ request: socket.handshakeRequest }, "origin"),
-          status: socket.handshake?.status,
-          error: socket.error,
-        })),
-      )}`,
-    );
-
-    const fallback = [...records.values()].find((record) => {
-      try {
-        if (typeof record.url !== "string") return false;
-        return (
-          new URL(record.url).pathname === "/live/longpoll" &&
-          !beforeRequestIds.has(record.requestId) &&
-          matchesPrivateRequestGeneration(record, generation)
-        );
-      } catch {
-        return false;
-      }
-    });
-    assert.equal(
-      fallback,
-      undefined,
-      `LiveView fell back to longpoll transport: ${fallback?.url || "unknown request"}`,
-    );
-    assert.deepEqual(
-      webSocketFailures,
-      [],
-      `LiveView websocket transport failed: ${webSocketFailures.join("; ")}`,
-    );
-    const originDiagnostic = [...consoleErrors, ...logErrors].find((message) =>
-      /origin|longpoll/i.test(message),
-    );
-    assert.equal(
-      originDiagnostic,
-      undefined,
-      `LiveView emitted an origin or transport diagnostic: ${originDiagnostic}`,
-    );
-    return socketSnapshot(connected);
-  };
-
   const diagnostics = {
-    assertLiveViewWebSocket: assertPrivateLiveViewWebSocket,
     requests: exposedRequests,
     consoleErrors: exposedConsoleErrors,
     logErrors: exposedLogErrors,
@@ -3196,139 +3059,7 @@ export function installDiagnostics(client, { expectedOrigin, secrets = [] } = {}
       );
     },
   };
-  Object.defineProperty(diagnostics, "assertLiveViewWebSocket", {
-    value: assertPrivateLiveViewWebSocket,
-    enumerable: false,
-    configurable: false,
-    writable: false,
-  });
   return diagnostics;
-}
-
-/** @param {import("./browser-diagnostics.ts").DetachedDiagnostics} diagnostics @param {string} expectedOrigin @param {SocketOptions} [options] */
-function assertDetachedLiveViewWebSocket(
-  { webSockets, webSocketFailures, requests, consoleErrors = [], logErrors = [] },
-  expectedOrigin,
-  { beforeRequestIds = new Set(), generation } = {},
-) {
-  const normalizedExpectedOrigin = new URL(expectedOrigin);
-  assert.ok(
-    ["http:", "https:"].includes(normalizedExpectedOrigin.protocol),
-    `LiveView expected origin must use HTTP(S), got ${normalizedExpectedOrigin.protocol}`,
-  );
-  const requiresCausalGeneration = generation && typeof generation === "object";
-  const causalRequestId = requiresCausalGeneration ? generation.causalRequestId : undefined;
-  const causalRequestSequence = requiresCausalGeneration
-    ? generation.causalRequestSequence
-    : undefined;
-  const liveViewSockets = [...webSockets.values()].filter((socket) => {
-    try {
-      if (typeof socket.url !== "string") return false;
-      const url = new URL(socket.url);
-      return (
-        ["ws:", "wss:"].includes(url.protocol) &&
-        url.pathname === "/live/websocket" &&
-        socket.boundToRequest === true &&
-        !beforeRequestIds.has(socket.requestId) &&
-        matchesRequestGeneration(socket, generation) &&
-        (!requiresCausalGeneration ||
-          (causalRequestId !== undefined &&
-            socket.causalRequestId === causalRequestId &&
-            typeof causalRequestSequence === "number" &&
-            socket.observedSequence >= causalRequestSequence))
-      );
-    } catch {
-      return false;
-    }
-  });
-  assert.ok(
-    liveViewSockets.length > 0,
-    `LiveView did not create a websocket transport for the current generation: ${JSON.stringify(
-      [...webSockets.values()].map((socket) => ({
-        requestId: socket.requestId,
-        generation: socket.generation,
-        observedGeneration: socket.observedGeneration,
-        sequence: socket.sequence,
-        boundToRequest: socket.boundToRequest,
-        observedSequence: socket.observedSequence,
-        causalRequestId: socket.causalRequestId,
-        url: socket.url,
-        closed: socket.closed,
-      })),
-    )}`,
-  );
-
-  const connected = liveViewSockets.find((socket) => {
-    const url = new URL(socket.url ?? "");
-    const originHeader = requestHeader({ request: socket.handshakeRequest }, "origin");
-    const socketOrigin = `${url.protocol === "wss:" ? "https" : "http"}://${url.host}`;
-    return (
-      socketOrigin === normalizedExpectedOrigin.origin &&
-      originHeader === normalizedExpectedOrigin.origin &&
-      socket.handshake?.status === 101 &&
-      socket.closed !== true &&
-      !socket.error
-    );
-  });
-  assert.ok(
-    connected,
-    `LiveView websocket did not complete a same-origin HTTP 101 handshake: ${JSON.stringify(
-      liveViewSockets.map((socket) => ({
-        url: socket.url,
-        origin: requestHeader({ request: socket.handshakeRequest }, "origin"),
-        status: socket.handshake?.status,
-        error: socket.error,
-      })),
-    )}`,
-  );
-
-  const fallback = [...requests.values()].find((record) => {
-    try {
-      if (typeof record.url !== "string") return false;
-      return (
-        new URL(record.url).pathname === "/live/longpoll" &&
-        !beforeRequestIds.has(record.requestId) &&
-        matchesRequestGeneration(record, generation)
-      );
-    } catch {
-      return false;
-    }
-  });
-  assert.equal(
-    fallback,
-    undefined,
-    `LiveView fell back to longpoll transport: ${fallback?.url || "unknown request"}`,
-  );
-  assert.deepEqual(
-    webSocketFailures,
-    [],
-    `LiveView websocket transport failed: ${webSocketFailures.join("; ")}`,
-  );
-
-  const originDiagnostic = [...consoleErrors, ...logErrors].find((message) =>
-    /origin|longpoll/i.test(message),
-  );
-  assert.equal(
-    originDiagnostic,
-    undefined,
-    `LiveView emitted an origin or transport diagnostic: ${originDiagnostic}`,
-  );
-  return connected;
-}
-
-/** @param {import("./browser-diagnostics.ts").DetachedDiagnostics} diagnostics @param {string} expectedOrigin @param {SocketOptions} [options] */
-export function assertLiveViewWebSocket(diagnostics, expectedOrigin, options = {}) {
-  /** @type {unknown} */
-  const privateAssertion = Object.getOwnPropertyDescriptor(
-    diagnostics,
-    "assertLiveViewWebSocket",
-  )?.value;
-  if (typeof privateAssertion === "function" && !nodeTypes.isProxy(privateAssertion)) {
-    /** @type {unknown} */
-    const result = Reflect.apply(privateAssertion, diagnostics, [expectedOrigin, options]);
-    return result;
-  }
-  return assertDetachedLiveViewWebSocket(diagnostics, expectedOrigin, options);
 }
 
 /** @param {CdpPort} client @param {string} expression @param {string} label @param {SignalOptions} [options] @returns {Promise<unknown>} */
@@ -4395,9 +4126,8 @@ export async function armNextActionCsrfRejection(client, signal) {
 
 /**
  * Signs the browser session in through the console's JSON API (L5), from the console sign-in
- * document, then opens `landingPath`, a legacy host page (since §11c the app root redirects to the
- * console). Returns that navigation's request generation, which owns the authenticated LiveView
- * socket.
+ * document, then opens `landingPath` (the console's Now). Returns that navigation's request
+ * generation.
  * @param {CdpPort} client @param {string} loginUrl @param {string} email @param {string} password @param {string} expectedOrigin @param {Diagnostics} diagnostics @param {AbortSignal|undefined} signal @param {string} landingPath
  */
 async function submitSignIn(
@@ -4783,99 +4513,6 @@ async function assertRemoteSurface({
   };
 }
 
-/**
- * The legacy host keeps its shell across in-app navigation. After §11c(B) the only legacy pages
- * that link each other are the ops pages (the ops rail); every sidebar link leaves for the console.
- * So this clicks through the rail and browser history and checks the shell, the rail and the
- * LiveView root survive with no Phoenix navigation.
- * @param {CdpPort} client @param {Diagnostics} diagnostics @param {string} missionId @param {string} origin @param {AbortSignal|undefined} signal
- */
-async function assertPersistentHostNavigation(client, diagnostics, missionId, origin, signal) {
-  reportProgress("checking persistent shell navigation through the ops rail and browser history");
-  const ops = `/missions/${encodeURIComponent(missionId)}/ops`;
-  await navigate(client, `${origin}${ops}/explore`, {
-    expectedOrigin: origin,
-    expectedPath: `${ops}/explore`,
-    diagnostics,
-    signal,
-  });
-  /** @param {string} path */
-  const ready = async (path) => {
-    try {
-      await waitForExpression(
-        client,
-        `(() => {
-        const probe = window.__cadenceNavigationProbe;
-        const shell = document.querySelector('#application-shell');
-        return location.pathname === ${JSON.stringify(path)} && probe?.shell === shell &&
-          probe.phoenixNavigations === 0 && probe.liveRoot === shell?.closest('[data-phx-main]') &&
-          probe.rail === document.querySelector('#ops-nav-rail') &&
-          Boolean(document.querySelector('main h1') && document.querySelector('#host-page-content > *')) &&
-          !document.querySelector('[data-host-page-loading], #ops-module-loading, #ops-module-unavailable, [data-host-page-load-failed]') &&
-          document.querySelectorAll('#cadence-federation-root').length === 0;
-      })()`,
-        `persistent ops navigation to ${path}`,
-        { signal },
-      );
-    } catch (error) {
-      throw new Error(`${errorMessage(error)}\n${diagnostics.describe()}`, { cause: error });
-    }
-  };
-  /** @param {string} path */
-  const click = async (path) => {
-    assert.equal(
-      await evaluate(
-        client,
-        `(() => {
-      const link = [...document.querySelectorAll('#ops-nav-rail a')]
-        .find(link => new URL(link.href).pathname === ${JSON.stringify(path)});
-      if (!link) return false;
-      link.click(); return true;
-    })()`,
-        `click ops rail link ${path}`,
-        { signal },
-      ),
-      true,
-      `ops rail link ${path} exists`,
-    );
-  };
-
-  await waitForExpression(
-    client,
-    "Boolean(document.querySelector('#ops-nav-rail') && window.liveSocket?.isConnected())",
-    "ops rail",
-    { signal },
-  );
-  assert.equal(
-    await evaluate(
-      client,
-      `(() => {
-    const shell = document.querySelector('#application-shell');
-    const rail = document.querySelector('#ops-nav-rail');
-    if (!shell || !rail) return false;
-    window.__cadenceNavigationProbe = { shell, rail, liveRoot: shell.closest('[data-phx-main]'), phoenixNavigations: 0 };
-    window.addEventListener("phx:navigate", () => window.__cadenceNavigationProbe.phoenixNavigations++);
-    return true;
-  })()`,
-      "seed persistent shell identity",
-      { signal },
-    ),
-    true,
-  );
-  await ready(`${ops}/explore`);
-  await click(`${ops}/alarms`);
-  await ready(`${ops}/alarms`);
-  await click(`${ops}/timeline`);
-  await ready(`${ops}/timeline`);
-  await evaluate(client, "history.back()", "ops navigation back", { signal });
-  await ready(`${ops}/alarms`);
-  await evaluate(client, "history.forward()", "ops navigation forward", { signal });
-  await ready(`${ops}/timeline`);
-  await diagnostics.drainLateEvents(300, signal);
-  diagnostics.assertClean("persistent host navigation");
-  reportProgress("shell identity, ops rail and back/forward navigation retained");
-}
-
 /** @param {string} lifecycleUrl @param {"promote"|"rollback"} transition @param {Record<import("./browser-diagnostics.ts").ApplicationKey,string>} expectedReleaseIds */
 export async function applyReleaseTransition(lifecycleUrl, transition, expectedReleaseIds) {
   const endpoint = assertHttpUrl(
@@ -4905,6 +4542,8 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
   const opsUrl = requiredArg(args, "--ops-url");
   const loginUrl = requiredArg(args, "--login-url");
   const email = requiredArg(args, "--login-email");
+  const orgSlug = requiredArg(args, "--org-slug");
+  const missionSlug = requiredArg(args, "--mission-slug");
   const missionId = requiredArg(args, "--mission-id");
   assert.ok(secret?.password, "structured login secret is required");
 
@@ -4945,7 +4584,8 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
   reportProgress("unauthenticated catalog containment observed");
 
   reportProgress("authenticating browser session");
-  const authenticatedGeneration = await submitSignIn(
+  // The mission's entry is the console's Now; the federated surfaces below are visited from it.
+  await submitSignIn(
     client,
     loginUrl,
     email,
@@ -4953,26 +4593,16 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
     origin,
     diagnostics,
     signal,
-    // The LiveView socket assertions below need a legacy host page: the timeline is one.
-    `/missions/${encodeURIComponent(missionId)}/ops/timeline`,
+    `/console/${encodeURIComponent(orgSlug)}/${encodeURIComponent(missionSlug)}/now`,
+  );
+  // Finish this visit before navigating away so its module requests have a terminal event.
+  await waitForExpression(
+    client,
+    "Boolean(document.querySelector('main h1'))",
+    "authenticated console Now",
+    { signal },
   );
   reportProgress("authenticated browser session ready");
-  await waitForExpression(
-    client,
-    "window.liveSocket?.isConnected() === true",
-    "authenticated LiveView connection",
-    { signal },
-  );
-  diagnostics.assertLiveViewWebSocket(origin, { generation: authenticatedGeneration });
-  reportProgress("authenticated LiveView websocket asserted");
-  // The shell and socket can be ready while the lazy timeline page is still loading.
-  // Finish this visit before navigating away so its module request has a terminal event.
-  await waitForExpression(
-    client,
-    "Boolean(document.querySelector('main h1') && document.querySelector('#host-page-content > *') && !document.querySelector('[data-host-page-loading], #ops-module-loading'))",
-    "authenticated mission timeline page",
-    { signal },
-  );
 
   const opsSurface = {
     client,
@@ -5006,7 +4636,6 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
     readPublishedHostBody: true,
   });
   reportProgress("Ops Console workspace mounted");
-  await assertPersistentHostNavigation(client, diagnostics, missionId, origin, signal);
 
   reportProgress("proving manifest failure containment and immutable-release retry");
   await assertContainedRemoteFailureAndRetry({

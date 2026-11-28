@@ -74,7 +74,7 @@ function clickLink(
   href: string,
   attrs = "",
   options: MouseEventInit = {},
-  current = "https://cadence.test/missions/m-1/ops/timeline",
+  current = "https://cadence.test/missions/m-1/ops/commands",
 ) {
   const navigate = vi.fn();
   cleanups.push(installHostNavigation(document, { href: current } as Location, navigate));
@@ -93,7 +93,7 @@ function clickLink(
 
 test("ordinary links across feature areas are handled by the Vue host", () => {
   const { link, preventedByNavigation } = clickLink(
-    "/missions/m-1/ops/alarms",
+    "/missions/m-1/ops/planning",
     'data-phx-link="redirect"',
   );
   expect(link.dataset.phxLink).toBe("redirect");
@@ -101,8 +101,8 @@ test("ordinary links across feature areas are handled by the Vue host", () => {
 });
 
 test("plain remote links and query changes use the same host navigation", () => {
-  expect(clickLink("/missions/m-1/ops/timeline").navigate).toHaveBeenCalledWith(
-    "/missions/m-1/ops/timeline",
+  expect(clickLink("/missions/m-1/ops/contacts").navigate).toHaveBeenCalledWith(
+    "/missions/m-1/ops/contacts",
     false,
   );
   expect(
@@ -141,8 +141,8 @@ test("remote component handlers can cancel navigation before the host processes 
   expect(navigate).not.toHaveBeenCalled();
 });
 
-test("the mission timeline resolves to the operational shell", () => {
-  const route = hostRoute(new URL("https://cadence.test/missions/mission-1/ops/timeline"));
-  expect(route?.workspacePage).toBe("timeline");
+test("the mission commands page resolves to the operational shell", () => {
+  const route = hostRoute(new URL("https://cadence.test/missions/mission-1/ops/commands"));
+  expect(route?.kind === "ops_module" && route.contribution).toBe("commanding.monitor");
   expect(shellForRoute(required(route))).toBe("ops");
 });

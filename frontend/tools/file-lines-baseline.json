@@ -23,10 +23,6 @@
     "lines": 418,
     "owner": "legacy (#80): frozen, leaves with its row"
   },
-  "modules/dashboards-and-exploration/src/features/exploration/ExplorationPanel.vue": {
-    "lines": 411,
-    "owner": "legacy (#80): frozen, leaves with its row"
-  },
   "apps/host/src/phoenix-catalog-client.ts": {
     "lines": 403,
     "owner": "legacy (#80): frozen, leaves with its row"

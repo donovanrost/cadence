@@ -63,5 +63,5 @@ test("operational context preserves unavailable data, severity and command focus
   expect(health.content.available).toBe(false);
   expect(health.observed_at_label).toBe("12:00:00 UTC");
   expect(alarms.content.badges[0]).toMatchObject({ count: 2, label: "Critical" });
-  expect(alarms.destination).toBe("/missions/mission%2F1/ops/alarms?focus_command_id=cmd-1");
+  expect(alarms.destination).toBeNull();
 });

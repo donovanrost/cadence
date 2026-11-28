@@ -17,12 +17,6 @@
       "path": "./modules/commanding"
     },
     {
-      "path": "./modules/dashboards-and-exploration"
-    },
-    {
-      "path": "./modules/limits-and-alarming"
-    },
-    {
       "path": "./modules/planning-and-contacts"
     },
     {

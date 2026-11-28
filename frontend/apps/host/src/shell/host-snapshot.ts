@@ -19,12 +19,10 @@ function envelope<T>(read: (value: unknown) => T) {
   };
 }
 const contributedPage = envelope(object({ id: optional(string), token: maybe(string) }));
-const featurePayload = (value: unknown) => value;
 const snapshotFields = object({
   path: string,
   context: readHostContext,
   ops_page: maybe(contributedPage),
-  timeline_page: featurePayload,
 });
 export type HostSnapshot = ReturnType<typeof snapshotFields>;
 export function readHostSnapshot(value: unknown): HostSnapshot {

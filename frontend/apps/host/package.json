@@ -15,9 +15,7 @@
   },
   "dependencies": {
     "@cadence/commanding": "workspace:*",
-    "@cadence/dashboards-and-exploration": "workspace:*",
     "@cadence/design-tokens": "workspace:*",
-    "@cadence/limits-and-alarming": "workspace:*",
     "@cadence/planning-and-contacts": "workspace:*",
     "@cadence/plugin-sdk": "workspace:*",
     "@cadence/ui": "workspace:*",

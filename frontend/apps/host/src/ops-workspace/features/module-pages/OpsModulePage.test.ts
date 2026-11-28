@@ -1,14 +1,15 @@
 import "../../../module-pages.test-support";
 import type { OpsPageNavigationPort } from "@cadence/plugin-sdk/ops-pages";
+import { pageHeaderHarness } from "@cadence/plugin-sdk/page-header-testing";
 import { required } from "../../../../../../test-support/required";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { mount } from "@vue/test-utils";
+import { flushPromises, mount } from "@vue/test-utils";
 import OpsModulePage from "./OpsModulePage.vue";
-import { ExplorationPanel } from "@cadence/dashboards-and-exploration/exploration";
+import { CommandMonitor } from "@cadence/commanding/mission-commands";
 import {
-  fixture as explorationFixture,
-  context as explorationContext,
-} from "../../../../../../modules/dashboards-and-exploration/src/features/exploration/fixtures.test-support";
+  monitorFixture,
+  monitorContext,
+} from "../../../../../../modules/commanding/src/features/mission-commands/monitor.test-support";
 let app: ReturnType<typeof mount>;
 afterEach(() => app?.unmount());
 test("read-only navigation has no execute capability and expires with its admitted snapshot", async () => {
@@ -16,53 +17,57 @@ test("read-only navigation has no execute capability and expires with its admitt
     execute = vi.fn(),
     dispose = vi.fn();
   const guardNavigation = vi.fn(() => dispose);
-  const exploration = {
-    id: "dashboards.exploration",
+  const monitor = {
+    id: "commanding.monitor",
     slot: "ops.page",
     version: 1,
     status: "ready",
-    context: explorationContext,
-    data: explorationFixture(),
+    context: monitorContext,
+    data: monitorFixture(),
   };
+  const header = pageHeaderHarness("/missions/:mission_id/ops/commands");
   app = mount(OpsModulePage, {
     props: {
-      contributionId: exploration.id,
-      snapshot: exploration,
-      context: explorationContext,
+      contributionId: monitor.id,
+      snapshot: monitor,
+      context: monitorContext,
       refresh: vi.fn(),
       navigate: navigation,
       execute,
       guardNavigation,
     },
+    global: { provide: header.provide },
   });
-  const port: OpsPageNavigationPort = app.getComponent(ExplorationPanel).props("port");
+  await flushPromises();
+  const port: OpsPageNavigationPort = app.getComponent(CommandMonitor).props("port");
   expect(Object.hasOwn(port, "execute")).toBe(false);
-  port.navigate("/missions/mission/ops/explore");
+  // An admitted page's guard registers through the host until its snapshot is replaced.
+  expect(required(port.guardNavigation)(() => true)).toBe(dispose);
+  expect(guardNavigation).toHaveBeenCalledOnce();
+  port.navigate("/missions/mission-1/ops/commands");
   expect(navigation).toHaveBeenCalledOnce();
-  exploration.status = "unavailable";
-  port.navigate("/missions/mission/ops/explore");
+  monitor.status = "unavailable";
+  port.navigate("/missions/mission-1/ops/commands");
   expect(navigation).toHaveBeenCalledOnce();
-  exploration.status = "ready";
+  monitor.status = "ready";
   await app.setProps({ refreshing: true });
-  port.navigate("/missions/mission/ops/explore");
+  port.navigate("/missions/mission-1/ops/commands");
   expect(navigation).toHaveBeenCalledOnce();
   expect(app.find("#ops-module-unavailable").exists()).toBe(false);
   await app.setProps({
     refreshing: false,
-    snapshot: { ...exploration, data: explorationFixture() },
+    snapshot: { ...monitor, data: monitorFixture() },
   });
-  const replacement: OpsPageNavigationPort = app.getComponent(ExplorationPanel).props("port");
-  expect(dispose).toHaveBeenCalledOnce();
-  expect(guardNavigation).toHaveBeenCalledTimes(2);
-  port.navigate("/missions/mission/ops/explore");
+  const replacement: OpsPageNavigationPort = app.getComponent(CommandMonitor).props("port");
+  port.navigate("/missions/mission-1/ops/commands");
   expect(() => required(port.guardNavigation)(() => false)).toThrow("Inactive");
   expect(navigation).toHaveBeenCalledOnce();
-  replacement.navigate("/missions/mission/ops/explore?point_id=other");
+  replacement.navigate("/missions/mission-1/ops/commands?status=queued");
   expect(navigation).toHaveBeenCalledTimes(2);
-  await app.setProps({ snapshot: { ...exploration, status: "unavailable" } });
+  await app.setProps({ snapshot: { ...monitor, status: "unavailable" } });
   expect(app.find("#ops-module-unavailable").exists()).toBe(true);
-  replacement.navigate("/missions/mission/ops/explore");
+  replacement.navigate("/missions/mission-1/ops/commands");
   expect(navigation).toHaveBeenCalledTimes(2);
+  expect(guardNavigation).toHaveBeenCalledOnce();
   expect(execute).not.toHaveBeenCalled();
-  expect(dispose).toHaveBeenCalledTimes(2);
 });

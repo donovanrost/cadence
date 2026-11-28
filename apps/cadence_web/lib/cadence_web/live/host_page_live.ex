@@ -4,7 +4,7 @@ defmodule CadenceWeb.HostPageLive do
 
   alias Cadence.Reads.OperationalContext
 
-  alias CadenceWeb.{HostContext, HostPageAuthorization, OpsTimelinePage}
+  alias CadenceWeb.{HostContext, HostPageAuthorization}
 
   alias Plug.Conn.{InvalidQueryError, Query}
 
@@ -37,22 +37,6 @@ defmodule CadenceWeb.HostPageLive do
     end
   end
 
-  def handle_event(
-        "host:ops-page:read",
-        %{"path" => path, "id" => "limits.alarm-conditions"} = params,
-        socket
-      ) do
-    with true <- CadenceWeb.OpsAlarmConditionsPage.matches?(socket, params),
-         {:ok, info} <- resolve_path(path),
-         {:cont, socket} <- HostPageAuthorization.prepare(socket, info.host_policy, info.params),
-         true <- CadenceWeb.OpsAlarmConditionsPage.matches?(socket, params) do
-      {:reply, %{ok: true, snapshot: CadenceWeb.OpsAlarmConditionsPage.read(socket)}, socket}
-    else
-      {:halt, socket} -> {:noreply, socket}
-      _ -> {:reply, %{ok: false}, socket}
-    end
-  end
-
   def handle_event(_event, _params, socket), do: {:reply, %{ok: false}, socket}
 
   @impl true
@@ -65,13 +49,6 @@ defmodule CadenceWeb.HostPageLive do
     with {:ok, info} <- resolve_path(path),
          {:cont, socket} <- HostPageAuthorization.prepare(socket, info.host_policy, info.params) do
       socket = assign(socket, host_path: path, page_title: "Cadence")
-
-      socket =
-        assign(socket,
-          timeline_page: OpsTimelinePage.load(socket.assigns.current_scope, info)
-        )
-        |> CadenceWeb.OpsExplorationPage.prepare(info, path)
-        |> CadenceWeb.OpsAlarmConditionsPage.prepare(info, path)
 
       socket =
         if socket.assigns[:ops_context_active?] do
@@ -119,7 +96,6 @@ defmodule CadenceWeb.HostPageLive do
         assigns
         |> HostContext.from_assigns()
         |> Map.drop([:nav_context, :nav_item, :ops_nav_item, :active_dashboard_id]),
-      timeline_page: assigns[:timeline_page],
       ops_page: assigns[:ops_page]
     }
   end

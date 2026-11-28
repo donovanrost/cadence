@@ -34,41 +34,6 @@ test("commands are a compiled read-only mission contribution with explicit navig
   expect(required(opsPages["commanding.monitor"]).navigation).toBe(true);
   expect(required(opsPages["commanding.monitor"]).actions).toBeUndefined();
 });
-test("Explore is a compiled mission query page with navigation but no action authority", () => {
-  const route = required(routes.find((r) => r.path === "/missions/:mission_id/ops/explore"));
-  expect(route).toMatchObject({ kind: "ops_module", contribution: "dashboards.exploration" });
-  expect(route).not.toHaveProperty("application");
-  expect(route).not.toHaveProperty("surface");
-  expect(route.resourceParam).toBeUndefined();
-  expect(route.queryKeys).toEqual([
-    "point_id",
-    "spacecraft_id",
-    "scope_kind",
-    "scope_id",
-    "time_mode",
-    "time_axis",
-    "from",
-    "to",
-    "replay_run_id",
-    "order",
-    "limit",
-    "selection_view",
-    "validity_state",
-    "realm",
-    "logical_source",
-    "data_source_id",
-    "source_binding_id",
-    "source_dashboard_id",
-    "sample_id",
-    "selected_time",
-    "question",
-    "limit_mode",
-    "data_view",
-  ]);
-  expect(route.queryAliases).toEqual({});
-  expect(required(opsPages["dashboards.exploration"]).navigation).toBe(true);
-  expect(required(opsPages["dashboards.exploration"]).actions).toBeUndefined();
-});
 test("each core host route resolves to its registered owner", () => {
   expect(new Set(routes.map((route) => route.path)).size).toBe(routes.length);
   for (const route of routes) {
@@ -77,26 +42,6 @@ test("each core host route resolves to its registered owner", () => {
       expect(route.scope).toBe("mission");
       expect(route).not.toHaveProperty("application");
       expect(route).not.toHaveProperty("surface");
-      continue;
-    }
-    if (route.kind === "ops_workspace") {
-      expect(route.path).toBe("/missions/:mission_id/ops/timeline");
-      expect(route.workspacePage).toBe("timeline");
-      expect(route.scope).toBe("mission");
-      expect(route).not.toHaveProperty("application");
-      expect(route).not.toHaveProperty("surface");
-      expect(route.queryKeys).toEqual([
-        "category",
-        "kind",
-        "severity",
-        "spacecraft_id",
-        "from",
-        "to",
-        "event_id",
-        "source_dashboard_id",
-        "before_at",
-        "before_id",
-      ]);
       continue;
     }
     if (route.kind === "application_surface") {
