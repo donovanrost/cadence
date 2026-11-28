@@ -1,26 +1,9 @@
 <script setup lang="ts">
 import type { FullPageSurfaceProps, HostActionReceipt } from "@cadence/plugin-sdk";
 import { computed, onBeforeUnmount, onMounted, provide, ref, shallowRef } from "vue";
-import { FLEET_DIRECTORY_PORT } from "@cadence/planning-and-contacts/fleet-planning";
-import { createFleetDirectoryPort } from "./fleet-directory-port";
-import { FLEET_START_PORT } from "@cadence/planning-and-contacts/fleet-planning";
-import { createFleetRunPort } from "./fleet-run-port";
-import { FLEET_RUN_PORT } from "@cadence/planning-and-contacts/fleet-planning";
-import { createFleetStartPort } from "./fleet-start-port";
-import { PLAN_DETAIL_PORT } from "@cadence/planning-and-contacts/contact-plans";
-import {
-  CONTACT_SCHEDULE_PORT,
-  CONTACT_RECORD_PORT,
-} from "@cadence/planning-and-contacts/contact-scheduling";
-import { createContactSchedulePort } from "./contact-schedule-port";
-import { createContactRecordPort } from "./contact-record-port";
-import { RESERVATION_PORT } from "@cadence/planning-and-contacts/contact-scheduling";
-import { createReservationPort } from "./reservation-port";
-import { createPlanDetailPort } from "./plan-detail-port";
 import { OPS_COMPONENTS } from "./ops-components";
 import { OPS_EVENT_BRIDGE, type OpsEventPayload } from "./ops-events";
 import { unwrapOpsConsoleResponse, type OpsConsolePresentation } from "./ops-console";
-import { reconcileOpsActionResult } from "./ops-action-results";
 
 const props = defineProps<FullPageSurfaceProps>();
 const presentation = shallowRef<OpsConsolePresentation>();
@@ -30,61 +13,13 @@ const actionPending = ref(false);
 const actionNotice = ref<string>();
 let loadGeneration = 0;
 let actionGeneration = 0;
-let planPortActive = true;
-const capturedContext = props.context;
-const capturedSurface = props.surface;
-const planPort = createPlanDetailPort(
-  props,
-  () => planPortActive && props.context === capturedContext && props.surface === capturedSurface,
-);
-if (planPort) provide(PLAN_DETAIL_PORT, planPort);
-const reservationPort = createReservationPort(
-  props,
-  () => planPortActive && props.context === capturedContext && props.surface === capturedSurface,
-);
-if (reservationPort) provide(RESERVATION_PORT, reservationPort);
-const recordPort = createContactRecordPort(
-  props,
-  () => planPortActive && props.context === capturedContext && props.surface === capturedSurface,
-);
-if (recordPort) provide(CONTACT_RECORD_PORT, recordPort);
-const schedulePort = createContactSchedulePort(
-  props,
-  () => planPortActive && props.context === capturedContext && props.surface === capturedSurface,
-);
-if (schedulePort) provide(CONTACT_SCHEDULE_PORT, schedulePort);
-
-const fleetDirectoryPort = createFleetDirectoryPort(
-  props,
-  () => planPortActive && props.context === capturedContext && props.surface === capturedSurface,
-);
-if (fleetDirectoryPort) provide(FLEET_DIRECTORY_PORT, fleetDirectoryPort);
-
-const fleetStartPort = createFleetStartPort(
-  props,
-  () => planPortActive && props.context === capturedContext && props.surface === capturedSurface,
-);
-if (fleetStartPort) provide(FLEET_START_PORT, fleetStartPort);
-const fleetRunPort = createFleetRunPort(
-  props,
-  () => planPortActive && props.context === capturedContext && props.surface === capturedSurface,
-);
-if (fleetRunPort) provide(FLEET_RUN_PORT, fleetRunPort);
-
-const draftPreservingActions = new Set(["validate", "validate-fleet-run", "search"]);
 
 const actionListeners = computed(() =>
   Object.fromEntries(
-    (planPort ||
-    reservationPort ||
-    recordPort ||
-    schedulePort ||
-    fleetDirectoryPort ||
-    fleetStartPort ||
-    fleetRunPort
-      ? []
-      : props.surface.actions
-    ).map((actionId) => [actionId, (input: unknown) => void executeAction(actionId, input)]),
+    props.surface.actions.map((actionId) => [
+      actionId,
+      (input: unknown) => void executeAction(actionId, input),
+    ]),
   ),
 );
 
@@ -96,7 +31,6 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
-  planPortActive = false;
   window.removeEventListener("cadence:ops-event", onOpsEvent);
   loadGeneration += 1;
   actionGeneration += 1;
@@ -125,17 +59,7 @@ async function loadSurface(): Promise<void> {
 }
 
 async function onOpsEvent(event: Event): Promise<void> {
-  if (
-    planPort ||
-    reservationPort ||
-    recordPort ||
-    schedulePort ||
-    fleetDirectoryPort ||
-    fleetStartPort ||
-    fleetRunPort ||
-    !(event instanceof CustomEvent)
-  )
-    return;
+  if (!(event instanceof CustomEvent)) return;
 
   const detail = event.detail as { eventName?: string; payload?: OpsEventPayload };
   const actionId = detail.eventName;
@@ -169,16 +93,6 @@ async function executeAction(actionId: string, input: unknown): Promise<void> {
     if (generation !== actionGeneration) return;
     assertCompletedReceipt(receipt, actionId);
 
-    if (draftPreservingActions.has(actionId)) {
-      if (!presentation.value) throw new Error("The Ops Console presentation is unavailable.");
-      presentation.value = reconcileOpsActionResult(
-        presentation.value,
-        props.surface.surfaceId,
-        actionId,
-        receipt.result,
-      );
-    }
-
     window.dispatchEvent(
       new CustomEvent("cadence:ops-action-result", {
         detail: { actionId, result: receipt.result },
@@ -192,7 +106,7 @@ async function executeAction(actionId: string, input: unknown): Promise<void> {
     }
 
     actionNotice.value = `${actionId} completed.`;
-    if (!draftPreservingActions.has(actionId)) await loadSurface();
+    await loadSurface();
   } catch (reason) {
     if (generation !== actionGeneration) return;
     error.value = reason instanceof Error ? reason.message : "The Ops Console action failed.";

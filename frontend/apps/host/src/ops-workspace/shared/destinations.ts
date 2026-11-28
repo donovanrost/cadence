@@ -27,15 +27,6 @@ export function workspaceGroups(
     [
       ["observe", "Observe", [item("dashboards", "Dashboards", "hero-squares-2x2")]],
       ["act", "Act", [item("commands", "Commands", "hero-command-line")]],
-      [
-        "plan",
-        "Plan",
-        [
-          item("planning", "Planning", "hero-chart-bar-square"),
-          item("requirements", "Requirements", "hero-clipboard-document-list"),
-          item("contacts", "Contacts", "hero-calendar-days"),
-        ],
-      ],
       ["system", "System", [item("data_sources", "Data Sources", "hero-circle-stack")]],
     ] satisfies [string, string, WorkspaceDestination[]][]
   ).map(([key, label, items], index) => ({

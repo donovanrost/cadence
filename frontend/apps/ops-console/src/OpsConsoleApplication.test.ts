@@ -40,62 +40,6 @@ const response = {
 
 const expectedSurfaceTable = [
   ["workspace", "overview", "mission", "application_workspace", "cadence.ops.workspace", []],
-  [
-    "contact_schedule",
-    "operations",
-    "mission",
-    "ops_workspace",
-    "cadence.ops.contact_schedule",
-    ["validate", "search", "reserve", "cancel"],
-  ],
-  [
-    "contact_plan_show",
-    "subject_detail",
-    "mission",
-    "ops_workspace",
-    "cadence.ops.contact_plan_show",
-    ["submit-plan", "approve-plan", "reject-plan", "execute-plan"],
-  ],
-  [
-    "contact_detail",
-    "subject_detail",
-    "mission",
-    "ops_workspace",
-    "cadence.ops.contact_detail",
-    ["approve-provider-change", "reject-provider-change", "acknowledge-provider-change"],
-  ],
-  [
-    "contact_record",
-    "subject_detail",
-    "mission",
-    "ops_workspace",
-    "cadence.ops.contact_record",
-    [],
-  ],
-  [
-    "fleet_planning",
-    "operations",
-    "mission",
-    "ops_workspace",
-    "cadence.ops.fleet_planning",
-    ["refresh-planning"],
-  ],
-  [
-    "fleet_planning_new",
-    "configuration",
-    "mission",
-    "ops_workspace",
-    "cadence.ops.fleet_planning_new",
-    ["validate-fleet-run", "create-fleet-run"],
-  ],
-  [
-    "fleet_planning_run",
-    "subject_detail",
-    "mission",
-    "ops_workspace",
-    "cadence.ops.fleet_planning_run",
-    ["refresh-fleet-run", "repair-fleet-run"],
-  ],
   ["commands", "operations", "mission", "ops_workspace", "cadence.ops.commands", []],
   [
     "data_sources",
@@ -149,7 +93,7 @@ const expectedSurfaceTable = [
 type TestQuery = (request: HostQueryRequest) => Promise<unknown>;
 type TestExecute = (request: HostActionRequest<unknown>) => Promise<HostActionReceipt<unknown>>;
 
-function propsFor(query: TestQuery, execute: TestExecute = vi.fn(), surfaceId = "fleet_planning") {
+function propsFor(query: TestQuery, execute: TestExecute = vi.fn(), surfaceId = "commands") {
   const surface = required(surfaceContracts.find((candidate) => candidate.surfaceId === surfaceId));
   return {
     application: {
@@ -256,12 +200,10 @@ describe("Ops Console federated application", () => {
 
     expect(query).toHaveBeenCalledOnce();
     expect(query.mock.calls[0]?.[0]).toEqual({
-      queryId: required(
-        surfaceContracts.find((candidate) => candidate.surfaceId === "fleet_planning"),
-      ).dataContract.id,
-      version: required(
-        surfaceContracts.find((candidate) => candidate.surfaceId === "fleet_planning"),
-      ).dataContract.version,
+      queryId: required(surfaceContracts.find((candidate) => candidate.surfaceId === "commands"))
+        .dataContract.id,
+      version: required(surfaceContracts.find((candidate) => candidate.surfaceId === "commands"))
+        .dataContract.version,
       context,
     });
     expect(query.mock.calls[0]?.[0]).not.toHaveProperty("params");
@@ -369,16 +311,9 @@ describe("Ops Console federated application", () => {
     const required = [
       "OpsCommands",
       "OpsConsoleLanding",
-      "OpsContactDetail",
-      "OpsContactPlanShow",
-      "OpsContactRecord",
-      "OpsContactSchedule",
       "OpsDataSourceRegistration",
       "OpsDataSourceSettings",
       "OpsDataSources",
-      "OpsFleetPlanning",
-      "OpsFleetPlanningNew",
-      "OpsFleetPlanningRun",
     ];
     expect(OPS_COMPONENT_NAMES).toEqual(required);
     for (const component of [
@@ -405,19 +340,19 @@ describe("Ops Console federated application", () => {
     expect(manifest.application).toMatchObject({ applicationKey: "ops_console", version: 1 });
     expect(manifest.application.installableScopes).toEqual(["mission"]);
     expect(manifest.surfaces).toEqual(surfaceContracts);
-    expect(surfaceContracts).toHaveLength(12);
-    expect(new Set(surfaceContracts.map((surface) => surface.surfaceId)).size).toBe(12);
-    expect(surfaceContracts.flatMap((surface) => surface.actions)).toHaveLength(38);
+    expect(surfaceContracts).toHaveLength(5);
+    expect(new Set(surfaceContracts.map((surface) => surface.surfaceId)).size).toBe(5);
+    expect(surfaceContracts.flatMap((surface) => surface.actions)).toHaveLength(22);
     expect(
       new Set(
         surfaceContracts.flatMap((surface) =>
           surface.actions.map((action) => `${surface.surfaceId}:${action}`),
         ),
       ).size,
-    ).toBe(38);
-    expect(new Set(surfaceContracts.flatMap((surface) => surface.actions)).size).toBe(27);
+    ).toBe(22);
+    expect(new Set(surfaceContracts.flatMap((surface) => surface.actions)).size).toBe(11);
     expect(
-      surfaceContracts.slice(2).every((surface) => {
+      surfaceContracts.slice(1).every((surface) => {
         const componentName = `Ops${surface.surfaceId.replace(/(^|_)(\w)/g, (_: string, _prefix: string, letter: string) => letter.toUpperCase())}`;
         return Boolean(OPS_COMPONENTS[componentName]);
       }),

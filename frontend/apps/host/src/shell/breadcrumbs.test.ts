@@ -10,16 +10,19 @@ const context = {
 test("a record's trail links back to its list", () => {
   expect(
     breadcrumbTrail(
-      { path: "/missions/:mission_id/ops/contacts/records/:contact_id", scope: "mission" },
-      "/missions/m1/ops/contacts/records/c1",
+      {
+        path: "/missions/:mission_id/ops/commands/requests/:command_request_id/history",
+        scope: "mission",
+      },
+      "/missions/m1/ops/commands/requests/r1/history",
       context,
-      "Contact Record",
+      "Command history",
     ),
   ).toEqual([
     { label: "Flight Operations", href: "/" },
     { label: "Kestrel", href: "/missions/m1" },
-    { label: "Contact Schedule", href: "/missions/m1/ops/contacts" },
-    { label: "Contact Record" },
+    { label: "Commands", href: "/missions/m1/ops/commands" },
+    { label: "Command history" },
   ]);
 });
 
@@ -28,10 +31,10 @@ test("records above the page are left out; the spacecraft is named by context", 
     breadcrumbTrail({ path: pattern, scope: "mission" }, path, context, "Page").map((c) => c.label);
   expect(
     labels(
-      "/missions/:mission_id/ops/contacts/records/:contact_id/edit",
-      "/missions/m1/ops/contacts/records/c1/edit",
+      "/missions/:mission_id/ops/commands/requests/:command_request_id/history/edit",
+      "/missions/m1/ops/commands/requests/r1/history/edit",
     ),
-  ).toEqual(["Flight Operations", "Kestrel", "Contact Schedule", "Page"]);
+  ).toEqual(["Flight Operations", "Kestrel", "Commands", "Page"]);
   expect(
     labels(
       "/missions/:mission_id/spacecraft/:spacecraft_id/applications/:application_key/:surface_id",
