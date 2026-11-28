@@ -411,14 +411,18 @@ defmodule Cadence.Replay do
     end)
   end
 
+  # The set is held to the hash recorded when that version was activated, not to the hash of the
+  # set just read: a version that was never activated has none, and is not replayed (CB-9, #512).
   defp replay_runtime_spec(%Run{} = run, binding_set) do
-    with {:ok, active_spec} <- RuntimeMissions.applied_spec(run.mission_id) do
+    with {:ok, expected_hash} <- recorded_hash(run),
+         {:ok, active_spec} <- RuntimeMissions.applied_spec(run.mission_id) do
       MissionRuntimeSpec.new(%{
         activation_id: run.replay_run_id <> ":replay",
         mission_id: run.mission_id,
         generation: 1,
         binding_set_id: run.binding_set_id,
         binding_set_version: run.binding_set_version,
+        binding_set_content_sha256: expected_hash,
         binding_set: binding_set,
         mission_model_revision_id: active_spec.mission_model_revision_id,
         mission_model_content_sha256: active_spec.mission_model_content_sha256,
@@ -426,6 +430,20 @@ defmodule Cadence.Replay do
         activated_at: run.started_at,
         metadata: %{"replay" => true, "replay_run_id" => run.replay_run_id}
       })
+    end
+  end
+
+  defp recorded_hash(%Run{} = run) do
+    case Cadence.Activations.recorded_content_sha256(
+           run.mission_id,
+           run.binding_set_id,
+           run.binding_set_version
+         ) do
+      nil ->
+        {:error, {:binding_set_hash_not_recorded, run.binding_set_id, run.binding_set_version}}
+
+      hash ->
+        {:ok, hash}
     end
   end
 

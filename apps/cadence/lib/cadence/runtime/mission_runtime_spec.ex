@@ -368,10 +368,19 @@ defmodule Cadence.Runtime.MissionRuntimeSpec do
   defp validate_organization_scope(%BindingSet{}, _organization_id),
     do: {:error, {:mission_runtime_spec_mismatch, :organization_id}}
 
+  # The caller names the hash the set must have (the activation's recorded one; Replay's the
+  # recorded version's): a missing key is an error, never a default to the computed hash, so no path
+  # checks computed against computed and a new caller can't skip the check silently (CB-9, #512).
   defp validate_content_hash(attrs, computed_hash) do
-    case Map.get(attrs, :binding_set_content_sha256, computed_hash) do
-      ^computed_hash -> :ok
-      _other -> {:error, {:mission_runtime_spec_mismatch, :binding_set_content_sha256}}
+    case Map.fetch(attrs, :binding_set_content_sha256) do
+      {:ok, ^computed_hash} ->
+        :ok
+
+      {:ok, expected} when is_binary(expected) and expected != "" ->
+        {:error, {:mission_runtime_spec_mismatch, :binding_set_content_sha256}}
+
+      _missing_or_invalid ->
+        {:error, {:invalid_mission_runtime_spec, :binding_set_content_sha256}}
     end
   end
 

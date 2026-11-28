@@ -102,6 +102,63 @@ defmodule Cadence.ReplayTest do
     assert diff_report.extra_live == []
   end
 
+  # CB-9 (#512): a replay holds the set it reads to the hash recorded when that version was
+  # activated, not to the hash of the set it just read.
+  describe "a replay is held to the version's recorded hash" do
+    test "a version whose recorded hash differs from the set stored is refused" do
+      binding_set = persist_binding_set_fixture()
+
+      raw_evidence =
+        RawEvidence.new(%{mission_id: "mission-alpha", raw: build_space_packet(42, 2, <<0, 7>>)})
+
+      assert {:ok, _row} = Repo.insert(RawEvidenceRow.changeset(raw_evidence))
+
+      Repo.update_all(
+        from(row in "mission_binding_set_activations",
+          where: row.mission_id == "mission-alpha"
+        ),
+        set: [binding_set_content_sha256: "not-what-was-recorded"]
+      )
+
+      assert {:error, {:mission_runtime_spec_mismatch, :binding_set_content_sha256}} =
+               Replay.replay_telemetry_evidence(
+                 "mission-alpha",
+                 raw_evidence.evidence_id,
+                 binding_set.binding_set_id,
+                 binding_set.version
+               )
+    end
+
+    test "a version that was never activated has no recorded hash and is not replayed" do
+      persist_mission_scope("org-replay-unactivated", "mission-replay-unactivated")
+
+      binding_set =
+        BindingSet.new(%{
+          mission_id: "mission-replay-unactivated",
+          binding_set_id: "never-activated",
+          version: 1
+        })
+
+      assert {:ok, _} = Cadence.Governance.persist_binding_set(binding_set)
+
+      raw_evidence =
+        RawEvidence.new(%{
+          mission_id: "mission-replay-unactivated",
+          raw: build_space_packet(42, 2, <<0, 7>>)
+        })
+
+      assert {:ok, _row} = Repo.insert(RawEvidenceRow.changeset(raw_evidence))
+
+      assert {:error, {:binding_set_hash_not_recorded, "never-activated", 1}} =
+               Replay.replay_telemetry_evidence(
+                 "mission-replay-unactivated",
+                 raw_evidence.evidence_id,
+                 "never-activated",
+                 1
+               )
+    end
+  end
+
   test "lists replay runs for an organization and mission newest first" do
     persist_mission_scope("org-replay-list", "mission-replay-list")
     persist_mission_scope("org-replay-list", "mission-replay-other")
