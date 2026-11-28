@@ -1,8 +1,11 @@
 defmodule Cadence.Control.MissionRuntimeReconcilerTest do
   use Cadence.RuntimeCase, async: false
 
+  import Cadence.TestSupport.SemanticTransitionFixtures
+
   alias Cadence.Activations
   alias Cadence.Activations.ActiveBindingSetRow
+  alias Cadence.Alarms.{EpisodeEventRow, EpisodeRow}
   alias Cadence.ApplicationDispatch.BindingSet
   alias Cadence.Catalog.MissionModel.Layer
   alias Cadence.Control.{MissionModelPromotion, MissionRuntimeReconciler, MissionRuntimeStatus}
@@ -10,6 +13,8 @@ defmodule Cadence.Control.MissionRuntimeReconcilerTest do
   alias Cadence.Platform.{ContentHash, ScopedReadUpdates}
   alias Cadence.Runtime
   alias Cadence.Runtime.{MissionRuntimeSpec, Missions}
+  alias Cadence.SemanticObservations
+  alias Cadence.SemanticObservations.LatestAlarmStateRow
   alias Cadence.SemanticRuntime.RegisteredRegistry
   alias Cadence.TestSupport.BindingFleet
 
@@ -122,6 +127,42 @@ defmodule Cadence.Control.MissionRuntimeReconcilerTest do
     assert {:ok, %{generation: 2} = observation} = MissionRuntimeReconciler.reconcile(mission)
     assert observation.activation_id == next.activation_id
     assert {:ok, ^observation} = MissionRuntimeReconciler.reconcile(mission)
+  end
+
+  # #451 T3b: a generation whose monitoring plan no longer has a policy retires it, once, when it
+  # is applied: the policy's open episode clears with `rule_retired` and its state goes.
+  test "a generation that drops a policy retires its open alarm episode" do
+    %{mission: mission, bindings: bindings} = fixture()
+    org = bindings.organization_id
+
+    :ok =
+      SemanticObservations.persist_many([
+        transition(
+          org,
+          mission,
+          "sc-1",
+          "P1",
+          {:normal, :critical},
+          ~U[2026-11-28 12:00:00.000000Z],
+          "open-retired"
+        )
+      ])
+
+    assert [%{state: "active"}] = Repo.all(from(e in EpisodeRow, where: e.mission_id == ^mission))
+
+    assert {:ok, %{generation: 1}} = MissionRuntimeReconciler.reconcile(mission)
+
+    assert [%{state: "cleared"}] =
+             Repo.all(from(e in EpisodeRow, where: e.mission_id == ^mission))
+
+    assert [%{payload: %{"cause" => "rule_retired"}}] =
+             Repo.all(from(e in EpisodeEventRow, where: e.kind == "cleared"))
+
+    assert Repo.all(from(s in LatestAlarmStateRow, where: s.mission_id == ^mission)) == []
+
+    # An unchanged poll does not run it again.
+    assert {:ok, %{generation: 1}} = MissionRuntimeReconciler.reconcile(mission)
+    assert Repo.aggregate(from(e in EpisodeEventRow, where: e.kind == "cleared"), :count) == 1
   end
 
   test "a different live runtime basis cannot be acknowledged from the cached observation" do

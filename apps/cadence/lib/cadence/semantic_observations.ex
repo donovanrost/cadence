@@ -107,6 +107,55 @@ defmodule Cadence.SemanticObservations do
     end)
   end
 
+  @doc """
+  A generation's rules no longer include some policies (`live_policy_ids` are the ones it keeps;
+  #451 T3b): their open episodes clear with cause `rule_retired`, their latest alarm states go, and
+  the fleet summaries of the spacecraft they were on are recomputed, in one transaction. One call
+  per generation and mission, however many spacecraft are affected; idempotent, so a second node
+  or a repeat writes nothing more. `ref` names the generation (it keys the episode events) and `at`
+  is when it was applied.
+  """
+  @spec retire_rules(binary(), binary(), [binary()], binary(), DateTime.t()) ::
+          {:ok, %{episodes: non_neg_integer(), states: non_neg_integer()}} | {:error, term()}
+  def retire_rules(organization_id, mission_id, live_policy_ids, ref, at) do
+    Multi.new()
+    |> Multi.run(:episodes, fn repo, _changes ->
+      Episodes.retire_rules(repo, mission_id, live_policy_ids, ref, at)
+    end)
+    |> Multi.run(:states, fn repo, _changes ->
+      {:ok, retire_states(repo, organization_id, mission_id, live_policy_ids)}
+    end)
+    |> Multi.run(:fleet_alarm_summaries, fn repo, %{episodes: episodes, states: states} ->
+      with :ok <-
+             FleetAlarms.refresh(repo, organization_id, mission_id, Enum.uniq(episodes ++ states)),
+           do: {:ok, :refreshed}
+    end)
+    |> Repo.transaction()
+    |> case do
+      {:ok, %{episodes: episodes, states: states}} ->
+        if episodes != [], do: Notify.missions_changed([mission_id])
+        {:ok, %{episodes: length(episodes), states: length(states)}}
+
+      {:error, _operation, reason, _changes} ->
+        {:error, reason}
+    end
+  end
+
+  # The spacecraft of the latest states of the mission's policies no generation keeps.
+  defp retire_states(repo, organization_id, mission_id, live_policy_ids) do
+    {_count, spacecraft} =
+      repo.delete_all(
+        from(row in LatestAlarmStateRow,
+          where:
+            row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+              row.policy_id not in ^live_policy_ids,
+          select: row.spacecraft_id
+        )
+      )
+
+    spacecraft
+  end
+
   defp notify_alarm_changes(changes) do
     changes
     |> Enum.flat_map(fn
