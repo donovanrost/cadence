@@ -27,7 +27,7 @@ defmodule Cadence.MixProject do
     [
       # :os_mon for disksup only (the ingress journal's disk, ux U66); config.exs starts nothing
       # else of it and keeps its own disk alarms quiet.
-      extra_applications: [:logger, :os_mon],
+      extra_applications: [:logger, :os_mon, :ssl],
       mod: {Cadence.Application, []}
     ]
   end

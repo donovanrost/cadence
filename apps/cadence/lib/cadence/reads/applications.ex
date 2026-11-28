@@ -11,15 +11,11 @@ defmodule Cadence.Reads.Applications do
   }
 
   alias Cadence.Auth.{Policy, Scope}
-  alias Cadence.Reads.Applications.DerivedTelemetryStatus
-  alias Cadence.Reads.Applications.LimitsStatus
   alias Cadence.Reads.Applications.StatusProvider
   alias Cadence.Reads.Applications.TelemetryDecomStatus
 
   @providers %{
-    "cadence.telemetry_decom.status" => TelemetryDecomStatus,
-    "cadence.derived_telemetry.status" => DerivedTelemetryStatus,
-    "cadence.limits.status" => LimitsStatus
+    "cadence.telemetry_decom.status" => TelemetryDecomStatus
   }
 
   @spec validate_providers() ::

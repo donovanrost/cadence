@@ -4,7 +4,7 @@ defmodule Cadence.TestActionProviders.Throwing do
   @behaviour Cadence.Applications.ActionProvider
 
   @impl true
-  def application_key, do: "derived_telemetry"
+  def application_key, do: "telemetry_decom"
 
   @impl true
   def execute(_scope, _host_context, _request), do: throw(:synthetic_action_provider_throw)

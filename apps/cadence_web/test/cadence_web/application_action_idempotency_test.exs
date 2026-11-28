@@ -408,11 +408,11 @@ defmodule CadenceWeb.ApplicationActionIdempotencyTest do
       mission_id: "mission-1",
       scope_kind: "mission",
       scope_id: "mission-1",
-      application_key: "derived_telemetry",
+      application_key: "comms",
       application_version: 1,
-      surface_id: "manage",
+      surface_id: "routing_new",
       surface_version: 1,
-      operation: "save_definition",
+      operation: "save",
       operation_version: 1,
       generation_id: generation_id,
       release_id: "release-1"
@@ -422,11 +422,11 @@ defmodule CadenceWeb.ApplicationActionIdempotencyTest do
 
   defp request_document(value \\ "same") do
     %{
-      "applicationKey" => "derived_telemetry",
+      "applicationKey" => "comms",
       "applicationVersion" => 1,
-      "surfaceId" => "manage",
+      "surfaceId" => "routing_new",
       "surfaceVersion" => 1,
-      "operation" => "save_definition",
+      "operation" => "save",
       "operationVersion" => 1,
       "params" => %{"value" => value}
     }

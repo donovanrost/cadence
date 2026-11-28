@@ -1,13 +1,13 @@
 defmodule Cadence.Contacts.ProfileStore.ListenAllowlist do
   @moduledoc """
-  The source-allowlist rule every provider-profile write applies (#990, DECISIONS #115): an active
-  listen-mode TCP profile must name the peers it accepts, by the `Comms.PeerAddresses` rules.
-  `ProfileStore` checks it before storing, so no write path keeps a listening profile the runtime
-  would refuse.
+  Admission rules for active TCP provider profiles. Plaintext listeners require a source
+  allowlist. Mutual TLS listeners require a credential scoped to their provider and transport,
+  configured server material, and a valid allowlist when one is supplied.
   """
 
-  alias Cadence.Comms.PeerAddresses
+  alias Cadence.Comms.{PeerAddresses, ProviderDeliveryListenerRead}
   alias Cadence.Contacts.ProviderProfile
+  alias Cadence.Secrets.ProviderDeliveryListenerIdentity, as: ServerIdentity
 
   @doc """
   Whether an active listen-mode TCP provider profile names a usable source allowlist
@@ -17,34 +17,64 @@ defmodule Cadence.Contacts.ProfileStore.ListenAllowlist do
   profile write (`persist_provider_profile/1,2`, and `version_provider_profile/4` through it)
   checks it, so no path stores a listening profile the runtime would refuse.
   """
-  @spec check(ProviderProfile.t()) :: :ok | {:error, atom()}
-  def check(%ProviderProfile{lifecycle_state: :active, adapter_key: adapter} = profile)
+  @spec check(ProviderProfile.t(), binary() | nil) :: :ok | {:error, atom()}
+  def check(profile, organization_id \\ nil)
+
+  def check(%ProviderProfile{lifecycle_state: :active, adapter_key: adapter} = profile, org)
       when adapter in [:tcp_socket, "tcp_socket"] do
     config = profile.configuration || %{}
 
     mode = Map.get(config, "mode", Map.get(config, :mode))
     auth = Map.get(config, "delivery_auth", Map.get(config, :delivery_auth))
 
-    if mode in ["listen", :listen] do
-      check_listener(config, auth)
-    else
-      :ok
+    cond do
+      mode in ["listen", :listen] ->
+        check_listener(profile, org || profile.organization_id, config, auth)
+
+      auth in [nil, "plaintext", :plaintext] ->
+        :ok
+
+      true ->
+        {:error, :provider_delivery_auth_unsupported}
     end
   end
 
-  def check(%ProviderProfile{}), do: :ok
+  def check(%ProviderProfile{}, _org), do: :ok
 
-  defp check_listener(config, auth) when auth in [nil, "plaintext", :plaintext] do
+  defp check_listener(_profile, _org, config, auth) when auth in [nil, "plaintext", :plaintext] do
     config
     |> Map.get("expected_peer_addresses", Map.get(config, :expected_peer_addresses))
     |> PeerAddresses.classify()
     |> allowlist_result()
   end
 
-  defp check_listener(_config, auth) when auth in ["mtls", :mtls],
-    do: {:error, :provider_delivery_mtls_unavailable}
+  defp check_listener(profile, org, config, auth) when auth in ["mtls", :mtls] do
+    metadata = profile.metadata || %{}
+    peers = Map.get(config, "expected_peer_addresses", Map.get(config, :expected_peer_addresses))
 
-  defp check_listener(_config, _auth), do: {:error, :provider_delivery_auth_unsupported}
+    with :ok <- check_optional_allowlist(peers),
+         true <- metadata["transport_origin"] == "provider_managed",
+         true <- ServerIdentity.configured?() do
+      ProviderDeliveryListenerRead.check_binding(
+        org,
+        profile.mission_id,
+        metadata["mission_provider_id"],
+        metadata["materialized_from_transport_id"],
+        Map.get(config, "delivery_credential_ref", Map.get(config, :delivery_credential_ref))
+      )
+    else
+      false -> {:error, :delivery_tls_identity_unavailable}
+      {:error, _reason} = error -> error
+    end
+  end
+
+  defp check_listener(_profile, _org, _config, _auth),
+    do: {:error, :provider_delivery_auth_unsupported}
+
+  defp check_optional_allowlist(peers) when peers in [nil, []], do: :ok
+
+  defp check_optional_allowlist(peers),
+    do: peers |> PeerAddresses.classify() |> allowlist_result()
 
   defp allowlist_result(:ok), do: :ok
   defp allowlist_result(:empty), do: {:error, :peer_addresses_missing}
