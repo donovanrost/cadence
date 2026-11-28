@@ -67,6 +67,7 @@ defmodule Cadence.Runtime.MissionGenerationTest do
         generation: generation,
         binding_set_id: binding_set_id,
         binding_set_version: version,
+        binding_set_content_sha256: MissionRuntimeSpec.content_sha256(binding_set),
         binding_set: binding_set,
         mission_model_revision_id: compilation.revision.revision_id,
         mission_model_content_sha256: compilation.revision.content_sha256,
