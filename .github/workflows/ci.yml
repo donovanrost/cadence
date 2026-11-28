@@ -125,7 +125,7 @@ jobs:
               - "dev/reflect_orbital_{simulator,demo,planning}.exs"
               - "dev/apogee_qa_personas.exs"
               - "dev/reflect_orbital/{fixture,configuration,planning,approver,seed}.exs"
-              - "dev/seed/{route_changes,rest_client}.exs"
+              - "dev/seed/**"
               - "dev/catalogs/demo_spacecraft.yaml"
               - "apps/cadence/lib/cadence/accounts/fixture_passwords.ex"
               - "apps/cadence/lib/cadence/reads/{fleet_status,passes}.ex"
