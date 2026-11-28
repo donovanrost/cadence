@@ -38,7 +38,7 @@ defmodule Cadence.SemanticRuntime.MonitoringEvaluator do
   # in `metadata`, never a struct field: partition replay verifies results by equality.
   defp apply_rule_digest(%MonitoringPlan{rule_digest: nil}, prior), do: {prior, nil}
 
-  defp apply_rule_digest(%MonitoringPlan{rule_digest: digest}, prior) do
+  defp apply_rule_digest(%MonitoringPlan{rule_digest: digest} = plan, prior) do
     case Map.get(prior, :rule_digest) do
       nil ->
         {prior, nil}
@@ -50,8 +50,23 @@ defmodule Cadence.SemanticRuntime.MonitoringEvaluator do
         reset =
           Map.merge(prior, %{violation_count: 0, conformance_count: 0, candidate_state: nil})
 
-        {reset, %{from: previous, to: digest}}
+        {reset, %{from: previous, to: digest, rule_ids: rule_ids(plan)}}
     end
+  end
+
+  # The ids of the compiled rules in force (sorted), so the episode event says what changed.
+  defp rule_ids(plan) do
+    rules = plan.default_rules ++ Enum.flat_map(plan.contexts, &value(&1, :rules, []))
+
+    rules
+    |> Enum.flat_map(fn rule ->
+      case value(rule, :rule_id) do
+        id when is_binary(id) and id != "" -> [id]
+        _none -> []
+      end
+    end)
+    |> Enum.uniq()
+    |> Enum.sort()
   end
 
   defp put_rule_digest(next, %MonitoringPlan{rule_digest: nil}), do: next

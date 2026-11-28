@@ -6,13 +6,12 @@ defmodule Cadence.SemanticRuntime.ThresholdLimitsTest do
   """
   use Cadence.UnitCase, async: true
 
-  alias Cadence.Limits.Evaluator
   alias Cadence.SemanticRuntime.ThresholdLimits
 
   @keys ["red_low", "yellow_low", "yellow_high", "red_high"]
   @states [:green, :blue, :yellow_low, :yellow_high, :red_low, :red_high]
 
-  test "the same state as Limits.Evaluator for generated thresholds and values" do
+  test "the same state as the reference threshold evaluator (the deleted `Limits.Evaluator`) for generated thresholds and values" do
     seed = :erlang.unique_integer([:positive])
     :rand.seed(:exsss, {seed, 11, 3})
 
@@ -20,7 +19,7 @@ defmodule Cadence.SemanticRuntime.ThresholdLimitsTest do
       thresholds = thresholds()
 
       for value <- values(thresholds) do
-        old = Evaluator.evaluate(value, thresholds)
+        old = reference(value, thresholds)
         new = ThresholdLimits.limit_state(value, thresholds)
 
         assert new == old,
@@ -32,9 +31,9 @@ defmodule Cadence.SemanticRuntime.ThresholdLimitsTest do
 
   test "the vocabulary functions agree for every state" do
     for state <- @states do
-      assert ThresholdLimits.violation?(state) == Evaluator.violation?(state)
-      assert ThresholdLimits.severity(state) == Evaluator.severity(state)
-      assert ThresholdLimits.normalize_state(state) == Evaluator.normalize_state(state)
+      assert ThresholdLimits.violation?(state) == state not in [:green, :blue]
+      assert ThresholdLimits.severity(state) == reference_severity(state)
+      assert ThresholdLimits.normalize_state(state) == reference_normalized(state)
     end
 
     # A stored state this version does not know (#1025) is no violation of its own, rank 0.
@@ -104,4 +103,31 @@ defmodule Cadence.SemanticRuntime.ThresholdLimitsTest do
 
     around ++ [-1_000, 1_000, 30, 30.5, :rand.uniform(80) - 10]
   end
+
+  # The old evaluator, kept as the oracle: the first of red low, red high, yellow low, yellow high
+  # whose strict comparison holds; green when none does or the value is not a number.
+  defp reference(value, thresholds) when is_number(value) do
+    cond do
+      below?(value, thresholds["red_low"]) -> :red_low
+      above?(value, thresholds["red_high"]) -> :red_high
+      below?(value, thresholds["yellow_low"]) -> :yellow_low
+      above?(value, thresholds["yellow_high"]) -> :yellow_high
+      true -> :green
+    end
+  end
+
+  defp reference(_value, _thresholds), do: :green
+
+  defp below?(_value, nil), do: false
+  defp below?(value, threshold), do: value < threshold
+  defp above?(_value, nil), do: false
+  defp above?(value, threshold), do: value > threshold
+
+  defp reference_severity(state) when state in [:green, :blue], do: 0
+  defp reference_severity(state) when state in [:yellow_low, :yellow_high], do: 1
+  defp reference_severity(state) when state in [:red_low, :red_high], do: 2
+
+  defp reference_normalized(state) when state in [:red_low, :red_high], do: :red
+  defp reference_normalized(state) when state in [:yellow_low, :yellow_high], do: :yellow
+  defp reference_normalized(state), do: state
 end

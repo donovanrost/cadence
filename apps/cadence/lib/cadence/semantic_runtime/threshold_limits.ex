@@ -11,7 +11,8 @@ defmodule Cadence.SemanticRuntime.ThresholdLimits do
   stored states keep (`green`, `blue`, `yellow_low`, `yellow_high`, `red_low`, `red_high`; the
   normalized `red | yellow | green | blue`).
 
-  It replaces `Limits.Evaluator` for `Limits.evaluate_source_samples/3` (the batch ground
+  It replaced the old red/yellow evaluator (deleted with this module's arrival) for
+  `Limits.evaluate_source_samples/3` (the batch ground
   evaluation) and the dashboards' recomputed analysis, so one evaluator serves them and the live
   partitions. The answers are identical to the old evaluator's (a test compares them over generated
   thresholds and values); when the revision's compiled monitoring plan carries the limits (#451 T3)
