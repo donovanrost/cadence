@@ -113,6 +113,31 @@ defmodule Cadence.Catalog.FleetSnapshot do
 
   def entries_for(_metadata, _spacecraft_ids), do: {:error, :invalid_spacecraft_model_bindings}
 
+  @doc """
+  The spacecraft of an activation's fleet whose entry runs `catalog_revision_id` (#678), in one
+  query over the fleet's members (the column readers filter on). `[]` for a metadata that isn't
+  a v2 fleet.
+  """
+  @spec spacecraft_on_catalog(map(), String.t()) :: [String.t()]
+  def spacecraft_on_catalog(
+        %{"spacecraft_configuration_version" => 2, "fleet" => fleet},
+        catalog_revision_id
+      )
+      when is_binary(catalog_revision_id) do
+    case members_query(fleet) do
+      nil ->
+        []
+
+      query ->
+        query
+        |> where([m], m.catalog_revision_id == ^catalog_revision_id)
+        |> select([m], m.spacecraft_id)
+        |> Repo.all()
+    end
+  end
+
+  def spacecraft_on_catalog(_metadata, _catalog_revision_id), do: []
+
   @doc "One spacecraft's entry."
   @spec entry(map(), String.t()) :: {:ok, map()} | {:error, :spacecraft_model_not_active}
   def entry(%{"spacecraft_configuration_version" => 2, "fleet" => fleet}, spacecraft_id) do

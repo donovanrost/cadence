@@ -522,6 +522,8 @@ defmodule CadenceWeb.Router do
       get("/catalog/imports/:import_run_id", CatalogController, :import_run)
       get("/catalog/revisions/:revision_id/rollout", CatalogController, :rollout)
       get("/catalog/revisions/:revision_id/apids", CatalogController, :apids)
+      # #678: the spacecraft whose saved or active configuration uses the revision, paged.
+      get("/catalog/revisions/:revision_id/spacecraft", CatalogController, :revision_spacecraft)
       # L18 source files (owner: api).
       get("/catalog/artifacts/:artifact_id", CatalogController, :artifact)
       post("/catalog/artifacts/:artifact_id/reimport", CatalogController, :reimport)

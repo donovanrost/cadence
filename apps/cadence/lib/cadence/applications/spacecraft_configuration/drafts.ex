@@ -94,6 +94,43 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Drafts do
     |> Repo.one()
   end
 
+  @doc """
+  The spacecraft whose **latest** saved configuration names `catalog_revision_id` (#678): one
+  query, the latest row per spacecraft filtered on its catalog revision.
+  """
+  @spec saved_on_catalog(binary(), binary(), binary()) :: [binary()]
+  def saved_on_catalog(organization_id, mission_id, catalog_revision_id) do
+    latest =
+      from(row in ConfigurationRevisionRow,
+        where: row.organization_id == ^organization_id and row.mission_id == ^mission_id,
+        distinct: row.spacecraft_id,
+        order_by: [asc: row.spacecraft_id, desc: row.version],
+        select: %{spacecraft_id: row.spacecraft_id, catalog_revision_id: row.catalog_revision_id}
+      )
+
+    from(row in subquery(latest),
+      where: row.catalog_revision_id == ^catalog_revision_id,
+      select: row.spacecraft_id
+    )
+    |> Repo.all()
+  end
+
+  @doc "Each of `spacecraft_ids`' latest saved configuration version, in one query (absent: none)."
+  @spec latest_versions(binary(), binary(), [binary()]) :: %{binary() => pos_integer()}
+  def latest_versions(_organization_id, _mission_id, []), do: %{}
+
+  def latest_versions(organization_id, mission_id, spacecraft_ids) do
+    from(row in ConfigurationRevisionRow,
+      where:
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+          row.spacecraft_id in ^spacecraft_ids,
+      group_by: row.spacecraft_id,
+      select: {row.spacecraft_id, max(row.version)}
+    )
+    |> Repo.all()
+    |> Map.new()
+  end
+
   @doc "`latest/3` for many spacecraft in one query: `%{spacecraft_id => row}` (absent if none)."
   def latest_many(_organization_id, _mission_id, []), do: %{}
 
