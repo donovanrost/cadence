@@ -170,6 +170,31 @@ defmodule Cadence.Commanding.Groups.GroupStore do
     end
   end
 
+  @doc """
+  `withdrawn_seen/3` for many requests in one query: `%{request_id => basis | nil}`; a request
+  with no GO row, or one that predates the record, is absent (read it as `:unrecorded`).
+  """
+  @spec withdrawn_seen_for(binary(), binary(), [binary()]) :: %{binary() => binary() | nil}
+  def withdrawn_seen_for(_org, _mission, []), do: %{}
+
+  def withdrawn_seen_for(org, mission, request_ids) do
+    CommandApprovalRow
+    |> where(
+      [a],
+      a.organization_id == ^org and a.mission_id == ^mission and
+        a.command_request_id in ^request_ids and a.decision in ["approved", "not_required"]
+    )
+    |> order_by([a], asc: a.decided_at)
+    |> select([a], {a.command_request_id, a.metadata_document})
+    |> Repo.all()
+    |> Enum.reduce(%{}, fn {request_id, document}, acc ->
+      case document |> JsonDocument.unwrap_value() |> Map.fetch("withdrawn_seen") do
+        {:ok, seen} -> Map.put(acc, request_id, seen)
+        :error -> Map.delete(acc, request_id)
+      end
+    end)
+  end
+
   @doc "`%{command_request_id => command_queue_entry_id}` for the requests' pending queue entries."
   @spec pending_entry_ids(binary(), binary(), [binary()]) :: %{binary() => binary()}
   def pending_entry_ids(_org, _mission, []), do: %{}
