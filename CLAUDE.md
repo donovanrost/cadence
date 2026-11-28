@@ -15,8 +15,8 @@ Read `docs/TEAM.md` first: it is the charter (ground rules, who owns what, how w
 
 ## UI rules (non-negotiable)
 
-The console (`frontend/apps/console`, Vue 3 + `@cadence/apogee-ui`) is the only UI. LiveView pages,
-the federated apps, the host and `packages/ui` are being deleted; don't add to them.
+The console (`frontend/apps/console`, Vue 3 + `@cadence/apogee-ui`) is the only UI (DECISIONS #116).
+Apps are headless: they have no pages or surfaces of their own, and the console shows them.
 How the console is built: `frontend/apps/console/ARCHITECTURE.md`.
 
 1. **Compose `@/ui`.** Screens use the `Ap*` components from `@cadence/apogee-ui`, imported through
