@@ -111,22 +111,6 @@ test("plain remote links and query changes use the same host navigation", () => 
   ).toBe("replace");
 });
 
-// §11c B: the mission's management pages left the host; these mission-sidebar pages remain.
-test.each([
-  ["/missions/m-1/spacecraft/s-1", "/missions/m-1/catalog/artifacts/a-1"],
-  ["/missions/m-1/catalog/artifacts/a-1", "/missions/m-1/spacecraft/s-1"],
-  ["/missions/m-1/spacecraft/s-1/identity", "/missions/m-1/spacecraft/s-1"],
-])("management navigation stays in the host: %s to %s", (from, to) => {
-  const { link, preventedByNavigation } = clickLink(
-    to,
-    'data-phx-link="redirect"',
-    {},
-    `https://cadence.test${from}`,
-  );
-  expect(link.dataset.phxLink).toBe("redirect");
-  expect(preventedByNavigation).toBe(true);
-});
-
 test.each([
   ["https://other.test/missions", "", {}, undefined],
   ["/session", "", {}, undefined],

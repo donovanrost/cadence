@@ -44,6 +44,71 @@ defmodule Cadence.SpacecraftTypeStore do
     end
   end
 
+  @doc """
+  `persist_spacecraft_type/2` for many types of one mission in one insert (`ON CONFLICT DO NOTHING`
+  on the same key), then one read of what is stored: `{:ok, %{{type_id, version} => type}}`. The
+  first invalid type refuses all (admission of a fleet review, #1020).
+  """
+  @spec persist_spacecraft_types(binary(), [SpacecraftType.t()]) ::
+          {:ok, %{{binary(), pos_integer()} => SpacecraftType.t()}} | {:error, term()}
+  def persist_spacecraft_types(_organization_id, []), do: {:ok, %{}}
+
+  def persist_spacecraft_types(
+        organization_id,
+        [%SpacecraftType{mission_id: mission_id} | _] = types
+      )
+      when is_binary(organization_id) do
+    now = DateTime.utc_now()
+
+    with {:ok, _mission} <- Missions.fetch_mission(organization_id, mission_id),
+         {:ok, rows} <- insertable(types, organization_id, now) do
+      Repo.insert_all(SpacecraftTypeRow, rows,
+        on_conflict: :nothing,
+        conflict_target: [:mission_id, :spacecraft_type_id, :version]
+      )
+
+      {:ok, stored(organization_id, mission_id, types)}
+    end
+  end
+
+  defp insertable(types, organization_id, now) do
+    types
+    |> Enum.reduce_while({:ok, []}, fn type, {:ok, acc} ->
+      with {:ok, scoped} <- put_organization_scope(type, organization_id),
+           %Changeset{valid?: true} = changeset <- SpacecraftTypeRow.changeset(scoped) do
+        row =
+          changeset
+          |> Changeset.apply_changes()
+          |> Map.from_struct()
+          |> Map.drop([:__meta__, :id, :updated_at])
+          |> Map.put(:inserted_at, now)
+
+        {:cont, {:ok, [row | acc]}}
+      else
+        %Changeset{} = changeset -> {:halt, {:error, changeset}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+    |> case do
+      {:ok, rows} -> {:ok, Enum.reverse(rows)}
+      error -> error
+    end
+  end
+
+  defp stored(organization_id, mission_id, types) do
+    ids = Enum.map(types, & &1.spacecraft_type_id)
+    keys = MapSet.new(types, &{&1.spacecraft_type_id, &1.version})
+
+    from(row in SpacecraftTypeRow,
+      where:
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+          row.spacecraft_type_id in ^ids
+    )
+    |> Repo.all()
+    |> Enum.filter(&MapSet.member?(keys, {&1.spacecraft_type_id, &1.version}))
+    |> Map.new(&{{&1.spacecraft_type_id, &1.version}, SpacecraftTypeRow.to_domain(&1)})
+  end
+
   @spec fetch_spacecraft_type(binary(), binary(), binary()) ::
           {:ok, SpacecraftType.t()} | {:error, term()}
   def fetch_spacecraft_type(organization_id, mission_id, spacecraft_type_id)
@@ -202,21 +267,6 @@ defmodule Cadence.SpacecraftTypeStore do
     |> Map.values()
     |> Enum.reject(&(&1.lifecycle_state == "deleted"))
     |> Enum.sort_by(& &1.display_name)
-    |> Enum.map(&SpacecraftTypeRow.to_domain/1)
-  end
-
-  @spec list_spacecraft_type_versions(binary(), binary(), binary()) :: [SpacecraftType.t()]
-  def list_spacecraft_type_versions(organization_id, mission_id, spacecraft_type_id)
-      when is_binary(organization_id) and is_binary(mission_id) and
-             is_binary(spacecraft_type_id) do
-    SpacecraftTypeRow
-    |> where(
-      [row],
-      row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-        row.spacecraft_type_id == ^spacecraft_type_id
-    )
-    |> order_by([row], desc: row.version)
-    |> Repo.all()
     |> Enum.map(&SpacecraftTypeRow.to_domain/1)
   end
 

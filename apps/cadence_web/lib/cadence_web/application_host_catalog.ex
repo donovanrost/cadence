@@ -163,14 +163,7 @@ defmodule CadenceWeb.ApplicationHostCatalog do
 
     case admission do
       {:ok, application} ->
-        with :ok <-
-               ApplicationInstallations.authorize_surface(
-                 current_scope,
-                 route_context.host_context,
-                 application.surface
-               ) do
-          {:ok, Map.put(application, :generation_id, release_snapshot.generation_id)}
-        end
+        {:ok, Map.put(application, :generation_id, release_snapshot.generation_id)}
 
       {:error, reason} ->
         {:error, reason}
@@ -514,14 +507,7 @@ defmodule CadenceWeb.ApplicationHostCatalog do
            release_snapshot
          ) do
       {:ok, application} ->
-        with :ok <-
-               ApplicationInstallations.authorize_surface(
-                 current_scope,
-                 route_context.host_context,
-                 application.surface
-               ) do
-          {:ok, application_document(application, manifest_url)}
-        end
+        {:ok, application_document(application, manifest_url)}
 
       {:error, reason} ->
         {:error, reason}

@@ -15,7 +15,7 @@ defmodule Cadence.Reads.FleetStatus do
   one row each in a summary the limit-state writers keep (`Cadence.Limits.Store.FleetSummary`, #849), each spacecraft's newest
   telemetry receipt comes from the current-value store, which keeps it as values are recorded
   (`CurrentValueStore.last_receipts/2`), and the durable history receipts come from a cache
-  (`fleet_durable_receipts_ttl_ms`, 60 s) refreshed off the read's path. The number of queries is
+  (`durable_receipts_ttl_ms`, 60 s) refreshed off the read's path. The number of queries is
   fixed (pinned in `fleet_status_database_test.exs`) however large the fleet is. `build/1` and
   `build_posture/1` stay the pure builders over raw events (tests), reduced to the same
   per-spacecraft facts.

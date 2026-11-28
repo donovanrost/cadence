@@ -13,7 +13,6 @@ defmodule Cadence.Applications.TelemetryDecomReviewTest do
     TelemetryDecomFixtures
   }
 
-  alias Cadence.Applications.Spacecraft.ActionProvider, as: SpacecraftActions
   alias Cadence.Applications.TelemetryDecom.Review
   alias Cadence.Management.Activations
   alias Cadence.MissionModels.TelemetryProjection
@@ -186,31 +185,6 @@ defmodule Cadence.Applications.TelemetryDecomReviewTest do
 
     assert request.state == :approval_pending
     assert request.metadata["reviewed_configuration_basis"] == after_change["mission_token"]
-  end
-
-  test "the legacy spacecraft surface delegates reviewed actions and bounded results to the canonical authority",
-       c do
-    request = %ActionRequest{
-      application_key: "spacecraft",
-      application_version: 1,
-      surface_id: "telemetry_decom",
-      surface_version: 1,
-      action_id: "save_configuration",
-      params: reviewed(attrs(c), evidence(c))
-    }
-
-    assert {:ok, saved} = SpacecraftActions.execute(c.scope, c.host, request)
-    assert SpacecraftActions.result(saved)["configurationVersion"] == 1
-
-    assert {:error, %ActionFailure{code: "review_conflict"}} =
-             SpacecraftActions.execute(c.scope, c.host, request)
-
-    disable = %{request | action_id: "disable", params: reviewed(%{}, evidence(c))}
-    assert {:ok, disabled} = SpacecraftActions.execute(c.scope, c.host, disable)
-    refute disabled.enabled
-
-    assert {:error, :application_installation_disabled} =
-             ApplicationInstallations.fetch_installed(c.scope, c.host, "telemetry_decom")
   end
 
   test "a failed reviewed operation rolls back nested configuration writes", c do

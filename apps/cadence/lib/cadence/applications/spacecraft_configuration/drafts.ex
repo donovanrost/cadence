@@ -234,6 +234,19 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Drafts do
     :ok
   end
 
+  @doc "`fetch/3` for many revision ids in one query: `%{configuration_revision_id => row}` (absent if none)."
+  def fetch_many(_organization_id, _mission_id, []), do: %{}
+
+  def fetch_many(organization_id, mission_id, ids) when is_list(ids) do
+    from(row in ConfigurationRevisionRow,
+      where:
+        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+          row.configuration_revision_id in ^ids
+    )
+    |> Repo.all()
+    |> Map.new(&{&1.configuration_revision_id, &1})
+  end
+
   def fetch(organization_id, mission_id, id) do
     case Repo.get_by(ConfigurationRevisionRow,
            organization_id: organization_id,

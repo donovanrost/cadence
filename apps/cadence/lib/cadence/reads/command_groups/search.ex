@@ -6,6 +6,9 @@ defmodule Cadence.Reads.CommandGroups.Search do
     * `q`: case-insensitive substring of the title, log entry, group id, operation id, or a
       stacked command's id or name.
     * `target`: groups with that spacecraft among their targets.
+    * `withdrawn_revision` (E2, #546): groups with a target that runs that mission-model revision,
+      resolved here through `Control.WithdrawnPins.affected/2` for the mission (a revision of
+      another mission, or one no craft runs, resolves to no craft and an empty page).
     * `states`, `mine`, `awaiting_me`: in SQL, so a page is exact.
     * `stages`: groups where ANY target is at one of `release_failed | verify_failed |
       indeterminate | in_flight | queued_for_contact` (`in_flight` = `radiating` or `executed`).
@@ -18,6 +21,7 @@ defmodule Cadence.Reads.CommandGroups.Search do
   import Ecto.Query
 
   alias Cadence.Commanding.Groups.CommandGroupRow
+  alias Cadence.Control.WithdrawnPins
   alias Cadence.Reads.CommandGroups
   alias Cadence.Repo
 
@@ -31,7 +35,9 @@ defmodule Cadence.Reads.CommandGroups.Search do
 
   def page(org, mission, viewer_id, opts) do
     with {:ok, cursor} <- decode(opts[:cursor]) do
-      query = base(org, mission, viewer_id, opts)
+      query =
+        org |> base(mission, viewer_id, opts) |> withdrawn(withdrawn_craft(org, mission, opts))
+
       limit = Keyword.get(opts, :limit, 100)
 
       ctx = %{org: org, mission: mission, viewer: viewer_id, query: query, stages: opts[:stages]}
@@ -110,6 +116,29 @@ defmodule Cadence.Reads.CommandGroups.Search do
           ^like,
           ^like
         )
+    )
+  end
+
+  defp withdrawn_craft(org, mission, opts) do
+    case opts[:withdrawn_revision] do
+      nil -> nil
+      revision_id -> org |> WithdrawnPins.affected(mission) |> Map.get(revision_id, [])
+    end
+  end
+
+  defp withdrawn(query, nil), do: query
+  defp withdrawn(query, []), do: where(query, false)
+
+  defp withdrawn(query, craft) do
+    where(
+      query,
+      [g],
+      fragment(
+        "EXISTS (SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(?->'value') = 'array' THEN ?->'value' ELSE '[]'::jsonb END) t WHERE t->>'spacecraft_id' = ANY(?))",
+        g.targets_document,
+        g.targets_document,
+        ^craft
+      )
     )
   end
 

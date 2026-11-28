@@ -24,14 +24,14 @@ defmodule Cadence.Reads.PointConditionsTest do
   setup do
     persist_mission_scope(@org, @mission)
     persist_mission_scope(@org, "#{@mission}-other")
-    saved = Application.get_env(:cadence, :fleet_durable_receipts_ttl_ms)
+    saved = Application.get_env(:cadence, :durable_receipts_ttl_ms)
     # No cache between tests: the durable answer is asked every time.
-    Application.put_env(:cadence, :fleet_durable_receipts_ttl_ms, 0)
+    Application.put_env(:cadence, :durable_receipts_ttl_ms, 0)
 
     on_exit(fn ->
       if saved,
-        do: Application.put_env(:cadence, :fleet_durable_receipts_ttl_ms, saved),
-        else: Application.delete_env(:cadence, :fleet_durable_receipts_ttl_ms)
+        do: Application.put_env(:cadence, :durable_receipts_ttl_ms, saved),
+        else: Application.delete_env(:cadence, :durable_receipts_ttl_ms)
     end)
 
     # This node's current-value store, as in production (the suite's default is the Postgres one).

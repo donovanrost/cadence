@@ -1,12 +1,20 @@
 import type { MissionId } from "@/api/index.ts";
 import { computed, type Ref } from "vue";
-import { actorName } from "@/api";
-import { useConfigState, type ChangeSet } from "@/features/changes/index.ts";
+import { useConfigState, who, type ChangeSet } from "@/features/changes/index.ts";
 import { useSession } from "@/shell";
 import { fieldText, type ProfileField } from "./detail.ts";
 
-/** A profile field someone already staged in the open change set (Profile.md States: Conflict). */
-export type StagedField = Readonly<{ path: string; by: string; mine: boolean; value: unknown }>;
+/**
+ * A profile field already staged in the open change set (Profile.md States: Conflict). `by` is
+ * the author in a line (U25, #308): a person by name, "Cadence", a service identity marked; null
+ * for a person with no name, whose name drops from the sentence.
+ */
+export type StagedField = Readonly<{
+  path: string;
+  by: string | null;
+  mine: boolean;
+  value: unknown;
+}>;
 
 /**
  * The open set's staged values for one profile, by field path: update ops on this
@@ -32,7 +40,7 @@ export function stagedFields(
           continue;
         out.set(c.path, {
           path: c.path,
-          by: actorName(change.author, "Someone"),
+          by: who(change.author),
           mine: change.author.id === userId,
           value: "value" in c ? c.value : null,
         });
@@ -56,5 +64,14 @@ export function useStagedFields(
 }
 
 /** The chip: `Mira K. staged 1,200` (`You staged …` for your own). */
-export const stagedText = (f: ProfileField, s: StagedField) =>
-  `${s.mine ? "You" : s.by} staged ${fieldText({ ...f, value: s.value })}`;
+export const stagedText = (f: ProfileField, s: StagedField) => {
+  const value = fieldText({ ...f, value: s.value });
+  if (s.mine) return `You staged ${value}`;
+  return s.by ? `${s.by} staged ${value}` : `Staged ${value}`;
+};
+
+/** Stage's reason while another author's value for a dirty field stands (U25: no name drops). */
+export const stagedConflict = (s: StagedField, label: string) =>
+  s.by
+    ? `${s.by} already staged ${label}. Resolve it on Staged changes first.`
+    : `Already staged in the open change set: ${label}. Resolve it on Staged changes first.`;

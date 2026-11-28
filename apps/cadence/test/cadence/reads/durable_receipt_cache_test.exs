@@ -5,15 +5,15 @@ defmodule Cadence.Reads.DurableReceiptCacheTest do
 
   setup do
     key = {:cache_test, System.unique_integer([:positive])}
-    saved = Application.get_env(:cadence, :fleet_durable_receipts_ttl_ms)
-    Application.put_env(:cadence, :fleet_durable_receipts_ttl_ms, 60_000)
+    saved = Application.get_env(:cadence, :durable_receipts_ttl_ms)
+    Application.put_env(:cadence, :durable_receipts_ttl_ms, 60_000)
 
     on_exit(fn ->
       DurableReceiptCache.forget(key)
 
       if saved,
-        do: Application.put_env(:cadence, :fleet_durable_receipts_ttl_ms, saved),
-        else: Application.delete_env(:cadence, :fleet_durable_receipts_ttl_ms)
+        do: Application.put_env(:cadence, :durable_receipts_ttl_ms, saved),
+        else: Application.delete_env(:cadence, :durable_receipts_ttl_ms)
     end)
 
     %{key: key}
@@ -68,5 +68,45 @@ defmodule Cadence.Reads.DurableReceiptCacheTest do
     _ = :sys.get_state(DurableReceiptCache)
 
     assert [{^key, _, _, _, _}] = :ets.lookup(DurableReceiptCache, key)
+  end
+
+  test "a fetch that raises, exits or throws answers :degraded and does not reach the reader", %{
+    key: key
+  } do
+    for {fetch, tag} <- [
+          {fn -> raise "the store blew up" end, :raise},
+          {fn -> exit(:the_store_died) end, :exit},
+          {fn -> throw(:the_store_threw) end, :throw}
+        ] do
+      assert %{telemetry: :degraded, receipts: %{}} =
+               DurableReceiptCache.get({key, tag}, fetch)
+
+      DurableReceiptCache.forget({key, tag})
+    end
+
+    # The reader is still alive, and not linked to any of those tasks.
+    assert Process.alive?(self())
+    assert %{telemetry: :ok} = DurableReceiptCache.get(key, fn -> {:ok, %{}} end)
+  end
+
+  test "a refresh in the background is a child of the cache's task supervisor, not a bare task",
+       %{key: key} do
+    parent = self()
+
+    # TTL 1 ms: the second read finds the answer expired and refreshes it in the background.
+    Application.put_env(:cadence, :durable_receipts_ttl_ms, 1)
+    DurableReceiptCache.get(key, fn -> {:ok, %{}} end)
+    Process.sleep(5)
+
+    DurableReceiptCache.get(key, fn ->
+      send(parent, {:refresh, Process.info(self(), :dictionary)})
+      {:ok, %{}}
+    end)
+
+    assert_receive {:refresh, {:dictionary, dictionary}}, 2_000
+    refute dictionary[:"$callers"] == nil
+
+    supervisor = Process.whereis(Cadence.Reads.DurableReceiptCache.Tasks)
+    assert is_pid(supervisor)
   end
 end

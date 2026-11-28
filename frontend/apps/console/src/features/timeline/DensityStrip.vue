@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { formatClock, plural, timeTicks } from "@/ui";
+import { formatClock, timeTicks } from "@/ui";
 import type { Density } from "./api.ts";
-import { brushRange, densityBars } from "./model.ts";
+import { brushRange, densityBars, densityLabel, densityTruncation } from "./model.ts";
 
 /**
  * E1 · Events per bucket, stacked by severity (shape is the bar; words are in the label), now-line.
@@ -58,11 +58,9 @@ const FILL = {
   nominal: "fill-nominal-dim",
   info: "fill-text-4",
 } as const;
-const label = computed(() => {
-  const total = view.value.bars.reduce((n, b) => n + b.total, 0);
-  const busiest = [...view.value.bars].sort((a, b) => b.total - a.total)[0];
-  return `${plural(total, "event")} in the window${busiest && busiest.total ? `, busiest ${new Date(busiest.t).toISOString().slice(11, 16)}Z with ${busiest.total}` : ""}.`;
-});
+const label = computed(() => densityLabel(props.density));
+/** #677: a filtered window the server couldn't count whole says so, under the strip. */
+const truncation = computed(() => densityTruncation(props.density));
 </script>
 
 <template>
@@ -110,5 +108,6 @@ const label = computed(() => {
         >{{ tick.text }}</span
       >
     </div>
+    <p v-if="truncation" class="m-0 text-sm text-caution-text">{{ truncation }}</p>
   </div>
 </template>

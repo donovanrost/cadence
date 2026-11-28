@@ -434,6 +434,27 @@ defmodule CadenceWeb.Console.CommandGroupAPITest do
     assert code in ["command_group_not_found", "mission_not_found"]
   end
 
+  # E2 (#546): the Commands list filtered by the craft that run a withdrawn revision. Craft are
+  # resolved on the server (a withdrawn composition can sit on hundreds), never listed in the URL.
+  test "the list filters by withdrawn_revision, and it doesn't mix with target", c do
+    c |> create(body(c, "SET_SIGNED", %{"counter" => 1})) |> json_response(201)
+
+    list = fn query ->
+      as(c.requester) |> get(base(c) <> "/command-groups" <> query) |> json_response(200)
+    end
+
+    # No craft runs it (here nothing is withdrawn), another mission's revision likewise: empty.
+    assert %{"data" => %{"groups" => []}} = list.("?withdrawn_revision=no-such-revision")
+    assert %{"data" => %{"groups" => [_]}} = list.("")
+
+    [{craft, _} | _] = c.crafts
+
+    assert %{"error" => %{"code" => "invalid_params", "details" => %{"withdrawn_revision" => _}}} =
+             as(c.requester)
+             |> get(base(c) <> "/command-groups?withdrawn_revision=r1&target=#{craft}")
+             |> json_response(422)
+  end
+
   test "per-target values override the command's for those targets and are echoed back", c do
     [{first, _}, {second, _}] = c.crafts
     same = body(c, "SET_SIGNED", %{"counter" => 1})

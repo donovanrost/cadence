@@ -57,19 +57,13 @@ defmodule Cadence.Extensions.RegistryTest do
              %ApplicationContribution{application_key: "comms", application_version: 1}
            ]
 
-    for {package_id, application_key} <- [
-          {"cadence.mission-catalog", "mission_catalog"},
-          {"cadence.ops_console", "ops_console"},
-          {"cadence.spacecraft", "spacecraft"}
-        ] do
-      assert {:ok, package} = ExtensionCatalog.fetch(package_id)
-      assert package.trust == :first_party
-      assert package.version == 1
+    assert {:ok, package} = ExtensionCatalog.fetch("cadence.ops_console")
+    assert package.trust == :first_party
+    assert package.version == 1
 
-      assert package.contributions == [
-               %ApplicationContribution{application_key: application_key, application_version: 1}
-             ]
-    end
+    assert package.contributions == [
+             %ApplicationContribution{application_key: "ops_console", application_version: 1}
+           ]
   end
 
   test "every typed contribution resolves through its owning domain registry" do
@@ -263,9 +257,9 @@ defmodule Cadence.Extensions.RegistryTest do
     assert :ok = ExtensionCatalog.validate()
 
     assert ExtensionCatalog.inventory() == %{
-             packages: 13,
-             applications: 8,
-             available_applications: 7,
+             packages: 11,
+             applications: 6,
+             available_applications: 5,
              capabilities: 5,
              transport_kinds: 1,
              provider_connectors: 1,
@@ -275,16 +269,14 @@ defmodule Cadence.Extensions.RegistryTest do
            }
 
     assert Enum.map(ExtensionCatalog.applications_for_scope(:spacecraft), & &1.application_key) ==
-             ["telemetry_decom", "spacecraft"]
+             ["telemetry_decom"]
 
     assert Enum.map(ExtensionCatalog.applications_for_scope(:mission), & &1.application_key) ==
              [
                "derived_telemetry",
                "limits",
                "comms",
-               "mission_catalog",
                "ops_console",
-               "spacecraft",
                "cfdp"
              ]
 
@@ -295,9 +287,7 @@ defmodule Cadence.Extensions.RegistryTest do
              "derived_telemetry",
              "limits",
              "comms",
-             "mission_catalog",
-             "ops_console",
-             "spacecraft"
+             "ops_console"
            ]
 
     assert {:ok, %{application_key: "derived_telemetry", version: 1}} =

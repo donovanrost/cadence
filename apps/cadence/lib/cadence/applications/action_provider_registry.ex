@@ -8,11 +8,9 @@ defmodule Cadence.Applications.ActionProviderRegistry do
 
   @contributors [
     Cadence.Applications.Comms,
-    Cadence.Applications.Spacecraft,
     Cadence.Applications.TelemetryDecom,
     Cadence.Applications.DerivedTelemetry,
     Cadence.Applications.Limits,
-    Cadence.Applications.MissionCatalog,
     Cadence.Applications.OpsConsole
   ]
 

@@ -40,27 +40,7 @@ defmodule Cadence.Reads.Applications.InventoryTest do
     }
   end
 
-  test "catalog inventory composes available definitions with lifecycle state", context do
-    definitions = ExtensionCatalog.available_applications_for_scope(:mission)
-
-    assert {:ok, applications} =
-             Inventory.catalog(context.scope, context.mission_host, definitions)
-
-    assert Enum.map(applications, & &1.application_key) == [
-             "derived_telemetry",
-             "limits"
-           ]
-
-    assert Enum.all?(applications, fn application ->
-             not application.declared? and
-               application.installable? and
-               not application.manageable? and
-               application.lifecycle_state == nil and
-               application.status.state == :not_installed
-           end)
-  end
-
-  test "legacy platform rows are preserved but excluded while disabled optional apps stay disabled",
+  test "platform rows are preserved but excluded while disabled optional apps stay disabled",
        context do
     row =
       Repo.insert!(%InstallationRow{
@@ -83,14 +63,8 @@ defmodule Cadence.Reads.Applications.InventoryTest do
 
     definitions = ExtensionCatalog.available_applications_for_scope(:mission)
 
-    assert {:ok, applications} =
-             Inventory.catalog(context.scope, context.mission_host, definitions)
-
-    refute Enum.any?(applications, &(&1.application_key == "comms"))
-    assert Enum.find(applications, &(&1.application_key == "limits")).lifecycle_state == :disabled
-
     assert {:ok, [limits]} =
-             Inventory.declared(
+             declared(
                context.scope,
                context.mission_host,
                %{"comms" => %{}, "limits" => %{}},
@@ -98,6 +72,7 @@ defmodule Cadence.Reads.Applications.InventoryTest do
              )
 
     assert limits.application_key == "limits"
+    assert limits.lifecycle_state == :disabled
     assert Repo.get!(InstallationRow, row.application_installation_id) == row
   end
 
@@ -111,7 +86,7 @@ defmodule Cadence.Reads.Applications.InventoryTest do
     }
 
     assert {:ok, [custom, telemetry]} =
-             Inventory.declared(
+             declared(
                context.scope,
                context.spacecraft_host,
                declarations,
@@ -131,11 +106,6 @@ defmodule Cadence.Reads.Applications.InventoryTest do
     assert telemetry.status.state == :not_installed
     assert telemetry.installable?
     refute telemetry.manageable?
-
-    summary = Inventory.summary([custom, telemetry])
-    assert summary.state == :blocked
-    assert summary.label == "0 of 2 ready"
-    assert summary.tone == :blocked
   end
 
   test "installed declared applications load status through the registered provider", context do
@@ -147,7 +117,7 @@ defmodule Cadence.Reads.Applications.InventoryTest do
              )
 
     assert {:ok, [telemetry]} =
-             Inventory.declared(
+             declared(
                context.scope,
                context.spacecraft_host,
                %{"telemetry_decom" => %{}},
@@ -171,7 +141,7 @@ defmodule Cadence.Reads.Applications.InventoryTest do
              )
 
     assert {:ok, [telemetry]} =
-             Inventory.declared(
+             declared(
                context.scope,
                context.spacecraft_host,
                %{},
@@ -205,7 +175,7 @@ defmodule Cadence.Reads.Applications.InventoryTest do
              |> Repo.update_all(set: [application_version: 99])
 
     assert {:ok, [telemetry]} =
-             Inventory.declared(
+             declared(
                context.scope,
                context.spacecraft_host,
                %{"telemetry_decom" => %{}},
@@ -219,5 +189,17 @@ defmodule Cadence.Reads.Applications.InventoryTest do
     assert telemetry.installable?
     refute telemetry.manageable?
     assert telemetry.uninstallable?
+  end
+
+  defp declared(scope, host_context, declarations, definitions) do
+    {:ok, installations} = ApplicationInstallations.list(scope, host_context)
+
+    Inventory.declared_with_installations(
+      scope,
+      host_context,
+      declarations,
+      definitions,
+      installations
+    )
   end
 end

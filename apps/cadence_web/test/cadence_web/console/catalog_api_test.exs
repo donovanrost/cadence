@@ -1,6 +1,7 @@
 defmodule CadenceWeb.Console.CatalogAPITest do
   use CadenceWeb.ConnCase, async: false
   @moduletag :tmp_dir
+  import Ecto.Query, only: [from: 2]
 
   alias CadenceWeb.TestFixtures
 
@@ -215,5 +216,34 @@ defmodule CadenceWeb.Console.CatalogAPITest do
 
     missing = c.user |> TestFixtures.member_conn() |> get("#{c.base}/artifacts/nope")
     assert json_response(missing, 404)["error"]["code"] == "artifact_not_found"
+  end
+
+  test "L18: a running or failed run with no revision still names its source file", c do
+    database = TestFixtures.persist_catalog_database!(c.mission)
+    run = TestFixtures.start_catalog_revision_import!(database, artifact_name: "broken.yaml")
+
+    assert_names_its_file = fn status ->
+      assert [
+               %{"status" => ^status, "file_name" => "broken.yaml", "revision_number" => nil} =
+                 row
+             ] =
+               get_data(c, c.base)["database"]["import_runs"]
+
+      assert is_binary(row["format_label"])
+
+      page = get_data(c, "#{c.base}/artifacts/#{run.artifact_id}")
+      assert page["revisions"] == []
+      assert [^row] = page["import_runs"]
+    end
+
+    assert_names_its_file.("running")
+
+    {1, _} =
+      Cadence.Repo.update_all(
+        from(r in Cadence.Catalog.ImportRunRow, where: r.import_run_id == ^run.import_run_id),
+        set: [status: "failed", completed_at: DateTime.utc_now()]
+      )
+
+    assert_names_its_file.("failed")
   end
 end
