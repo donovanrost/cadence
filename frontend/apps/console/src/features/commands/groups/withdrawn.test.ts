@@ -220,7 +220,7 @@ describe("E2 withdrawn after GO (#546, #1042): the release panel's caution", () 
       "The model's approval was rejected after GO on 2 spacecraft, latest at 11-27 10:02Z. Their uplinks won't go out on their own: resubmit for a new GO, or release on a contact you name.",
     );
     expect(withdrawnAfterGoLine(read(2, { kind: "revoked" }))).toBe(
-      "The model 2 spacecraft run is no longer approved since 11-27 10:02Z. Their uplinks won't go out on their own: resubmit for a new GO, or release on a contact you name.",
+      "The model that 2 spacecraft run is no longer approved since 11-27 10:02Z. Their uplinks won't go out on their own: resubmit for a new GO, or release on a contact you name.",
     );
   });
 

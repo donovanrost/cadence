@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { ApPanel } from "@/ui";
+import { ApPanel, formatCount } from "@/ui";
 import type { ModelRevision } from "./api.ts";
 import {
   AFFECTED_INTRO,
@@ -55,7 +55,7 @@ const total = computed(() => props.revision.affected_groups_count ?? groups.valu
             query: { withdrawn_revision: revision.id, stage: 'queued_for_contact' },
           }"
           class="text-readout underline"
-          >See all {{ total }} in Commands</RouterLink
+          >See all {{ formatCount(total) }} in Commands</RouterLink
         >
       </p>
     </template>

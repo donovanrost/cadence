@@ -149,7 +149,7 @@ export function withdrawnAfterGoLine(w: GroupWithdrawnAfterGo): string {
   const who = actorInSentence(x.by);
   const on = w.count === 1 ? "on 1 spacecraft" : `on ${w.count} spacecraft, latest`;
   const head = !isKnown(x.kind)
-    ? `The model ${w.count === 1 ? "1 spacecraft runs" : `${w.count} spacecraft run`} is no longer approved${since(x.at)}`
+    ? `The model that ${w.count === 1 ? "1 spacecraft runs" : `${w.count} spacecraft run`} is no longer approved${since(x.at)}`
     : `The model's approval was ${x.kind === "rejected" ? "rejected" : "withdrawn"} after GO ${on}${who ? ` by ${who}` : ""}${at(x.at)}${why(x.reason)}`;
   const them = w.count === 1 ? "Its uplinks" : "Their uplinks";
   return `${head}. ${them} won't go out on their own: resubmit for a new GO, or release on a contact you name.`;
