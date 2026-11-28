@@ -75,11 +75,6 @@ defmodule CadenceWeb.Router do
     plug(CadenceWeb.Plugs.FrontendReleasePublisher)
   end
 
-  pipeline :authenticated_api do
-    plug(CadenceWeb.Plugs.FetchCurrentScope)
-    plug(CadenceWeb.Plugs.RequireCurrentScope)
-  end
-
   pipeline :frontend_release_artifact do
     plug(:put_secure_browser_headers)
   end

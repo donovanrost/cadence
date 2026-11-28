@@ -1,7 +1,7 @@
 defmodule CadenceWeb.Console.AlarmEpisodeAPITest do
   use CadenceWeb.ConnCase, async: false
 
-  alias CadenceWeb.ControlPlaneApiFixtures
+  alias CadenceWeb.MissionReadModelFixtures
   alias CadenceWeb.TestFixtures
 
   setup do
@@ -11,7 +11,7 @@ defmodule CadenceWeb.Console.AlarmEpisodeAPITest do
     TestFixtures.grant_membership!(user, org)
     TestFixtures.grant_membership!(other, org)
     mission = TestFixtures.persist_mission!(org)
-    ControlPlaneApiFixtures.seed_mission_read_models(org.organization_id, mission.mission_id)
+    MissionReadModelFixtures.seed_mission_read_models(org.organization_id, mission.mission_id)
 
     %{user: user, other: other, org: org, mission: mission}
   end
