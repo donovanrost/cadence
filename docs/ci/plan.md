@@ -18,6 +18,115 @@ Goal: PRs to `develop` and `main` get fast, trustworthy required checks, well un
 wall clock. Build order is **Elixir first** (phases 1–3), then the Apogee console and its full
 browser e2e suite (phase 4).
 
+## CI capacity measurement, 2026-11-28 UTC (#1030)
+
+Fixed sample of 200 `pull_request` runs of `ci.yml`, from [45899244496](https://github.com/donovanrost/cadence/actions/runs/45899244496)
+(2026-11-26 21:35:58 UTC) through [46102662313](https://github.com/donovanrost/cadence/actions/runs/46102662313)
+(2026-11-28 03:24:01 UTC). The cutoff was 2026-11-28 03:28:50 UTC. The
+reference `develop` commit was `37075aab150fd0121a25f7ea72e5119dd3407efb`.
+
+Current concurrency groups runs by PR number and enables `cancel-in-progress`
+for `pull_request` events. Push runs keep their own ref group and finish so
+they can publish caches.
+
+The sample uses the Actions REST endpoints for workflow runs, jobs with
+`filter=all`, and 104 completed attempt log archives retrieved once. Runner
+minutes sum `completed_at - started_at` across allocated jobs. Phase times use
+step timestamps and nested cache logs. For 798 test steps, the time before the
+first recognizable ExUnit or Playwright banner counts as setup. Test/check time
+can include setup inside steps with no such marker. Other time includes evidence
+uploads, teardown, and unclassified runner time. Queue time uses each job's
+`started_at - created_at` where both timestamps are usable. The table includes
+all 1,950 launched jobs in the counts and times the 1,931 completed by the cutoff.
+[Workflow runs API](https://docs.github.com/en/rest/actions/workflow-runs#list-workflow-runs-for-a-workflow)
+[Workflow jobs API](https://docs.github.com/en/rest/actions/workflow-jobs#list-jobs-for-a-workflow-run)
+
+**5,268.3 runner-minutes** across the sample, or **26.3 per workflow run**
+including drafts and cancellations. Among 97 completed first attempts with a
+positive code gate and a required verdict, median runner cost was **54.3 min**
+(p90 **71.0 min**). Their wall clock from creation to the last job was **16.9 min**
+(p90 **36.4 min**). The first-runner wait across started runs was **0.3 min**
+median and **3.4 min** p90. Of 1,894 measurable job waits, **652** were at
+least one minute.
+
+### Job costs and actual path decisions
+
+| Job | Workflow runs / jobs | Setup min | Cache restore min | Test / check min | Other min | Runner min | Queue median / p90 min | Run median min | Path skips / ran with gate false |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Console e2e | 87 / 180 | 487.4 | 34.3 | 1,036.6 | 18.1 | 1,576.4 | 0.1 / 8.8 | 7.8 | 4 / 0 |
+| Core tests | 90 / 185 | 241.9 | 20.9 | 509.8 | 14.4 | 787.0 | 0.1 / 9.9 | 4.2 | 15 / 0 |
+| Web tests | 92 / 188 | 281.4 | 20.1 | 257.4 | 14.2 | 573.1 | 0.1 / 10.8 | 3.0 | 15 / 0 |
+| Federation browser | 87 / 180 | 290.2 | 36.3 | 32.3 | 18.4 | 377.2 | 0.1 / 9.1 | 1.9 | 4 / 0 |
+| Packages, simulator, planes and cluster tests | 91 / 94 | 124.4 | 9.1 | 176.6 | 6.0 | 316.2 | 0.1 / 7.4 | 3.2 | 15 / 0 |
+| Browser assets (built once) | 103 / 107 | 92.9 | 15.8 | 166.5 | 9.8 | 284.9 | 0.1 / 9.0 | 2.6 | 4 / 0 |
+| Web tests needing the federation publication | 87 / 90 | 129.2 | 9.9 | 101.3 | 6.0 | 246.3 | 0.1 / 8.1 | 2.6 | 4 / 0 |
+| Elixir quality | 89 / 92 | 50.9 | 5.5 | 166.3 | 4.7 | 227.5 | 0.1 / 9.5 | 2.0 | 15 / 0 |
+| Ingest tests, journal off | 90 / 93 | 123.4 | 10.8 | 72.5 | 7.2 | 214.0 | 0.1 / 10.2 | 2.1 | 15 / 0 |
+| QuestDB integration | 91 / 94 | 99.6 | 6.4 | 71.7 | 7.2 | 184.9 | 0.1 / 9.8 | 1.7 | 15 / 0 |
+| REST seed smoke | 90 / 93 | 154.8 | 4.9 | 16.3 | 6.3 | 182.3 | 0.1 / 11.5 | 1.9 | 15 / 0 |
+| Frontend quality | 31 / 33 | 27.3 | 2.1 | 121.2 | 2.4 | 152.9 | 0.1 / 12.0 | 4.9 | 73 / 0 |
+| JS dependency audit | 100 / 104 | 17.7 | 0.0 | 76.0 | 6.0 | 99.7 | 0.1 / 7.8 | 0.9 | 4 / 0 |
+| Repository hygiene | 106 / 110 | 12.7 | 0.0 | 1.0 | 5.9 | 19.7 | 0.1 / 8.3 | 0.2 | — |
+| Detect code changes | 111 / 115 | 2.6 | 0.0 | 6.5 | 4.9 | 14.0 | 0.1 / 1.2 | 0.1 | — |
+| ci-ok | 189 / 192 | 0.2 | 0.0 | 3.4 | 8.5 | 12.2 | 0.1 / 2.8 | 0.1 | — |
+
+The path column counts attempts where the recorded gate was false. It includes
+101 attempts with explicit filter logs and four reruns that reused their
+original `changes` job. Four explicit attempts were docs-only. There were 67
+with the backend gate alone among the two scope gates, ten with the frontend
+gate alone, and 20 with both. No job launched against a false recorded gate.
+
+The broad code gate still ran **83 JS dependency audit jobs** on attempts with
+no package manifests, lockfiles, package-manager config, or CI paths in the
+reported changes. Those jobs used **80.1 min**. Advisory data can change between
+commits, so narrowing that gate would change which failures are caught and
+needs approval.
+
+### Cancellations, reruns, and stale bases
+
+| Observation | Count | Runner-minutes |
+| --- | ---: | ---: |
+| Canceled workflow runs | 68 | 1,336.1 |
+| Likely superseded, with a newer run on the same head branch before cancellation | 62 | 1,335.9 |
+| Likely superseded by a changed head SHA | 37 | 1,333.6 |
+| Additional attempts | 4 | 204.0 |
+| Attempts with the stale base warning | 12 of 28 with a recorded tested base and live tip | 482.0 |
+| Confirmed draft attempts | 85 | 5.3 |
+
+The cancellation rows overlap. Supersession is inferred from creation and
+cancellation timestamps grouped by head repository and branch. Those elapsed
+minutes accrued before cancellation became effective. Warned attempts include
+successful jobs and describe the age of the tested base. Each confirmed draft
+allocated a runner for `ci-ok` only.
+
+### Cache observations and the long pole
+
+| Restore | Exact | Fallback | Miss | Median restore, min |
+| --- | ---: | ---: | ---: | ---: |
+| Mix deps | 1,249 | 0 | 0 | 0.02 |
+| `_build` | 0 | 1,249 | 0 | 0.04 |
+| pnpm store | 932 | 48 | 0 | 0.06 |
+| Playwright | 345 | 0 | 0 | 0.06 |
+| npm cache | 413 | 0 | 0 | 0.03 |
+
+Cache counts use completed restore actions with a recorded outcome. The cohort
+had no complete cache misses to estimate a cold penalty. The `_build` fallbacks
+satisfied restore requests under the current policy of publishing from base
+branch pushes.
+
+Console e2e shard 2 took **13.5 min** median and **15.0 min** p90 on successful
+jobs. Shard 1 took **6.6 min** median and **8.2 min** p90. The fleet-scale budget
+step on shard 2 accounted for about **463 runner-minutes**. Keep that check and
+its isolated execution when evaluating shard balance.
+
+The first setup cut to verify is the LiveView npm install in the browser artifact
+consumers. The measured steps spent **27.7 min** in Console e2e and **28.6 min**
+in Federation browser. Both consume a prebuilt artifact from the job that
+already installs those dependencies. Verify that both suites can run from the
+artifact before removing consumer setup. The recorded steps provide a
+**56.3-minute upper bound** across this cohort. Measure the post-change jobs
+before reporting realized savings.
+
 ## What exists today
 
 | Thing | State |
