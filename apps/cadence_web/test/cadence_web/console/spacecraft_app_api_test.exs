@@ -41,22 +41,16 @@ defmodule CadenceWeb.Console.SpacecraftAppAPITest do
     %{"configuration_review" => ConfigurationReviews.metadata(ref, nil)}
   end
 
-  test "lists the spacecraft-scope apps with only spacecraft surfaces; an unknown one is 404",
-       c do
+  test "lists the spacecraft-scope apps; an unknown one is 404", c do
     data = c |> get_conn(c.base) |> json_response(200) |> Map.fetch!("data")
 
     assert data["permissions"] == ["apps.install"]
     keys = Enum.map(data["apps"], & &1["key"])
     assert "telemetry_decom" in keys
-    # Headless (#669): the console lists it with its verbs and no pages to open.
-    assert Enum.find(data["apps"], &(&1["key"] == "telemetry_decom"))["surfaces"] == []
-
-    for app <- data["apps"], surface <- app["surfaces"] do
-      assert surface["scope"] == "spacecraft"
-    end
 
     for app <- data["apps"] do
       assert %{"state" => _, "status" => _} = app
+      refute Map.has_key?(app, "surfaces")
     end
 
     assert c |> get_conn(c.missing) |> json_response(404) |> get_in(["error", "code"]) ==

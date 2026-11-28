@@ -6,9 +6,8 @@ defmodule CadenceWeb.Router do
   @dev_ingest_routes Application.compile_env(:cadence_web, :dev_ingest_routes, false)
 
   pipeline :browser do
-    plug(CadenceWeb.Plugs.BrowserAccepts)
+    plug(:accepts, ["html"])
     plug(:fetch_session)
-    plug(CadenceWeb.Plugs.ApplicationHostCSRF)
     plug(:protect_from_forgery)
     plug(:put_secure_browser_headers)
     plug(CadenceWeb.Plugs.FetchBrowserCurrentScope)
@@ -16,19 +15,6 @@ defmodule CadenceWeb.Router do
 
   pipeline :require_authenticated_scope do
     plug(CadenceWeb.Plugs.RequireAuthenticatedScope)
-  end
-
-  pipeline :require_authenticated_user do
-    plug(CadenceWeb.Plugs.RequireAuthenticatedScope)
-  end
-
-  pipeline :application_host_json do
-    plug(:accepts, ["json"])
-    plug(:fetch_session)
-    plug(:put_secure_browser_headers)
-    plug(CadenceWeb.Plugs.FetchBrowserCurrentScope)
-    plug(CadenceWeb.Plugs.RequireApplicationHostScope)
-    plug(CadenceWeb.Plugs.ApplicationHostSession)
   end
 
   pipeline :api do
@@ -522,8 +508,6 @@ defmodule CadenceWeb.Router do
       post("/apps/:key/install", AppController, :install)
       post("/apps/:key/disable", AppController, :disable)
       post("/apps/:key/uninstall", AppController, :uninstall)
-      # L9 surface host: one surface's application-host catalog, status and surfaces.
-      get("/apps/:key/surfaces/:surface_id/host", AppSurfaceController, :host)
 
       # -- Events and scheduling (owner: api, DECISIONS #26). Contracts: ops.md, scheduling.md
       get("/events", EventController, :index)
@@ -721,25 +705,5 @@ defmodule CadenceWeb.Router do
     put("/objects/:digest", FrontendReleasePublisherController, :upload)
     post("/releases", FrontendReleasePublisherController, :create)
     post("/promotions", FrontendReleasePublisherController, :promote)
-  end
-
-  scope "/api/cadence/application-host/v1", CadenceWeb do
-    pipe_through([:browser, :require_authenticated_user, :application_host_json])
-
-    post("/missions/:mission_id/query", ApplicationHostController, :query)
-
-    post(
-      "/missions/:mission_id/spacecraft/:spacecraft_id/query",
-      ApplicationHostController,
-      :query
-    )
-
-    post("/missions/:mission_id/actions", ApplicationHostController, :actions)
-
-    post(
-      "/missions/:mission_id/spacecraft/:spacecraft_id/actions",
-      ApplicationHostController,
-      :actions
-    )
   end
 end

@@ -222,16 +222,6 @@ defmodule Cadence.Auth.Policy do
     end
   end
 
-  def authorize(%Scope{} = current_scope, :read_application_catalog, %{
-        organization_id: organization_id,
-        mission_id: mission_id
-      }) do
-    authorize(current_scope, :operate_mission, %{
-      organization_id: organization_id,
-      mission_id: mission_id
-    })
-  end
-
   # Dashboard authoring deliberately starts with the existing mission-operator
   # population. Keeping this as a named policy action gives the Editor and
   # other mutation routes one enforceable boundary while leaving room for a
