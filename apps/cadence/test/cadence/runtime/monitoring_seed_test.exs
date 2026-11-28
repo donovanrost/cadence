@@ -2,9 +2,10 @@ defmodule Cadence.Runtime.PartitionOwner.MonitoringSeedTest do
   @moduledoc "The seed reads the mission's active alarm states for the plan's policies."
   use Cadence.DataCase, async: true
 
+  alias Cadence.Runtime.PartitionKey
   alias Cadence.Runtime.PartitionOwner.MonitoringSeed
   alias Cadence.SemanticObservations.LatestAlarmStateRow
-  alias Cadence.SemanticRuntime.{MonitoringPlan, Scope}
+  alias Cadence.SemanticRuntime.{MonitoringPlan, Scope, State}
 
   setup do
     suffix = System.unique_integer([:positive])
@@ -47,6 +48,41 @@ defmodule Cadence.Runtime.PartitionOwner.MonitoringSeedTest do
     assert MonitoringSeed.entries(%{mission_id: "another-mission"}, plan) == []
     assert MonitoringSeed.entries(%{mission_id: ctx.mission_id}, %{plan | monitoring: []}) == []
   end
+
+  test "seeds only the policies the recovered state has no entry for (#443)", ctx do
+    alarm_state!(ctx, "sc-001", "policy:kept", "critical")
+    alarm_state!(ctx, "sc-001", "policy:new", "warning")
+
+    plan = %{
+      algorithms: [],
+      monitoring:
+        Enum.map(
+          ["policy:kept", "policy:new"],
+          &MonitoringPlan.new(%{policy_id: &1, parameter_id: "parameter:" <> &1})
+        )
+    }
+
+    scope = Scope.new(ctx.mission_id, "sc-001")
+    carried = %{effective_state: :normal, candidate_state: :normal}
+    state = %State{monitoring_state: %{{scope, "policy:kept"} => carried}}
+
+    assert {:ok, seeded} =
+             MonitoringSeed.maybe_seed(%{mission_id: ctx.mission_id}, key(), plan, state)
+
+    # The carried policy keeps what the partition remembered, even where the table says otherwise.
+    assert seeded.monitoring_state[{scope, "policy:kept"}] == carried
+    assert %{effective_state: :warning} = seeded.monitoring_state[{scope, "policy:new"}]
+
+    # With an entry for every policy there is nothing to read or seed.
+    full = %State{
+      monitoring_state: Map.put(seeded.monitoring_state, {scope, "policy:new"}, carried)
+    }
+
+    assert {:ok, ^full} =
+             MonitoringSeed.maybe_seed(%{mission_id: ctx.mission_id}, key(), plan, full)
+  end
+
+  defp key, do: PartitionKey.new(%{affinity: :source_endpoint, value: "seed-test"})
 
   defp alarm_state!(ctx, spacecraft_id, policy_id, effective_state) do
     at = ~U[2026-11-15 12:00:00.000000Z]

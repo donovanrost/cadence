@@ -115,14 +115,36 @@ defmodule Cadence.SemanticRuntimeStoreTest do
     assert :missing = Snapshot.fetch(spec, other)
   end
 
-  test "a snapshot is per tenant and runtime basis", %{spec: spec, key: key} = ctx do
+  test "a snapshot is per tenant and partition, whatever basis wrote it (#443)",
+       %{
+         spec: spec,
+         key: key
+       } = ctx do
     {:ok, _, writer, _} = Store.recover(spec, key)
     state = state_after(ctx.plan, ctx.input_id, 2)
     assert :ok = Store.snapshot(spec, key, writer, state, %{"s" => 5})
 
-    assert :missing = Snapshot.fetch(%{spec | runtime_basis_sha256: "another-basis"}, key)
     assert :missing = Snapshot.fetch(%{spec | organization_id: "another-org"}, key)
     assert {:ok, ^state, %{"s" => 5}} = Snapshot.fetch(spec, key)
+    # The next basis finds the state the last one left; `Carry` decides what of it still applies.
+    assert {:ok, ^state, %{"s" => 5}} =
+             Snapshot.fetch(%{spec | runtime_basis_sha256: "another-basis"}, key)
+  end
+
+  test "an owner recovering under a new basis takes the last owner's state and replaces its snapshot",
+       ctx do
+    %{spec: spec, key: key} = ctx
+    next = %{spec | runtime_basis_sha256: "next-basis", generation: spec.generation + 1}
+    {:ok, _, old, _} = Store.recover(spec, key)
+    state = state_after(ctx.plan, ctx.input_id, 2)
+    assert :ok = Store.snapshot(spec, key, old, state, %{"s" => 5})
+
+    assert {:ok, ^state, new, %{"s" => 5}} = Store.recover(next, key)
+    later = state_after(ctx.plan, ctx.input_id, 3)
+    assert :ok = Store.snapshot(next, key, new, later, %{"s" => 9})
+
+    assert {:ok, ^later, %{"s" => 9}} = Snapshot.fetch(next, key)
+    assert {:error, :semantic_runtime_fenced} = Store.snapshot(spec, key, old, state, %{"s" => 5})
   end
 
   test "a newer generation fences an old basis and cannot be claimed by an old generation", ctx do
