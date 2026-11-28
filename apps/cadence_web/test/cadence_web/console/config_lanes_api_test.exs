@@ -26,7 +26,12 @@ defmodule CadenceWeb.Console.ConfigLanesAPITest do
   end
 
   test "the monitoring lane carries its sets in review", c do
-    assert %{"lane" => "monitoring", "change_set" => nil, "in_review" => []} =
+    assert %{
+             "lane" => "monitoring",
+             "change_set" => nil,
+             "in_review" => [],
+             "in_review_count" => 0
+           } =
              c |> read("?lane=monitoring") |> json_response(200) |> Map.fetch!("data")
   end
 

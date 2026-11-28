@@ -32,7 +32,7 @@ The head and one lane's staged bar (ADR-020 P3 slice L, #451; ux U108).
 - **`lane`** is `configuration` (the default, so a read without it is unchanged) or `monitoring`. Any other value is `422 invalid_lane`.
 - **The answer** is `{head, lane, change_set, permissions}`.
   - `change_set` is the lane's active set: configuration's open or in-review set, or monitoring's open set.
-  - A monitoring read adds `in_review`, the monitoring sets in review (any number), oldest first, each in the same shape as `change_set`.
+  - A monitoring read adds `in_review`, at most 20 of the monitoring sets in review, oldest first, as summaries `{id, state, opened_at, opened_by, submitted_at, submitted_by, reason, staged_count}`, plus `in_review_count` with the total. Read a set in full through `GET …/config/change-sets/:id`. The read takes the same number of queries however many sets are in review.
   - Both lanes share `head`: revisions from both are one sequence.
 - **Staging (`POST …/config/stage`)** goes to the lane of its ops' kinds. One request's ops must all be one lane's, or it's `422 mixed_lanes`.
   - Configuration keeps its rules: one set, frozen while in review (`frozen_in_review`).

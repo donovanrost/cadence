@@ -7,11 +7,14 @@ defmodule Cadence.Configuration.Status do
 
   alias Cadence.Configuration.{ActorNames, ChangeSetStore, Document, Ledger}
 
+  @in_review_limit 20
+
   @doc """
   The head and `lane`'s staged bar (ADR-020 P3, #451; U108). `change_set` is the lane's active
   set: configuration's open or in-review set, or monitoring's open set. A monitoring read also
-  carries `in_review`, its sets in review (any number), oldest first. Both lanes share the head:
-  revisions from both are one sequence.
+  carries `in_review`, a summary of at most #{@in_review_limit} of its sets in review (oldest
+  first; each is read in full by id), and `in_review_count`. Both lanes share the head: revisions
+  from both are one sequence. A fixed number of queries however many sets are in review.
   """
   @spec current(String.t(), String.t(), String.t()) :: map()
   def current(organization_id, mission_id, lane \\ "configuration") do
@@ -27,15 +30,32 @@ defmodule Cadence.Configuration.Status do
     |> ActorNames.named(mission_id)
   end
 
-  defp put_in_review(view, mission_id, "monitoring"),
-    do:
-      Map.put(
-        view,
-        :in_review,
-        mission_id |> ChangeSetStore.in_review("monitoring") |> Enum.map(&change_set_view/1)
-      )
+  defp put_in_review(view, mission_id, "monitoring") do
+    {sets, total} = ChangeSetStore.in_review(mission_id, "monitoring", @in_review_limit)
+    counts = sets |> Enum.map(& &1.change_set_id) |> ChangeSetStore.staged_counts()
+
+    Map.merge(view, %{
+      in_review: Enum.map(sets, &in_review_view(&1, Map.get(counts, &1.change_set_id, 0))),
+      in_review_count: total
+    })
+  end
 
   defp put_in_review(view, _mission_id, _lane), do: view
+
+  # A set in review on the monitoring bar: who, when, why and how much, never its changes (read the
+  # set by id for those).
+  defp in_review_view(set, staged_count) do
+    %{
+      id: set.change_set_id,
+      state: known(set.state),
+      opened_at: set.opened_at,
+      opened_by: actor(set.opened_by),
+      submitted_at: set.submitted_at,
+      submitted_by: actor(set.submitted_by),
+      reason: set.reason,
+      staged_count: staged_count
+    }
+  end
 
   @spec change_set(String.t(), String.t()) :: {:ok, map()} | {:error, term()}
   def change_set(mission_id, change_set_id) do

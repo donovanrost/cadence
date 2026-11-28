@@ -18,16 +18,40 @@ defmodule Cadence.Configuration.ChangeSetStore do
     mission_id |> active_query(lane) |> Repo.one()
   end
 
-  @doc "The mission's monitoring sets in review, oldest first (any number of them, U108)."
-  @spec in_review(String.t(), String.t()) :: [ChangeSetRow.t()]
-  def in_review(mission_id, "monitoring") do
-    ChangeSetRow
-    |> where(
-      [set],
-      set.mission_id == ^mission_id and set.lane == "monitoring" and set.state == "in_review"
-    )
-    |> order_by([set], asc: set.submitted_at, asc: set.change_set_id)
+  @doc """
+  The mission's monitoring sets in review (any number can be, U108), oldest first: at most `limit`
+  of them and how many there are, `{sets, total}`. Two queries however many there are.
+  """
+  @spec in_review(String.t(), String.t(), pos_integer()) ::
+          {[ChangeSetRow.t()], non_neg_integer()}
+  def in_review(mission_id, "monitoring", limit) when is_integer(limit) and limit > 0 do
+    query =
+      where(
+        ChangeSetRow,
+        [set],
+        set.mission_id == ^mission_id and set.lane == "monitoring" and set.state == "in_review"
+      )
+
+    sets =
+      query
+      |> order_by([set], asc: set.submitted_at, asc: set.change_set_id)
+      |> limit(^limit)
+      |> Repo.all()
+
+    {sets, Repo.aggregate(query, :count)}
+  end
+
+  @doc "How many staged changes each of `change_set_ids` has, in one query (absent when none)."
+  @spec staged_counts([String.t()]) :: %{String.t() => pos_integer()}
+  def staged_counts([]), do: %{}
+
+  def staged_counts(change_set_ids) do
+    ChangeRow
+    |> where([change], change.change_set_id in ^change_set_ids and change.state == "staged")
+    |> group_by([change], change.change_set_id)
+    |> select([change], {change.change_set_id, count(change.change_id)})
     |> Repo.all()
+    |> Map.new()
   end
 
   @doc "Locks the active set in `lane` for update. Must run inside a transaction."

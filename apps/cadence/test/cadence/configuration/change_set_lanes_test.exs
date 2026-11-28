@@ -57,7 +57,10 @@ defmodule Cadence.Configuration.ChangeSetLanesTest do
     second = open!(c, "monitoring")
 
     refute second.change_set_id == first.change_set_id
-    assert [%ChangeSetRow{change_set_id: id}] = ChangeSetStore.in_review(c.mission, "monitoring")
+
+    assert {[%ChangeSetRow{change_set_id: id}], 1} =
+             ChangeSetStore.in_review(c.mission, "monitoring", 20)
+
     assert id == first.change_set_id
 
     reviewed = c |> open!("configuration") |> to_review!()
@@ -126,8 +129,47 @@ defmodule Cadence.Configuration.ChangeSetLanesTest do
 
     monitoring = Status.current(c.org, c.mission, "monitoring")
     assert monitoring.change_set == nil
-    assert [%{id: id}] = monitoring.in_review
+    assert [%{id: id, staged_count: 0}] = monitoring.in_review
+    assert monitoring.in_review_count == 1
     assert id == reviewed.change_set_id
+    refute Map.has_key?(hd(monitoring.in_review), :changes)
     assert monitoring.head == configuration.head
+  end
+
+  test "the monitoring bar costs the same however many sets are in review", c do
+    c |> open!("monitoring") |> to_review!()
+    # The first read creates the mission's head; measure after it.
+    Status.current(c.org, c.mission, "monitoring")
+    {_one, one} = count_queries(fn -> Status.current(c.org, c.mission, "monitoring") end)
+
+    for _ <- 1..4, do: c |> open!("monitoring") |> to_review!()
+    {view, five} = count_queries(fn -> Status.current(c.org, c.mission, "monitoring") end)
+
+    assert view.in_review_count == 5
+    assert length(view.in_review) == 5
+    assert one > 0
+    assert five == one
+  end
+
+  defp count_queries(fun) do
+    ref = make_ref()
+    parent = self()
+    handler = fn _event, _measurements, _metadata, _config -> send(parent, {ref, :query}) end
+    :telemetry.attach(inspect(ref), [:cadence, :repo, :query], handler, nil)
+
+    try do
+      result = fun.()
+      {result, drain(ref, 0)}
+    after
+      :telemetry.detach(inspect(ref))
+    end
+  end
+
+  defp drain(ref, n) do
+    receive do
+      {^ref, :query} -> drain(ref, n + 1)
+    after
+      0 -> n
+    end
   end
 end
