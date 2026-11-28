@@ -48,8 +48,8 @@ through invitations, approves the planning policy, creates recurring templates a
 QA missions, and approves their fleets, sources, Telemetry Decom installations, and direct
 route. Rerunning `seed-rest` reuses existing records. Its dynamic Earendil IDs are written
 to the gitignored `var/stack/seed.ids` and `mise.local.toml` for console e2e.
-Configuration approval uses groups of 250 spacecraft while #1020 removes the backend's
-per-craft queries from a single 1,000-craft approval transaction.
+Configuration approval submits one review for the whole fleet; #1029 makes admitting the
+review fixed-query at 1,000 spacecraft.
 Console e2e sets `EARENDIL_SEED_APPROVE_CONFIGURATION=0`: the REST seed still saves drafts and
 enables the fleet switches, but leaves configuration activation to the specs. Normal
 `dev/stack up` approves and applies the configuration.

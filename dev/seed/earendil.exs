@@ -15,9 +15,6 @@ defmodule EarendilSeed do
     only: [request!: 3, request!: 4, request!: 5, request_envelope!: 3, sign_in: 3]
 
   @batch_size 100
-  # #1020: approval admits each craft inside one 15-second database transaction. Keep the seed's
-  # independent reviews bounded until mission-model makes a 1,000-craft approval fixed-query.
-  @configuration_review_batch 250
   @run_id "run-earendil-demo-v1"
   # The simulator's loopback admin token (a public local fixture, allowlisted in .gitleaks.toml).
   @sim_admin_token "earendil-local-admin"
@@ -603,43 +600,38 @@ defmodule EarendilSeed do
 
   defp review_configurations(client, approver, mission_id, reviews) do
     base = "/missions/#{mission_id}"
+    reviews = Enum.sort_by(reviews, &elem(&1, 0))
+    {first_id, _} = hd(reviews)
 
-    reviews
-    |> Enum.sort_by(&elem(&1, 0))
-    |> Enum.chunk_every(@configuration_review_batch)
-    |> Enum.reduce(client, fn batch, client ->
-      {first_id, _} = hd(batch)
+    {client, first} =
+      request!(client, :get, base <> "/spacecraft/#{first_id}/configuration/workspace")
 
-      {client, first} =
-        request!(client, :get, base <> "/spacecraft/#{first_id}/configuration/workspace")
+    {client, requested} =
+      request!(client, :post, base <> "/configuration/reviews", %{
+        spacecraft: Map.new(reviews),
+        policy_token: get_in(first, ["approval", "policy_token"]),
+        intent: "review"
+      })
 
-      {client, requested} =
-        request!(client, :post, base <> "/configuration/reviews", %{
-          spacecraft: Map.new(batch),
-          policy_token: get_in(first, ["approval", "policy_token"]),
-          intent: "review"
-        })
+    unless requested["state"] == "approval_pending",
+      do: fail!("configuration review", requested)
 
-      unless requested["state"] == "approval_pending",
-        do: fail!("configuration review", requested)
-
-      {_, approved} =
-        request!(
-          approver,
-          :post,
-          base <> "/activations/#{requested["request_id"]}/approve",
-          %{reason: "Seed Earendil configuration activation"}
-        )
-
-      unless approved["outcome"] == "applied",
-        do: fail!("configuration approval", approved)
-
-      IO.puts(
-        "  bulk configuration review approved for #{requested["spacecraft_count"]} spacecraft"
+    {_, approved} =
+      request!(
+        approver,
+        :post,
+        base <> "/activations/#{requested["request_id"]}/approve",
+        %{reason: "Seed Earendil configuration activation"}
       )
 
-      client
-    end)
+    unless approved["outcome"] == "applied",
+      do: fail!("configuration approval", approved)
+
+    IO.puts(
+      "  bulk configuration review approved for #{requested["spacecraft_count"]} spacecraft"
+    )
+
+    client
   end
 
   defp enable_switches(client, approver, mission_id, ids) do
