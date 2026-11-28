@@ -127,6 +127,51 @@ defmodule Cadence.Alarms.Episodes do
     end
   end
 
+  @doc """
+  Clears the mission's active catalog-monitoring episodes whose policy is not among
+  `live_policy_ids`, with cause `rule_retired` (#451 T3b): a generation dropped the rule, so
+  nothing will evaluate it again and its episode would stay open for ever. Returns the spacecraft
+  of the episodes cleared (`nil` for a mission-wide one).
+
+  The clears run under the episodes' row locks and only touch active ones, so a second run, or a
+  second node, finds nothing to clear; the event id derives from the episode and `ref` (the
+  generation's) all the same (DECISIONS #99). An episode that records no policy is left alone.
+  """
+  @spec retire_rules(module(), String.t(), [String.t()], String.t(), DateTime.t()) ::
+          {:ok, [String.t() | nil]}
+  def retire_rules(repo, mission_id, live_policy_ids, ref, at) do
+    live = MapSet.new(live_policy_ids)
+    at = usec(at)
+
+    retired =
+      EpisodeRow
+      |> where(
+        [e],
+        e.mission_id == ^mission_id and e.source == "catalog_monitoring" and e.state == "active"
+      )
+      |> lock("FOR UPDATE")
+      |> repo.all()
+      |> Enum.filter(fn episode ->
+        policy = Map.get(episode.context, "policy_id")
+        is_binary(policy) and not MapSet.member?(live, policy)
+      end)
+
+    Enum.each(retired, fn episode ->
+      observation = %{
+        # One per episode: a source ref is unique within the mission.
+        ref: "#{ref}:#{episode.episode_id}",
+        event_id: Canonical.content_id("alarm_event", {episode.episode_id, "rule_retired", ref}),
+        value: nil,
+        observed_at: at,
+        evaluated_at: at
+      }
+
+      clear(repo, episode, observation, :rule_retired)
+    end)
+
+    {:ok, Enum.map(retired, & &1.spacecraft_id)}
+  end
+
   @doc "Applies observations in time order per subject. Returns how many changed an episode."
   @spec observe_many(module(), [observation()]) :: {:ok, non_neg_integer()}
   def observe_many(repo, observations) do
@@ -360,7 +405,8 @@ defmodule Cadence.Alarms.Episodes do
 
   defp event(repo, episode, kind, observation, payload) do
     row = %EpisodeEventRow{
-      event_id: effect_id(:alarm_event, observation, "alarm_event"),
+      event_id:
+        Map.get(observation, :event_id) || effect_id(:alarm_event, observation, "alarm_event"),
       episode_id: episode.episode_id,
       organization_id: episode.organization_id,
       mission_id: episode.mission_id,

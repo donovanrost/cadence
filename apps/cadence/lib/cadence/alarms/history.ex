@@ -5,7 +5,7 @@ defmodule Cadence.Alarms.History do
 
   An occurrence is an episode in the `Cadence.Alarms.Queries.view/1` shape plus `condition` (the
   source state), `direction` (`:low | :high | nil`, from ground-limit states), `duration_s` and
-  `ended` (`:back_in_limits | :source_stopped | nil` while open). Episodes are listed newest
+  `ended` (`:back_in_limits | :source_stopped | :rule_retired | nil` while open). Episodes are listed newest
   opened first over `@horizon_days`, keyset-paged by `{opened_at, episode_id}`. Episodes are
   never pruned, so `retention_days/0` is nil.
   """
@@ -162,6 +162,7 @@ defmodule Cadence.Alarms.History do
   end
 
   defp ended(%EpisodeRow{state: "cleared"}, "reconcile"), do: :source_stopped
+  defp ended(%EpisodeRow{state: "cleared"}, "rule_retired"), do: :rule_retired
   defp ended(%EpisodeRow{state: "cleared"}, _in_limits), do: :back_in_limits
   defp ended(%EpisodeRow{}, _cause), do: nil
 
