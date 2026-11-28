@@ -51,8 +51,6 @@ const routes = [
   "/ops/planning",
   "/ops/planning/new",
   "/ops/contacts",
-  "/ops/data-operations",
-  "/ops/data-operations/manage",
 ];
 try {
   await signInThroughConsole(page, {
