@@ -170,9 +170,17 @@ defmodule Cadence.SemanticRuntime.Carry do
   defp value(map, key) when is_map(map),
     do: Map.get(map, key)
 
-  # What the evaluator reads, from the compiler (`rule_digest`); a plan without one is its content.
+  # What the evaluator reads, from the compiler (`rule_digest`, which leaves placement out); a
+  # plan without one is its content.
   defp digest(%MonitoringPlan{rule_digest: digest}) when is_binary(digest), do: digest
   defp digest(%MonitoringPlan{} = plan), do: ContentHash.term_sha256({:monitoring_plan, plan})
-  defp digest(%AlgorithmPlan{} = plan), do: ContentHash.term_sha256({:algorithm_plan, plan})
+
+  # Where an algorithm lives (its system, its qualified name) is not what it computes: moving it
+  # between systems keeps its state.
+  defp digest(%AlgorithmPlan{} = plan),
+    do: ContentHash.term_sha256({:algorithm_plan, placed(plan)})
+
   defp digest(term), do: ContentHash.term_sha256(term)
+
+  defp placed(%AlgorithmPlan{} = plan), do: %{plan | space_system_id: nil, runtime_name: nil}
 end
