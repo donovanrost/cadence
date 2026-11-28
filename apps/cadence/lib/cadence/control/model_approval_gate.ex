@@ -83,7 +83,7 @@ defmodule Cadence.Control.ModelApprovalGate do
           uniq: true,
           do: revision
 
-    statuses = MissionModels.revision_statuses(organization_id, mission_id, touched)
+    statuses = MissionModels.effective_statuses(organization_id, mission_id, touched)
 
     case touched |> Enum.filter(&(statuses[&1] == :withdrawn)) |> Enum.sort() do
       [] -> :ok
@@ -121,7 +121,7 @@ defmodule Cadence.Control.ModelApprovalGate do
   @doc "The ones among `revision_ids` that aren't approved."
   @spec unapproved(binary(), binary(), [binary()]) :: [binary()]
   def unapproved(organization_id, mission_id, revision_ids) do
-    statuses = MissionModels.revision_statuses(organization_id, mission_id, revision_ids)
+    statuses = MissionModels.effective_statuses(organization_id, mission_id, revision_ids)
     revision_ids |> Enum.reject(&(statuses[&1] == :approved)) |> Enum.sort()
   end
 

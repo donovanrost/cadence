@@ -176,6 +176,17 @@ defmodule Cadence.MissionModels do
     |> Map.new(fn {id, status} -> {id, String.to_existing_atom(status)} end)
   end
 
+  @doc """
+  The status each of `revision_ids` has for running it: its stored status, or for a revision at
+  an authored head, the status derived from its composition's base and the head (P3 M1, #451;
+  `MissionModels.EffectiveStatuses`). The model gate and every reader that decides whether a
+  revision may run use this, never `revision_statuses/3` alone.
+  """
+  @spec effective_statuses(binary(), binary(), [binary()]) :: %{binary() => atom()}
+  defdelegate effective_statuses(organization_id, mission_id, revision_ids),
+    to: Cadence.MissionModels.EffectiveStatuses,
+    as: :statuses
+
   @spec fetch_plan(binary() | nil, binary(), binary(), atom()) ::
           {:ok, RuntimePlan.t()} | {:error, term()}
   def fetch_plan(organization_id, mission_id, revision_id, target)
