@@ -14,6 +14,9 @@ import { formatShort } from "@/ui";
 import { importRunRow } from "./api.ts";
 import { formatBytes } from "./importRun.ts";
 
+/** The artifact page lists the newest 50 import runs of its file (paging: #217). */
+export const artifactRunCap = 50;
+
 /**
  * L18 (api setup.md "Source files", 05aa7e399): one source file, the revisions made from it, its
  * import runs, Import again (K2) and Download (K3).
@@ -49,7 +52,7 @@ const artifactReader = d.object({
     }),
     200,
   ),
-  import_runs: d.array(importRunRow, 50),
+  import_runs: d.array(importRunRow, artifactRunCap),
   permissions: d.array(d.known(["catalog.import"] as const), 10),
 });
 export type ArtifactPage = Decoded<typeof artifactReader>;

@@ -15,6 +15,7 @@ import {
 } from "@/ui";
 import ArtifactRevisions from "./ArtifactRevisions.vue";
 import {
+  artifactRunCap,
   artifactLine,
   fetchArtifact,
   reimportArtifact,
@@ -91,7 +92,7 @@ async function again() {
           >
         </ApCallout>
         <ArtifactRevisions :revisions="value.revisions" />
-        <ImportRunsPanel :runs="value.import_runs" />
+        <ImportRunsPanel :runs="value.import_runs" :cap="artifactRunCap" />
         <ApPanel index="F3" title="Technical details">
           <ApKeyValue :items="details(value.artifact)" :columns="2">
             <!-- A hash has no break points: let it wrap inside its column. -->

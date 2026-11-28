@@ -69,6 +69,9 @@ const requester = object({
 });
 export type Requester = Decoded<typeof requester>;
 
+/** The index lists the newest 20 import runs of a database. */
+export const indexRunCap = 20;
+
 /** One import run row (the index's; the artifact page lists the same rows, api L18). A run names
  * its own source file; null only if that file is gone, so one row can't break the page. */
 export const importRunRow = object({
@@ -88,7 +91,7 @@ const database = object({
   id: token,
   current_revision: nullable(currentRevision),
   revisions: array(revision, 50),
-  import_runs: array(importRunRow, 20),
+  import_runs: array(importRunRow, indexRunCap),
 });
 
 export const catalogIndexReader = object({
