@@ -18,7 +18,7 @@ defmodule Cadence.Reads.MonitoredParameters do
   use GenServer
 
   alias Cadence.MissionModels
-  alias Cadence.Reads.MissionModels.ActiveBasis
+  alias Cadence.Reads.RevisionsInUse
   alias Cadence.SemanticRuntime.{MonitoringPlan, PlanDecoder}
 
   @table __MODULE__
@@ -31,28 +31,61 @@ defmodule Cadence.Reads.MonitoredParameters do
         }
 
   @doc """
-  The parameters monitored on `spacecraft_id`, or `:none` when the mission has no active monitoring
-  plan. `opts[:revision_id]` reads another revision's plan than the active one.
+  The parameters monitored on `spacecraft_id`: its own revision's plan (the head of its composition,
+  `RevisionsInUse.of_spacecraft/4`), or `:none` when it runs none or the plan has none.
+  `opts[:revision_id]` names the revision for a caller that already holds it.
   """
   @spec for_spacecraft(binary(), binary(), binary(), keyword()) ::
           {:ok, MapSet.t(binary())} | :none
   def for_spacecraft(organization_id, mission_id, spacecraft_id, opts \\ []) do
-    with {:ok, summary} <- summary(organization_id, mission_id, opts) do
+    revision_id =
+      Keyword.get_lazy(opts, :revision_id, fn ->
+        RevisionsInUse.of_spacecraft(organization_id, mission_id, spacecraft_id)
+      end)
+
+    with {:ok, summary} <- summary(organization_id, mission_id, revision_id) do
       {:ok, monitored_on(summary, spacecraft_id)}
     end
   end
 
-  @doc "Whether the active plan evaluates any parameter on any craft."
+  @doc """
+  The parameters the plans in use evaluate on at least one spacecraft: the union over every
+  revision in use of the mission's plus what any craft's own entries add ("does this point have
+  limits at all", whatever the spacecraft or composition).
+  """
+  @spec anywhere(binary(), binary(), keyword()) :: MapSet.t(binary())
+  def anywhere(organization_id, mission_id, opts \\ []) do
+    organization_id
+    |> summaries(mission_id, opts)
+    |> Enum.reduce(MapSet.new(), fn %{mission: mission, craft: craft}, acc ->
+      craft
+      |> Enum.reduce(mission, fn {_id, %{on: on}}, inner -> MapSet.union(inner, on) end)
+      |> MapSet.union(acc)
+    end)
+  end
+
+  @doc "Whether the plans in use (every revision in use) evaluate any parameter on any craft."
   @spec configured?(binary(), binary(), keyword()) :: boolean()
   def configured?(organization_id, mission_id, opts \\ []) do
-    case summary(organization_id, mission_id, opts) do
-      {:ok, %{mission: mission, craft: craft}} ->
-        MapSet.size(mission) > 0 or
-          Enum.any?(craft, fn {_id, %{on: on}} -> MapSet.size(on) > 0 end)
+    organization_id
+    |> summaries(mission_id, opts)
+    |> Enum.any?(fn %{mission: mission, craft: craft} ->
+      MapSet.size(mission) > 0 or Enum.any?(craft, fn {_id, %{on: on}} -> MapSet.size(on) > 0 end)
+    end)
+  end
 
-      :none ->
-        false
-    end
+  # The summary of each revision in use (one cached summary per revision, never per craft).
+  defp summaries(organization_id, mission_id, opts) do
+    revision_ids =
+      case Keyword.fetch(opts, :revision_id) do
+        {:ok, nil} -> []
+        {:ok, revision_id} -> [revision_id]
+        :error -> organization_id |> RevisionsInUse.all(mission_id) |> Map.keys()
+      end
+
+    for revision_id <- revision_ids,
+        {:ok, summary} <- [summary(organization_id, mission_id, revision_id)],
+        do: summary
   end
 
   @doc "The summary of a decoded plan's entries (pure; the cache stores this)."
@@ -115,53 +148,46 @@ defmodule Cadence.Reads.MonitoredParameters do
     end
   end
 
-  # `:revision_id` names the revision for a caller that already holds it; otherwise the mission's
-  # active one.
-  defp summary(organization_id, mission_id, opts) do
-    revision_id =
-      Keyword.get_lazy(opts, :revision_id, fn ->
-        ActiveBasis.active_revision_id(organization_id, mission_id)
-      end)
+  defp summary(_organization_id, _mission_id, nil), do: :none
 
-    case revision_id do
-      nil ->
-        :none
-
-      revision_id ->
-        {:ok,
-         cached({mission_id, revision_id}, fn ->
-           build(organization_id, mission_id, revision_id)
-         end)}
-    end
+  defp summary(organization_id, mission_id, revision_id) do
+    {:ok,
+     cached({mission_id, revision_id}, fn -> build(organization_id, mission_id, revision_id) end)}
   end
 
   defp build(organization_id, mission_id, revision_id) do
     case MissionModels.fetch_plan(organization_id, mission_id, revision_id, :monitoring) do
       {:ok, plan} ->
-        %{monitoring: plan} |> PlanDecoder.decode() |> Map.fetch!(:monitoring) |> summarize()
+        {:cache,
+         %{monitoring: plan} |> PlanDecoder.decode() |> Map.fetch!(:monitoring) |> summarize()}
 
+      # No plan visible yet: answer none for now, but don't keep it, or a plan stored a moment
+      # later would read as having no monitoring until evicted.
       {:error, _not_found} ->
-        %{mission: MapSet.new(), craft: %{}}
+        {:skip, %{mission: MapSet.new(), craft: %{}}}
     end
   end
 
   defp cached(key, build) do
     case :ets.whereis(@table) do
       :undefined ->
-        build.()
+        {_keep, summary} = build.()
+        summary
 
       _table ->
         case :ets.lookup(@table, key) do
-          [{^key, _at, summary}] ->
-            summary
-
-          [] ->
-            summary = build.()
-            GenServer.cast(__MODULE__, {:put, key, summary})
-            summary
+          [{^key, _at, summary}] -> summary
+          [] -> build.() |> keep(key)
         end
     end
   end
+
+  defp keep({:cache, summary}, key) do
+    GenServer.cast(__MODULE__, {:put, key, summary})
+    summary
+  end
+
+  defp keep({:skip, summary}, _key), do: summary
 
   def start_link(opts \\ []), do: GenServer.start_link(__MODULE__, opts, name: __MODULE__)
 
