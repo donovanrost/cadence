@@ -81,6 +81,20 @@ console-build ──── needs ── e2e [1..N]   Phoenix + simulator + Quest
                                 └─────── e2e-report (if: always(); merges blob reports; not required)
 ```
 
+### Console fleet-scale budgets (#1030)
+
+On pull requests, the `changes` job's `scale` filter runs the isolated scale step on
+Console e2e shard 2 for frontend, Console build, CI, dev config and seed changes.
+It also includes the named fleet and paged-pass controllers, serializers and reads,
+and the socket, mission channel and fleet snapshot and push modules that serve
+the scaled payloads. Ordinary backend changes use the scale run on develop.
+The Console e2e jobs and their other steps use their existing gates.
+
+Every push to develop runs the scale step. Whenever the step runs, a failure
+fails the Console e2e job and therefore `ci-ok`. A scale failure on a develop
+push makes develop red. Platform routes it to the owning Head the same day so
+they can fix it forward or revert the change.
+
 ## Shared job setup (composite action)
 
 `.github/actions/setup-cadence/action.yml`, used by every Elixir job, so versions and cache keys

@@ -5,6 +5,7 @@ defmodule Cadence.Configuration.ProfileRolloutPreviewTest do
   """
   use Cadence.RuntimeCase, async: false
 
+  alias Cadence.Activations.GenerationReceipts
   alias Cadence.Applications.SpacecraftConfiguration.{Drafts, Review}
   alias Cadence.Applications.TelemetryDecom
   alias Cadence.Applications.TelemetryDecomFixtures, as: Fixtures
@@ -50,7 +51,7 @@ defmodule Cadence.Configuration.ProfileRolloutPreviewTest do
     c = setup_mission("preview", [yaml: Fixtures.dev_sized_yaml()], Fixtures.dev_sized_apids())
     ops = fleet_move!(c, @fleet)
 
-    {result, ms, queries, by_query} =
+    {result, ms, queries, by_query, _receipt_writes} =
       measure(fn -> Configuration.preview(c.scope, c.mission.mission_id, {:ops, ops}) end)
 
     # Every spacecraft moves, and the HOLDs speak for all 500.
@@ -80,6 +81,11 @@ defmodule Cadence.Configuration.ProfileRolloutPreviewTest do
 
     assert small.queries == large.queries,
            "100 craft: #{small.queries}, 1,000 craft: #{large.queries}; #{top(large.by_query)}"
+
+    assert {small.receipt_writes, large.receipt_writes} == {1, 1}
+
+    assert small.projection_queries == large.projection_queries,
+           "100 craft: #{small.projection_queries}, 1,000 craft: #{large.projection_queries}"
   end
 
   defp count_apply(size) do
@@ -87,8 +93,8 @@ defmodule Cadence.Configuration.ProfileRolloutPreviewTest do
     ops = fleet_move!(c, size, enable_telemetry: true)
     {:ok, staged} = Configuration.stage(c.scope, c.mission.mission_id, %{summary: "Move"}, ops)
 
-    {result, _ms, queries, by_query} =
-      measure(fn ->
+    {result, _ms, queries, by_query, receipt_writes} =
+      measure(c.mission.mission_id, fn ->
         Configuration.submit(c.scope, c.mission.mission_id, staged.change_set_id, %{
           reason: "Move the whole fleet to rev 2",
           expected_version: staged.version,
@@ -96,14 +102,12 @@ defmodule Cadence.Configuration.ProfileRolloutPreviewTest do
         })
       end)
 
-    assert {:ok, %{state: :applied}} = result
+    assert {:ok, %{state: :applied, runtime: :applied}} = result
 
     [%{changes: [%{value: composition}]}] = ops
     rev2 = CompositionPins.catalog_revision_for(c.org, c.mission.mission_id, composition)
 
-    assert c.org
-           |> TelemetryDecom.list_configs(c.mission.mission_id)
-           |> Enum.frequencies_by(& &1.catalog_revision_id) == %{rev2 => size}
+    projection_queries = count_projection(c, rev2, size)
 
     assert %{rows: [[2]]} =
              Repo.query!(
@@ -134,7 +138,35 @@ defmodule Cadence.Configuration.ProfileRolloutPreviewTest do
                [c.org, c.mission.mission_id]
              )
 
-    %{queries: queries, by_query: by_query}
+    assert %{rows: [[2]]} =
+             Repo.query!(
+               "SELECT count(*) FROM mission_generation_receipts WHERE organization_id = $1 AND mission_id = $2",
+               [c.org, c.mission.mission_id]
+             )
+
+    %{
+      queries: queries,
+      by_query: by_query,
+      receipt_writes: receipt_writes,
+      projection_queries: projection_queries
+    }
+  end
+
+  defp count_projection(c, revision, size) do
+    {activation, applied_at} = GenerationReceipts.latest(c.org, c.mission.mission_id)
+
+    {configs, _ms, queries, _by_query, _receipt_writes} =
+      measure(fn -> TelemetryDecom.list_configs(c.org, c.mission.mission_id) end)
+
+    assert length(configs) == size
+
+    assert Enum.all?(configs, fn config ->
+             config.catalog_revision_id == revision and config.enabled and
+               config.applied_generation == activation.generation and
+               config.applied_at == applied_at
+           end)
+
+    queries
   end
 
   # The whole fleet on one profile pinned to v1, and the ops that move its catalog to rev 2.
@@ -226,16 +258,18 @@ defmodule Cadence.Configuration.ProfileRolloutPreviewTest do
 
   # The calling process's queries during `fun`, counted by SQL and the Cadence functions that ran
   # them (so a failure names the per-spacecraft reader).
-  defp measure(fun) do
+  defp measure(mission_id \\ nil, fun) do
     test_pid = self()
     handler = "rollout-preview-#{System.unique_integer([:positive])}"
     table = :ets.new(:queries, [:public, :set])
+    receipts = :counters.new(1, [])
 
     :telemetry.attach(
       handler,
       [:cadence, :repo, :query],
       fn _event, _measurements, metadata, _config ->
         if self() == test_pid, do: count_query(table, metadata)
+        count_receipt(metadata, mission_id, receipts)
       end,
       nil
     )
@@ -246,11 +280,24 @@ defmodule Cadence.Configuration.ProfileRolloutPreviewTest do
       result = fun.()
       ms = System.monotonic_time(:millisecond) - started
       by_query = :ets.tab2list(table)
-      {result, ms, by_query |> Enum.map(&elem(&1, 1)) |> Enum.sum(), by_query}
+
+      {result, ms, by_query |> Enum.map(&elem(&1, 1)) |> Enum.sum(), by_query,
+       :counters.get(receipts, 1)}
     after
       :telemetry.detach(handler)
     end
   end
+
+  # The reconciler writes from its own process. Scope this count to the selected mission.
+  defp count_receipt(
+         %{source: "mission_generation_receipts", params: [_org, mission | _]},
+         mission,
+         receipts
+       )
+       when is_binary(mission),
+       do: :counters.add(receipts, 1, 1)
+
+  defp count_receipt(_metadata, _mission, _receipts), do: :ok
 
   defp count_query(table, metadata) do
     sql = metadata[:query] |> to_string() |> String.slice(0, 60)

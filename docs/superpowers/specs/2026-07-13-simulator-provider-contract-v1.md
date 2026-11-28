@@ -460,7 +460,7 @@ Minimum read shape:
 ```
 
 `egress` is the provider's half of the connection (#990, DECISIONS #115), apart from `target`
-(where Cadence listens); mutual TLS will add the provider's client identity here. Its
+(where Cadence listens). Its
 `source_addresses` is required when the delivery's target mode is `provider_connects`: a
 non-empty list of the IP addresses or CIDR ranges the provider connects from. An entry that
 allows every address (`0.0.0.0/0`, `::/0`, `::ffff:0:0/96` or any spelling of them) is refused.
@@ -469,6 +469,13 @@ A delivery without a usable list can't become a Cadence listen transport (named 
 `provider_egress_addresses_invalid`). Cadence refuses any peer outside the list before reading a
 frame. The simulator reports loopback (`127.0.0.1/32`, `::1/128`) unless configured with
 `:delivery_source_addresses`.
+
+A provider that supports mutual TLS declares `delivery.delivery_auth: "mtls"` in capabilities.
+An opted-in downlink delivery profile declares top-level `delivery_auth: "mtls"` and
+`egress.delivery_credential_ref` with the opaque Cadence-issued binding reference. The source
+allowlist remains required. Omit the profile's `delivery_auth` for plaintext delivery. Exchange
+certificates during enrollment and keep private keys in the provider's secret store. Cadence
+refuses to materialize opted-in profiles until the authenticated listener gate is available.
 
 Provisioning a TCP destination is a setup operation, not a reservation field:
 

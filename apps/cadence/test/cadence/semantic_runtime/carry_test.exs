@@ -19,8 +19,8 @@ defmodule Cadence.SemanticRuntime.CarryTest do
       before = Carry.fingerprints(%{}, plan())
       later = Carry.fingerprints(%{}, changed)
 
-      refute before.monitoring["p1"] == later.monitoring["p1"]
-      assert before.monitoring["p2"] == later.monitoring["p2"]
+      refute before.monitoring[{"p1", nil, nil}] == later.monitoring[{"p1", nil, nil}]
+      assert before.monitoring[{"p2", nil, nil}] == later.monitoring[{"p2", nil, nil}]
       assert before.algorithms == later.algorithms
     end
 
@@ -134,63 +134,51 @@ defmodule Cadence.SemanticRuntime.CarryTest do
     end
   end
 
-  describe "per-craft overrides (#451)" do
-    # p1 has a mission entry and an override for craft-a that shares its policy id.
-    defp with_override(opts \\ []) do
-      override =
-        policy("p1",
-          scope: :spacecraft,
-          spacecraft_id: "craft-a",
-          rule_id: "policy:p1",
-          minimum_violations: Keyword.get(opts, :violations, 2)
-        )
+  describe "a per-craft override (rule entries share a policy_id)" do
+    test "only the craft whose entry changed starts fresh" do
+      mission = rule("p1", :mission, nil, "d1")
+      state = evolved_monitoring(%{monitoring: [mission]})
 
-      %{plan() | monitoring: [policy("p1"), override, policy("p2")]}
-    end
+      overridden = [mission, rule("p1", :spacecraft, "craft-a", "d2")]
+      assert {carried, %{kept: 3, dropped: 1}} = Carry.carry(state, rule_fingerprints(overridden))
 
-    test "the mission entry keeps its plain key and the override's key carries the craft" do
-      monitoring = Carry.fingerprints(%{}, with_override()).monitoring
-
-      assert Map.has_key?(monitoring, "p1")
-      assert Map.has_key?(monitoring, {"p1", "craft-a"})
-      assert monitoring["p1"] != monitoring[{"p1", "craft-a"}]
-    end
-
-    test "adding an override starts fresh only the craft it is for" do
-      runtime_plans = telemetry([field("temp", "float", "K")])
-      state = evolved(Carry.fingerprints(runtime_plans, plan()))
-
-      assert {carried, %{dropped: 1}} =
-               Carry.carry(state, Carry.fingerprints(runtime_plans, with_override()))
-
+      # craft-a now runs the override: its state starts fresh; craft-b keeps the mission entry's.
       refute Map.has_key?(carried.monitoring_state, {@scope, "p1"})
       assert Map.has_key?(carried.monitoring_state, {@other_scope, "p1"})
       assert Map.has_key?(carried.monitoring_state, {@scope, "p2"})
     end
 
-    test "editing the override changes that craft's state only, and an unchanged plan keeps all" do
-      runtime_plans = telemetry([field("temp", "float", "K")])
-      state = evolved(Carry.fingerprints(runtime_plans, with_override()))
+    test "an override dropped resets that craft only; an unchanged override carries" do
+      mission = rule("p1", :mission, nil, "d1")
+      override = rule("p1", :spacecraft, "craft-a", "d2")
+      state = evolved_monitoring(%{monitoring: [mission, override]})
 
-      assert {^state, %{dropped: 0}} =
-               Carry.carry(state, Carry.fingerprints(runtime_plans, with_override()))
+      assert {kept, %{dropped: 0}} = Carry.carry(state, rule_fingerprints([mission, override]))
+      assert map_size(kept.monitoring_state) == 4
 
-      edited = Carry.fingerprints(runtime_plans, with_override(violations: 5))
-      assert {carried, %{dropped: 1}} = Carry.carry(state, edited)
-
-      refute Map.has_key?(carried.monitoring_state, {@scope, "p1"})
-      assert Map.has_key?(carried.monitoring_state, {@other_scope, "p1"})
+      assert {dropped, %{dropped: 1}} = Carry.carry(state, rule_fingerprints([mission]))
+      refute Map.has_key?(dropped.monitoring_state, {@scope, "p1"})
+      assert Map.has_key?(dropped.monitoring_state, {@other_scope, "p1"})
     end
 
-    test "removing the override brings the craft back to the mission entry, fresh" do
-      runtime_plans = telemetry([field("temp", "float", "K")])
-      state = evolved(Carry.fingerprints(runtime_plans, with_override()))
+    test "a threshold edit of the mission entry resets the craft that runs it, not the override's" do
+      mission = rule("p1", :mission, nil, "d1")
+      override = rule("p1", :spacecraft, "craft-a", "d2")
+      state = evolved_monitoring(%{monitoring: [mission, override]})
 
-      assert {carried, %{dropped: 1}} =
-               Carry.carry(state, Carry.fingerprints(runtime_plans, plan()))
+      edited = rule("p1", :mission, nil, "d1-edited")
+      assert {carried, %{dropped: 1}} = Carry.carry(state, rule_fingerprints([edited, override]))
 
-      refute Map.has_key?(carried.monitoring_state, {@scope, "p1"})
-      assert Map.has_key?(carried.monitoring_state, {@other_scope, "p1"})
+      assert Map.has_key?(carried.monitoring_state, {@scope, "p1"})
+      refute Map.has_key?(carried.monitoring_state, {@other_scope, "p1"})
+    end
+
+    test "the compiler's digest is what carries: a change of origin alone keeps the state" do
+      before = rule("p1", :mission, nil, "d1")
+      moved = %{before | origin: :mission_layer, declaration_id: "elsewhere"}
+      state = evolved_monitoring(%{monitoring: [before]})
+
+      assert {_carried, %{dropped: 0}} = Carry.carry(state, rule_fingerprints([moved]))
     end
   end
 
@@ -278,6 +266,35 @@ defmodule Cadence.SemanticRuntime.CarryTest do
     Enum.find_value(compilation.revision.declarations, fn {id, declaration} ->
       if declaration.qualified_name == name, do: id
     end)
+  end
+
+  defp rule(policy_id, scope, craft, digest),
+    do:
+      MonitoringPlan.new(%{
+        policy_id: policy_id,
+        parameter_id: "temp",
+        rule_id: "policy:" <> policy_id,
+        rule_digest: digest,
+        origin: :catalog,
+        declaration_id: policy_id,
+        scope: scope,
+        spacecraft_id: craft
+      })
+
+  defp rule_fingerprints(monitoring),
+    do: Carry.fingerprints(%{}, %{algorithms: [], monitoring: monitoring ++ [policy("p2")]})
+
+  # Monitoring state for p1 and p2 in two craft scopes, evolved under `plan`'s fingerprints.
+  defp evolved_monitoring(%{monitoring: entries}) do
+    %State{
+      monitoring_state: %{
+        {@scope, "p1"} => %{effective_state: :warning},
+        {@other_scope, "p1"} => %{effective_state: :normal},
+        {@scope, "p2"} => %{effective_state: :normal},
+        {@other_scope, "p2"} => %{effective_state: :normal}
+      },
+      fingerprints: rule_fingerprints(entries)
+    }
   end
 
   # State evolved under `fingerprints`: both policies in two scopes, the algorithm's memory and

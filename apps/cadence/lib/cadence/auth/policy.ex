@@ -51,6 +51,20 @@ defmodule Cadence.Auth.Policy do
          do: authorize(scope, :manage_mission, params)
   end
 
+  @delivery_credential_actions [
+    :"provider_delivery_credential.issue",
+    :"provider_delivery_credential.rotate",
+    :"provider_delivery_credential.revoke",
+    :"provider_delivery_credential.downgrade"
+  ]
+
+  def authorize(%Scope{actor_kind: :user, user: %{user_id: id}} = scope, action, params)
+      when action in @delivery_credential_actions and is_binary(id),
+      do: authorize(scope, :manage_mission, params)
+
+  def authorize(%Scope{}, action, _params) when action in @delivery_credential_actions,
+    do: {:error, :authenticated_user_required}
+
   # Settings and activation review use named policy actions. The initial policy
   # admits active human members; customer approval requirements never assign a
   # built-in role. These action boundaries are the future Cedar integration.

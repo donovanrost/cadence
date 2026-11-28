@@ -13,13 +13,14 @@ defmodule Cadence.Comms.PeerAddresses do
   import Bitwise
 
   @type range :: {:inet.ip_address(), non_neg_integer()}
+  @type invalid_allowlist :: :too_broad | :invalid
 
   @doc """
   Parses an allowlist: a list of entries, or one text with entries separated by commas or
   whitespace. `{:ok, normalized}` (each entry as `address/prefix`, sorted and unique) or
-  `{:error, message}` naming the first bad entry. An empty list is `{:ok, []}`.
+  `{:error, reason, message}` naming the first bad entry. An empty list is `{:ok, []}`.
   """
-  @spec normalize(term()) :: {:ok, [binary()]} | {:error, binary()}
+  @spec normalize(term()) :: {:ok, [binary()]} | {:error, invalid_allowlist(), binary()}
   def normalize(nil), do: {:ok, []}
 
   def normalize(text) when is_binary(text),
@@ -29,9 +30,14 @@ defmodule Cadence.Comms.PeerAddresses do
     entries
     |> Enum.reduce_while({:ok, []}, fn entry, {:ok, acc} ->
       case parse(entry) do
-        {:ok, {_ip, 0}} -> {:halt, {:error, "#{inspect(entry)} allows every address."}}
-        {:ok, range} -> {:cont, {:ok, [format(range) | acc]}}
-        :error -> {:halt, {:error, "#{inspect(entry)} is not an IP address or CIDR range."}}
+        {:ok, {_ip, 0}} ->
+          {:halt, {:error, :too_broad, "#{inspect(entry)} allows every address."}}
+
+        {:ok, range} ->
+          {:cont, {:ok, [format(range) | acc]}}
+
+        :error ->
+          {:halt, {:error, :invalid, "#{inspect(entry)} is not an IP address or CIDR range."}}
       end
     end)
     |> case do
@@ -40,23 +46,18 @@ defmodule Cadence.Comms.PeerAddresses do
     end
   end
 
-  def normalize(_other), do: {:error, "Allowed source addresses must be a list."}
+  def normalize(_other), do: {:error, :invalid, "Allowed source addresses must be a list."}
 
   @doc """
   What's wrong with an allowlist, as a stable reason: `:ok`, `:empty` (none given), `:too_broad`
   (an entry allows every address) or `:invalid` (an entry isn't an address or range).
   """
-  @spec classify(term()) :: :ok | :empty | :too_broad | :invalid
+  @spec classify(term()) :: :ok | :empty | invalid_allowlist()
   def classify(entries) do
     case normalize(entries) do
-      {:ok, []} ->
-        :empty
-
-      {:ok, _entries} ->
-        :ok
-
-      {:error, message} ->
-        if String.ends_with?(message, "allows every address."), do: :too_broad, else: :invalid
+      {:ok, []} -> :empty
+      {:ok, _entries} -> :ok
+      {:error, reason, _message} -> reason
     end
   end
 

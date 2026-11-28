@@ -14,7 +14,9 @@ defmodule Cadence.SemanticRuntime.AlgorithmPlan do
           maximum_age_ms: non_neg_integer() | nil,
           quality_policy: :worst_input,
           time_basis: :receipt_time | :generation_time,
-          implementation: map()
+          implementation: map(),
+          space_system_id: binary() | nil,
+          runtime_name: binary() | nil
         }
 
   @enforce_keys [:algorithm_id, :input_parameter_ids, :outputs]
@@ -25,7 +27,11 @@ defmodule Cadence.SemanticRuntime.AlgorithmPlan do
                 maximum_age_ms: nil,
                 quality_policy: :worst_input,
                 time_basis: :receipt_time,
-                implementation: %{kind: :expression}
+                implementation: %{kind: :expression},
+                # The owning SpaceSystem and qualified runtime name (ADR-020 P5); nil for a plan
+                # compiled before them. Where an algorithm lives is not what it computes.
+                space_system_id: nil,
+                runtime_name: nil
               ]
 
   @spec new(map()) :: t()
@@ -39,7 +45,9 @@ defmodule Cadence.SemanticRuntime.AlgorithmPlan do
       maximum_age_ms: value(attrs, :maximum_age_ms),
       quality_policy: attrs |> value(:quality_policy, :worst_input) |> normalize_atom(),
       time_basis: attrs |> value(:time_basis, :receipt_time) |> normalize_atom(),
-      implementation: value(attrs, :implementation, %{kind: :expression})
+      implementation: value(attrs, :implementation, %{kind: :expression}),
+      space_system_id: value(attrs, :space_system_id),
+      runtime_name: value(attrs, :runtime_name)
     }
   end
 

@@ -2,7 +2,6 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Drafts do
   @moduledoc "Authorized, versioned spacecraft configuration drafts; saving never activates them."
 
   alias Cadence.Applications.ConfigurationLock
-  alias Cadence.Applications.TelemetryDecom
 
   alias Cadence.Auth.Policy
   alias Cadence.Auth.Scope
@@ -107,15 +106,12 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Drafts do
 
     application_basis = ConfigurationApplications.basis(mission, spacecraft.spacecraft_id)
 
-    {:ok, profile} = SpacecraftStore.fetch_pinned_profile(mission, spacecraft)
-    config = optional_telemetry(mission, spacecraft)
-    saved = if row, do: row.document, else: legacy_document(config, profile)
+    saved = if row, do: row.document, else: default_document(mission, spacecraft)
     changed = row && row.application_basis != application_basis
-    document = if changed, do: overlay_telemetry(saved, config), else: saved
 
     %{
       row: row,
-      document: document,
+      document: saved,
       saved: saved,
       application_basis: application_basis,
       external_changes: changed == true,
@@ -172,33 +168,9 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Drafts do
   def exact_token(token, token) when is_binary(token), do: :ok
   def exact_token(_, _), do: {:error, :spacecraft_configuration_changed}
 
-  defp legacy_document(config, profile) do
-    ConfigurationInput.empty()
-    |> Map.put("protocol", ConfigurationInput.from_profile(profile))
-    |> Map.put("commanding_enabled", not is_nil(config))
-    |> overlay_telemetry(config)
-  end
-
-  defp overlay_telemetry(document, nil), do: document
-
-  defp overlay_telemetry(document, config) do
-    Map.merge(document, %{
-      "catalog_revision_id" => config.catalog_revision_id,
-      "telemetry_enabled" => config.enabled,
-      "telemetry_source_endpoint_id" => config.source_endpoint_id,
-      "handled_apids" => config.handled_apids
-    })
-  end
-
-  defp optional_telemetry(mission, spacecraft) do
-    case TelemetryDecom.fetch_config(
-           mission.organization_id,
-           mission.mission_id,
-           spacecraft.spacecraft_id
-         ) do
-      {:ok, config} -> config
-      {:error, :not_configured} -> nil
-    end
+  defp default_document(mission, spacecraft) do
+    {:ok, profile} = SpacecraftStore.fetch_pinned_profile(mission, spacecraft)
+    Map.put(ConfigurationInput.empty(), "protocol", ConfigurationInput.from_profile(profile))
   end
 
   defp validate_references(mission, spacecraft, document) do
@@ -253,7 +225,7 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Drafts do
     with :ok <- exact_token(current.token, expected_token),
          {:ok, catalog} <- validate_references(mission, locked, document),
          {:ok, document} <-
-           ConfigurationApplications.persist(scope, mission, locked, document) do
+           ConfigurationApplications.persist(scope, mission, locked, document, catalog) do
       version = if current.row, do: current.row.version + 1, else: 1
 
       row =

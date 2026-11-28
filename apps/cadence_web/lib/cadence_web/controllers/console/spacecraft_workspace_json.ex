@@ -29,6 +29,8 @@ defmodule CadenceWeb.Console.SpacecraftWorkspaceJSON do
       document: document(s.document),
       # D2 (#543): the composition behind the document's catalog revision, or nil.
       composition: s.composition,
+      # ADR-020 P5: the SpaceSystems the saved APIDs amount to ([] or nil: none known).
+      systems: s.systems,
       external_changes: s.external_changes,
       switches: s.switches,
       active: active(s.active),
@@ -80,6 +82,7 @@ defmodule CadenceWeb.Console.SpacecraftWorkspaceJSON do
       generation: active.generation,
       document: document(active.document),
       composition: active.composition,
+      systems: Map.get(active, :systems),
       # E2 (#546; U109): null, or {revision_id, decision: {kind, by, at, reason}}.
       approval_withdrawn: Map.get(active, :approval_withdrawn)
     }

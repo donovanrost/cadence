@@ -122,7 +122,10 @@ defmodule Cadence.Reads.CommandPreflight do
           ResolvedArguments.for_preflight(org, mission, validated.members, by_index)
         ),
       members: length(validated.members),
-      checks: checks
+      checks: checks,
+      # What this preflight validated (the draft with its resolved routes, and the validation): a
+      # submit in the same request reuses it instead of validating again (#1051). Not on the wire.
+      request_validation: %{draft: draft, validated: validated}
     }
   end
 

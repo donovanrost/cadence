@@ -4,11 +4,9 @@ defmodule CadenceWeb.FrontendReleaseSignedActivationTest do
   import Ecto.Query
   import Plug.Conn
 
-  alias Cadence.Applications.{ApplicationInstallations, HostContext, TelemetryDecom}
+  alias Cadence.Applications.{ApplicationInstallations, HostContext}
   alias Cadence.Auth.Scope
   alias Cadence.Repo
-  alias Cadence.SourceEndpoints.SourceEndpoint
-  alias CadenceWeb.ApplicationActionIdempotency
   alias CadenceWeb.FrontendReleaseActivation.{CatalogBinding, CatalogGeneration, Request}
   alias CadenceWeb.FrontendReleaseCatalog
   alias CadenceWeb.FrontendReleasePublication
@@ -80,7 +78,6 @@ defmodule CadenceWeb.FrontendReleaseSignedActivationTest do
              "phase-d-signed-activation-n-minus-1"
 
     context = telemetry_context()
-    {revision, endpoint} = imported_packet_context(context)
 
     upload_all_artifacts!(n_minus_1)
     upload_all_artifacts!(n)
@@ -323,7 +320,7 @@ defmodule CadenceWeb.FrontendReleaseSignedActivationTest do
     assert active_release.manifest_path ==
              "/releases/telemetry_decom/#{n_minus_1.release["releaseId"]}/artifacts/mf-manifest.json"
 
-    assert_host_query_and_action!(context, revision, endpoint, n_minus_1)
+    assert_host_query!(context, n_minus_1)
     assert_public_artifact_semantics!(n, "remoteEntry.js")
     assert_public_artifact_semantics!(n_minus_1, "mf-manifest.json")
     restart_endpoint_and_assert_catalog!(context, n_minus_1)
@@ -403,56 +400,6 @@ defmodule CadenceWeb.FrontendReleaseSignedActivationTest do
       host_context: host_context,
       installation: installation
     }
-  end
-
-  defp imported_packet_context(context) do
-    suffix = Integer.to_string(System.unique_integer([:positive]))
-    database = TestFixtures.persist_catalog_database!(context.mission, slug: "phase-d-#{suffix}")
-
-    run =
-      TestFixtures.start_catalog_revision_import!(database,
-        revision_label: "Phase D Revision",
-        source_artifact: """
-        packets:
-          - name: HEALTH
-            apid: 42
-            items:
-              - name: mode
-                data_type: uint
-                bit_offset: 0
-                bit_size: 8
-        commands: []
-        """
-      )
-
-    TestFixtures.complete_catalog_import_run!(run)
-    revision = TestFixtures.fetch_catalog_revision_for_run!(run)
-
-    endpoint =
-      SourceEndpoint.new(%{
-        source_endpoint_id: "phase-d-source-#{suffix}",
-        mission_id: context.mission.mission_id,
-        spacecraft_id: context.spacecraft.spacecraft_id,
-        display_name: "Phase D Downlink"
-      })
-
-    assert {:ok, endpoint} =
-             Cadence.SourceEndpointFixtures.persist(
-               context.organization.organization_id,
-               endpoint
-             )
-
-    assert {:ok, _configuration} =
-             TelemetryDecom.configure(
-               context.organization.organization_id,
-               context.mission.mission_id,
-               context.spacecraft.spacecraft_id,
-               catalog_revision_id: revision.catalog_revision_id,
-               handled_apids: [42],
-               source_endpoint_id: endpoint.source_endpoint_id
-             )
-
-    {revision, endpoint}
   end
 
   defp assert_package_evidence!(fixture) do
@@ -748,7 +695,7 @@ defmodule CadenceWeb.FrontendReleaseSignedActivationTest do
              "/api/cadence/application-host/v1/missions/#{context.mission.mission_id}/spacecraft/#{context.spacecraft.spacecraft_id}"
   end
 
-  defp assert_host_query_and_action!(context, revision, endpoint, package) do
+  defp assert_host_query!(context, package) do
     catalog_response = get(context.member_conn, host_path(context))
 
     catalog = json_response(catalog_response, 200)["data"]["catalog"]
@@ -772,37 +719,9 @@ defmodule CadenceWeb.FrontendReleaseSignedActivationTest do
            }
 
     assert query["trusted_surface"]["contract_version"] == 1
-    assert [%{"id" => packet_id}] = query["trusted_surface"]["packets"]["items"]
+    assert query["trusted_surface"]["configuration"] == nil
+    assert query["trusted_surface"]["packets"]["items"] == []
     refute Map.has_key?(query, "releaseId")
-
-    action_response =
-      catalog_response
-      |> bridge_conn(catalog)
-      |> put_req_header("idempotency-key", "phase-d-action")
-      |> post(
-        actions_path(context),
-        Jason.encode!(
-          action_body(
-            context,
-            revision,
-            endpoint,
-            packet_id,
-            query["trusted_surface"]["review_token"]
-          )
-        )
-      )
-
-    action = json_response(action_response, 200)
-
-    assert {:ok, idempotency_key_digest} =
-             ApplicationActionIdempotency.key_digest("phase-d-action")
-
-    assert action["receiptId"] == "application-host-receipt-" <> idempotency_key_digest
-    assert action["result"]["applicationKey"] == "telemetry_decom"
-    assert action["result"]["applicationVersion"] == 1
-    assert action["result"]["inputId"] == "telemetry-fields"
-    assert action["result"]["selectedPacketIds"] == [packet_id]
-    refute Map.has_key?(action, "releaseId")
   end
 
   defp assert_public_artifact_semantics!(package, artifact_path_value) do
@@ -1308,11 +1227,6 @@ defmodule CadenceWeb.FrontendReleaseSignedActivationTest do
       @host_catalog_suffix <>
         "/#{context.mission.mission_id}/spacecraft/#{context.spacecraft.spacecraft_id}/query"
 
-  defp actions_path(context),
-    do:
-      @host_catalog_suffix <>
-        "/#{context.mission.mission_id}/spacecraft/#{context.spacecraft.spacecraft_id}/actions"
-
   defp artifact_path(package, path),
     do: "/releases/telemetry_decom/#{package.release["releaseId"]}/artifacts/#{path}"
 
@@ -1334,26 +1248,6 @@ defmodule CadenceWeb.FrontendReleaseSignedActivationTest do
       "queryVersion" => 1,
       "scope" => scope_document(context),
       "params" => %{}
-    }
-  end
-
-  defp action_body(context, revision, endpoint, packet_id, review) do
-    %{
-      "applicationKey" => "telemetry_decom",
-      "applicationVersion" => 1,
-      "surfaceId" => "packet_bindings",
-      "surfaceVersion" => 1,
-      "actionId" => "save_packet_bindings",
-      "scope" => scope_document(context),
-      "input" => %{
-        "expected_review" => review,
-        "expected_configuration_version" => 0,
-        "input_id" => "telemetry-fields",
-        "input_version" => 1,
-        "catalog_revision_id" => revision.catalog_revision_id,
-        "source_endpoint_ref" => endpoint.source_endpoint_id,
-        "selected_packet_ids" => [packet_id]
-      }
     }
   end
 

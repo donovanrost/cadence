@@ -4,11 +4,21 @@ defmodule Cadence.Observability.ScaleSampler.Host do
   number): load average, swap in use and how many coding agents run on the host. A laptop shared
   with a dozen agents makes timings meaningless without it.
 
-  macOS reads `sysctl`; Linux reads `/proc`. A value that can't be read is `nil`.
+  macOS reads `sysctl`. Linux reads load and swap from `/proc` and counts available CPUs
+  with `nproc`.
   """
 
   @type load_average :: %{one: float(), five: float(), fifteen: float()}
   @type swap :: %{swap_used_mb: float(), swap_total_mb: float()}
+  @type pre_run :: %{
+          load_one: number() | nil,
+          swap_percent: number() | nil,
+          settle_ms: non_neg_integer(),
+          settled?: boolean()
+        }
+
+  @settle_interval_ms 10_000
+  @settle_timeout_ms 300_000
 
   @doc "This second's host load, swap usage and agent processes."
   @spec sample() :: %{
@@ -18,17 +28,66 @@ defmodule Cadence.Observability.ScaleSampler.Host do
           agents: integer() | nil
         }
   def sample do
-    swap = swap() || %{swap_used_mb: nil, swap_total_mb: nil}
-    Map.merge(swap, %{load: load(), agents: agents()})
+    Map.put(load_and_swap(), :agents, agents())
   end
 
-  @doc "Classifies a run using every sample's 1-minute load and percentage of swap in use."
-  @spec capacity([map()], pos_integer() | :unknown) :: %{
+  @doc "Waits for a dedicated runner's pre-run load and swap to settle."
+  @spec settle(keyword()) :: pre_run()
+  def settle(opts \\ []) do
+    read_host = Keyword.get(opts, :read_host, &load_and_swap/0)
+    logical_cpus = Keyword.get_lazy(opts, :logical_cpus, &logical_cpus/0)
+    timeout_ms = Keyword.get(opts, :timeout_ms, @settle_timeout_ms)
+    settle(read_host, logical_cpus, System.monotonic_time(:millisecond), timeout_ms)
+  end
+
+  defp settle(read_host, logical_cpus, started, timeout_ms) do
+    capacity = capacity_for([read_host.()], logical_cpus)
+    elapsed_ms = System.monotonic_time(:millisecond) - started
+    settled? = capacity.classification == :baseline
+
+    if settled? or elapsed_ms >= timeout_ms do
+      %{
+        load_one: capacity.max_load_one,
+        swap_percent: capacity.max_swap_percent,
+        settle_ms: elapsed_ms,
+        settled?: settled?
+      }
+    else
+      Process.sleep(min(@settle_interval_ms, timeout_ms - elapsed_ms))
+      settle(read_host, logical_cpus, started, timeout_ms)
+    end
+  end
+
+  defp load_and_swap do
+    swap = swap() || %{swap_used_mb: nil, swap_total_mb: nil}
+    Map.put(swap, :load, load())
+  end
+
+  @doc """
+  Reports the load and swap peaks during a run. A local run uses every sample to
+  determine capacity. A dedicated runner uses its host sample from before the
+  workload and reports during-run pressure separately.
+  """
+  @spec capacity([map()], pos_integer() | :unknown, :local | pre_run()) :: %{
+          optional(:pre_run) => pre_run(),
           classification: :baseline | :ceiling_check,
           max_load_one: number() | nil,
           max_swap_percent: number() | nil
         }
-  def capacity(samples, logical_cpus) do
+  def capacity(samples, logical_cpus, pre_run \\ :local)
+
+  def capacity(samples, logical_cpus, :local), do: capacity_for(samples, logical_cpus)
+
+  def capacity(samples, logical_cpus, %{settled?: settled?} = pre_run) do
+    during = capacity_for(samples, logical_cpus)
+
+    Map.merge(during, %{
+      classification: if(settled?, do: :baseline, else: :ceiling_check),
+      pre_run: pre_run
+    })
+  end
+
+  defp capacity_for(samples, logical_cpus) do
     {max_load, load_complete?} = samples |> Enum.map(&get_in(&1, [:load, :one])) |> measured_max()
     {max_swap, swap_complete?} = samples |> Enum.map(&swap_percent/1) |> measured_max()
 
@@ -65,9 +124,25 @@ defmodule Cadence.Observability.ScaleSampler.Host do
     %{
       hostname: to_string(hostname),
       os: :os.type() |> Tuple.to_list() |> Enum.join("/"),
-      logical_cpus: :erlang.system_info(:logical_processors_available),
+      logical_cpus: logical_cpus(),
       ram_mb: ram_mb()
     }
+  end
+
+  defp logical_cpus do
+    case :os.type() do
+      {:unix, :linux} -> cmd("nproc", [], &parse_nproc/1) || :unknown
+      _os -> :erlang.system_info(:logical_processors_available)
+    end
+  end
+
+  @doc "Parses the count of available logical CPUs reported by Linux `nproc`."
+  @spec parse_nproc(binary()) :: pos_integer() | nil
+  def parse_nproc(text) do
+    case text |> String.trim() |> Integer.parse() do
+      {count, ""} when count > 0 -> count
+      _unreadable -> nil
+    end
   end
 
   # The machine's physical memory (the BEAM's own memory is in each row's `beam`).

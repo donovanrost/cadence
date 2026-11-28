@@ -42,13 +42,18 @@ defmodule CadenceWeb.Console.CommandGroupController do
     with {:ok, draft} <- CommandGroupParams.draft(params),
          {:ok, draft_revision} <- CommandGroupParams.draft_revision(params),
          {:ok, acks} <- CommandGroupParams.acknowledged_holds(params),
-         {:ok, accepted} <- holds_satisfied(conn, draft, acks, operation_id),
+         {:ok, accepted, validation} <- holds_satisfied(conn, draft, acks, operation_id),
          {:ok, group} <-
-           GroupSubmission.submit(conn.assigns.current_scope, mission(conn), draft,
-             preflight_digest: params["preflight_digest"],
-             operation_id: operation_id,
-             hold_acks: accepted,
-             draft_revision: draft_revision
+           GroupSubmission.submit(
+             conn.assigns.current_scope,
+             mission(conn),
+             draft,
+             [
+               preflight_digest: params["preflight_digest"],
+               operation_id: operation_id,
+               hold_acks: accepted,
+               draft_revision: draft_revision
+             ] ++ validation
            ),
          {:ok, view} <-
            CommandGroups.get(org(conn), mission(conn), group.command_group_id, viewer(conn)) do
@@ -66,13 +71,16 @@ defmodule CadenceWeb.Console.CommandGroupController do
          {:ok, preflight} <- CommandPreflight.run(org(conn), mission(conn), actor(conn), draft) do
       case CommandPreflight.holds(preflight, acks) do
         %{unsatisfied: [], accepted: accepted} ->
-          {:ok, Enum.map(accepted, &Map.put(&1, :preflight_digest, preflight.digest))}
+          # The submit reuses what this preflight validated (#1051), when it did validate.
+          reuse = validation_reuse(preflight)
+
+          {:ok, Enum.map(accepted, &Map.put(&1, :preflight_digest, preflight.digest)), reuse}
 
         %{unsatisfied: holds} ->
           {:error, {:holds_unacknowledged, holds}}
       end
     else
-      :replay -> {:ok, []}
+      :replay -> {:ok, [], []}
       {:error, reason} -> {:error, reason}
     end
   end
@@ -108,6 +116,13 @@ defmodule CadenceWeb.Console.CommandGroupController do
   end
 
   defp go_holds_satisfied(_conn, _id, _decision, _acks), do: {:ok, []}
+
+  defp validation_reuse(preflight) do
+    case Map.get(preflight, :request_validation) do
+      nil -> []
+      validation -> [request_validation: validation]
+    end
+  end
 
   defp replay(_conn, nil), do: :new
 
@@ -224,14 +239,14 @@ defmodule CadenceWeb.Console.CommandGroupController do
     with {:ok, decision} <- CommandGroupParams.decision(params),
          {:ok, acks} <- CommandGroupParams.acknowledged_holds(params),
          {:ok, hold_acks} <- go_holds_satisfied(conn, id, decision, acks),
-         {:ok, _group} <-
+         {:ok, group} <-
            GroupDecision.decide(
              conn.assigns.current_scope,
              mission(conn),
              id,
              Map.put(decision, :hold_acks, hold_acks)
            ) do
-      show(conn, %{"command_group_id" => id})
+      json(conn, %{data: CommandGroupJSON.decision_summary(group)})
     else
       error -> CommandGroupProblems.respond(conn, error)
     end

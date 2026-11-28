@@ -49,7 +49,11 @@ function cellText(row: Row, key: string): string {
   return value === null || value === undefined ? "" : String(value);
 }
 
-/** A table wider than the screen scrolls sideways: keyboard reachable and named then (qa §6). */
+/**
+ * A table wider than the screen scrolls sideways: keyboard reachable and named then (qa §6). The
+ * wrapper is positioned, so a header's sr-only label (absolute) is clipped with the table instead
+ * of widening the page (#1027: Playlists' Actions label, 148 px at 390).
+ */
 const wrapper = ref<HTMLElement | null>(null);
 const scrollable = useScrollable(wrapper);
 const scrolls = computed(() => scrollable.value || props.scrollBox === true);
@@ -141,7 +145,7 @@ defineSlots<
 <template>
   <div
     ref="wrapper"
-    :class="scrollBox ? 'h-full overflow-auto' : 'overflow-x-auto'"
+    :class="scrollBox ? 'relative h-full overflow-auto' : 'relative overflow-x-auto'"
     :style="scrollBox && headHeight ? { scrollPaddingTop: `${headHeight}px` } : undefined"
     :tabindex="scrolls ? 0 : undefined"
     :role="scrolls ? 'region' : undefined"

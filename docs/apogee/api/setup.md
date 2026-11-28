@@ -23,6 +23,7 @@ Conventions: [README.md](README.md). Requested shapes: `docs/apogee/plans/setup-
 | G1, T1, T2 | `GET /missions/:mission_id/ground-stations`, `/transports`, `/routing-rules` | **implemented** |
 | kind schema | `GET /missions/:mission_id/config/kinds/:kind/schema` | **implemented** |
 | catalog APIDs | `GET /missions/:mission_id/catalog/revisions/:revision_id/apids` | **implemented** (L17) |
+| catalog systems | `GET /missions/:mission_id/catalog/revisions/:revision_id/systems` | **implemented** (P5, #1078) |
 | revision spacecraft | `GET /missions/:mission_id/catalog/revisions/:revision_id/spacecraft` | **implemented** (#678, `Cadence.Reads.CatalogRevisionSpacecraft`) |
 | change-set lanes | `GET /missions/:mission_id/config?lane=configuration\|monitoring` | **implemented** (#451 slice L; see below) |
 
@@ -444,6 +445,11 @@ switches. The editable `document` never carries them; they're read-only in `swit
   ocf_length, truncated_primary_header} | null}`. No switch keys.
 - `composition` (D2, #543), beside `document`: the composition behind the document's
   `catalog_revision_id` (shape in setup.md's 'Compositions' section), or null.
+- `systems` (ADR-020 P5, #1078 B1), beside `document`: the SpaceSystems the saved `handled_apids`
+  amount to in the document catalog's model, `[{system_id, path, name, bound: "all"|"some",
+  apids: [int]}]` by path (`bound: "all"` when every container of the system is selected); `[]`
+  when no APID is selected (a document whose `handled_apids` is absent reads as every APID: every system that has a container, `bound: "all"`); null when the document has no catalog or it has no compiled model. It is read from the catalog's telemetry plan alone (one row).
+  Read-only: until B2 the input is still `handled_apids`.
 - `external_changes`: bool.
 - `switches`: `{telemetry_enabled: SWITCH, commanding_enabled: SWITCH}`, where SWITCH is `{value:
   bool, set: bool, revision: int|null}`. `set` false means no change set has set it (the value
@@ -453,6 +459,7 @@ switches. The editable `document` never carries them; they're read-only in `swit
   for the craft.
   - `active.composition` (D2, #543): the composition behind the active document's catalog
     revision (shape in setup.md's 'Compositions' section), or null.
+  - `active.systems` (P5): as `systems`, for the active document.
 - `review`: `{id, state: approval_pending|approved|rejected|withdrawn|superseded|stale|active,
   requester_id, version|null}` or null. From the dev reset (DECISIONS #112) it also carries the
   decision record's `subject`, `separated_from`, `admin_mode` and `applied_by`. Read them as
@@ -833,6 +840,26 @@ The APIDs the revision defines, with their packets: the choices for `handled_api
   exactly what decode can handle.
 - `available: false` (with `apids: []`) when the revision has no telemetry plan yet. Say "not
   compiled yet", not "no APIDs".
+- Errors: `404 catalog_revision_not_found`.
+
+## `GET /api/v1/missions/:mission_id/catalog/revisions/:revision_id/systems` (ADR-020 P5, #1078)
+
+The SpaceSystems of the revision's mission model and what each holds: the choices a spacecraft's
+binding offers (B2 switches the input from `handled_apids` to these).
+
+```json
+{"data": {"revision_id": "catalog_revision_…", "available": true,
+  "systems": [{"system_id": "semantic:space_system:…", "path": "/bus", "name": "bus",
+    "parent_id": "semantic:space_system:…" | null,
+    "packets": [{"packet_definition_id": "…", "name": "HK", "runtime_name": "/bus/HK", "apid": 10}],
+    "commands": [{"command_id": "…", "name": "SET_MODE", "runtime_name": "/bus/SET_MODE"}],
+    "algorithms": 0, "policies": 1}]}}
+```
+
+- By path; `parent_id` is null only for the root `/`. A system with nothing in it is listed.
+- A system binds its descendants (B2). `runtime_name` is the system's path joined with the
+  definition's name; the id a point or command takes is that without its leading `/` (B3).
+- `available: false` (with `systems: []`) when the revision has no compiled model yet.
 - Errors: `404 catalog_revision_not_found`.
 
 ## Source files (§11 L18: K1-K3)
@@ -1694,6 +1721,55 @@ forbidden`. Each answers with the provider's row as the list shows it.
     leaves the list.
   - `422 invalid_params {reason: "Say why."}`.
 - `404 provider_not_found` for an unknown or archived provider.
+
+#### Provider delivery credentials (#991)
+
+Use `/api/v1/missions/:mission_id/providers/:provider_id/delivery-credentials/:binding_id`.
+The binding ID is the stable transport ID, shared across versions of that transport. Issue and
+rotate require an active provider-managed transport in this mission, owned by the provider in
+the path. The credential reference belongs to that mission provider, account grant and binding.
+These routes use the console mission pipeline and require a human administrator's session.
+Mutations also require the session's CSRF token.
+
+| Method and suffix | Request and response |
+| --- | --- |
+| `GET` | Returns `200 {data: credential}`. |
+| `POST /issue` | Send `csr_pem` and `reason`. Returns `201 {data: {credential, certificate_pem, issuer_certificate_pem}}`. |
+| `POST /rotate` | Send a CSR for a fresh key, the current `expected_generation` and `reason`. Returns `200` with the same fields as issue. |
+| `POST /revoke` | Send `reason` with either a `fingerprint` or `target: "binding"`. Returns `200 {data: credential}`. |
+| `POST /downgrade` | Send the transport's `expected_version`, a plaintext `delivery_profile_ref: {id, version}` and `reason`. Returns `200 {data: {version, delivery_auth: "plaintext"}}`. The replacement must supply a valid source allowlist. |
+
+The credential contains `credential_ref`, `provider_binding_id`, nullable `retired_at` and
+`generations`. Each generation has `generation`, the SHA-256 certificate `fingerprint`
+(lowercase hexadecimal), `state` (`current`, `previous` or `revoked`), `expires_at` and
+nullable `overlap_ends_at` and `revoked_at`. The read returns the current and previous
+records when present and the most recent revoked record, newest generation first. Dates use
+ISO 8601 UTC. A stale expected generation or transport version returns `409 version_conflict`.
+
+Issue accepts `initial_enrollment`. Rotate accepts `scheduled_rotation`,
+`suspected_compromise` or `operator_requested`. Revoke accepts `suspected_compromise`,
+`retired_binding`, `end_overlap` or `operator_requested`. Downgrade accepts
+`provider_compatibility` or `operator_requested`. Reasons and actor identity are recorded in
+the provider audit trail. A compromise rotation revokes both outgoing generations as it installs
+the replacement. Revoking the current generation also ends any overlap unless the operator
+explicitly sends `keep_previous: true` for a reason other than `suspected_compromise`. A
+compromise revocation with `keep_previous: true` returns `422 invalid_params`.
+Revoking a binding permanently retires that transport ID for enrollment. If the grant changes,
+retire the old binding and enroll against a new transport.
+
+The provider generates and retains the private key. Cadence verifies proof of possession,
+assigns the certificate subject and extensions, and returns the signed client certificate and
+issuer certificate for installation at the provider. Supported CSR keys are P-256, P-384,
+P-521 and RSA of at least 3072 bits, with SHA-256 or stronger signatures. The leaf starts
+five minutes before issuance to allow for clock skew and expires within 30 days of issuance.
+A routine rotation retains the previous fingerprint for up to 24 hours, bounded by its
+certificate expiry. To enable issuance, set the application configuration
+`:cadence, :provider_delivery_issuer` with `issuer_reference` and a `secret_backend` that
+resolves purpose `provider_delivery_issuer` to `certificate_pem` and `private_key_pem`.
+Provision a dedicated deployment client CA in that backend.
+
+Mutual TLS listener activation is gated until the inbound TLS work in #991 lands. The
+credential endpoints can provision and manage certificates ahead of that activation.
 
 ## `GET /api/v1/missions/:mission_id/config/kinds/:kind/schema`
 

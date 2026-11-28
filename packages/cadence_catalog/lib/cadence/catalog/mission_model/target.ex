@@ -7,6 +7,7 @@ defmodule Cadence.Catalog.MissionModel.Target do
     MonitoringLowering,
     Revision,
     RuntimePlan,
+    SystemOwner,
     TargetLowering
   }
 
@@ -141,23 +142,25 @@ defmodule Cadence.Catalog.MissionModel.Target do
 
   defp legalize(%Declaration{}, _target), do: []
 
-  defp lower_plan(:algorithm, _revision, declarations, edges, _origins) do
+  defp lower_plan(:algorithm, revision, declarations, edges, _origins) do
+    systems = SystemOwner.index(revision)
+
     {%{
        "target" => "algorithm",
        "algorithms" =>
          declarations
          |> Enum.filter(&(&1.kind == :algorithm))
          |> order_algorithms(edges)
-         |> Enum.map(&lower_algorithm/1),
+         |> Enum.map(&lower_algorithm(&1, systems)),
        "edges" => own_edges(declarations, :algorithm, edges)
      }, []}
   end
 
-  defp lower_plan(:monitoring, _revision, declarations, edges, origins) do
+  defp lower_plan(:monitoring, revision, declarations, edges, origins) do
     {policies, diagnostics} =
       declarations
       |> Enum.filter(&(&1.kind == :monitoring_policy))
-      |> MonitoringLowering.lower(origins)
+      |> MonitoringLowering.lower(origins, SystemOwner.index(revision))
 
     {%{
        "target" => "monitoring",
@@ -182,7 +185,7 @@ defmodule Cadence.Catalog.MissionModel.Target do
     Enum.filter(edges, &MapSet.member?(own, &1.from))
   end
 
-  defp lower_algorithm(declaration) do
+  defp lower_algorithm(declaration, systems) do
     inputs =
       declaration.references
       |> Enum.filter(&(&1.role == :input and is_binary(&1.resolved_id)))
@@ -192,6 +195,7 @@ defmodule Cadence.Catalog.MissionModel.Target do
     |> stringify_keys()
     |> Map.put("algorithm_id", declaration.semantic_id)
     |> Map.put("input_parameter_ids", inputs)
+    |> Map.merge(SystemOwner.fields(declaration, systems))
   end
 
   defp order_algorithms(algorithms, edges) do

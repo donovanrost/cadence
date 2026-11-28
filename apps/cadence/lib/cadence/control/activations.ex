@@ -167,6 +167,10 @@ defmodule Cadence.Control.Activations do
       {:ok, %ActivationExecution{} = execution} ->
         {:ok, execution}
 
+      {:error, %module{} = exception}
+      when module in [DBConnection.ConnectionError, Postgrex.Error] ->
+        {:interrupted, execution_row, exception}
+
       {:error, reason} ->
         _ = fail_execution(execution_row, reason, now(opts))
         {:error, reason}

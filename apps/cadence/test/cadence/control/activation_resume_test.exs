@@ -6,6 +6,7 @@ defmodule Cadence.Control.ActivationResumeTest do
   """
   use Cadence.RuntimeCase, async: false
 
+  alias Cadence.Activations.GenerationReceipts
   alias Cadence.Applications.SpacecraftConfiguration.{Drafts, Review}
   alias Cadence.Applications.TelemetryDecomFixtures, as: Fixtures
   alias Cadence.Catalog.SpacecraftConfigurationInput
@@ -41,7 +42,9 @@ defmodule Cadence.Control.ActivationResumeTest do
   test "a failed apply shows in Now, the approver resumes it, and it resolves as applied", c do
     interrupt_apply!()
     assert {:error, :activation_execution_interrupted} = ControlActivations.execute(c.approved)
-    Repo.query!("DROP TRIGGER interrupt_apply ON spacecraft_application_bindings")
+    Repo.query!("DROP TRIGGER interrupt_apply ON mission_generation_receipts")
+
+    assert is_nil(GenerationReceipts.latest(@org, @mid))
 
     assert [item] = ApplyAttention.items(@org, @mid)
 
@@ -62,6 +65,11 @@ defmodule Cadence.Control.ActivationResumeTest do
     assert item.retryable
 
     assert {:ok, %{status: :succeeded}} = ControlActivations.resume(c.scope, @mid, c.id)
+
+    assert {%{activation_request_id: request_id}, %DateTime{}} =
+             GenerationReceipts.latest(@org, @mid)
+
+    assert request_id == c.id
     assert ApplyAttention.items(@org, @mid) == []
 
     assert [%{action: "applied", resolved_by: %{"kind" => "system"}}] =
@@ -81,7 +89,7 @@ defmodule Cadence.Control.ActivationResumeTest do
   test "an in-progress execution resumes only once it has stalled", c do
     interrupt_apply!()
     assert {:error, :activation_execution_interrupted} = ControlActivations.execute(c.approved)
-    Repo.query!("DROP TRIGGER interrupt_apply ON spacecraft_application_bindings")
+    Repo.query!("DROP TRIGGER interrupt_apply ON mission_generation_receipts")
 
     # As if an executor died two minutes in, leaving it in progress.
     set_execution!(c.id, :in_progress, DateTime.add(DateTime.utc_now(), -120))
@@ -100,7 +108,7 @@ defmodule Cadence.Control.ActivationResumeTest do
   test "a live executor's lock refuses a resume", c do
     interrupt_apply!()
     assert {:error, :activation_execution_interrupted} = ControlActivations.execute(c.approved)
-    Repo.query!("DROP TRIGGER interrupt_apply ON spacecraft_application_bindings")
+    Repo.query!("DROP TRIGGER interrupt_apply ON mission_generation_receipts")
 
     # Another database session (another node's executor) holds the request's lock.
     {:ok, other} = Postgrex.start_link(Keyword.drop(Repo.config(), [:pool, :pool_size]))
@@ -118,7 +126,7 @@ defmodule Cadence.Control.ActivationResumeTest do
   test "the lock dies with its executor, so a killed execution can be resumed", c do
     interrupt_apply!()
     assert {:error, :activation_execution_interrupted} = ControlActivations.execute(c.approved)
-    Repo.query!("DROP TRIGGER interrupt_apply ON spacecraft_application_bindings")
+    Repo.query!("DROP TRIGGER interrupt_apply ON mission_generation_receipts")
 
     # An executor holding the lock, killed mid-way (a crashed node or a killed task).
     test_pid = self()
@@ -158,7 +166,7 @@ defmodule Cadence.Control.ActivationResumeTest do
   test "a stale review isn't retried: it needs a new request", c do
     interrupt_apply!()
     assert {:error, :activation_execution_interrupted} = ControlActivations.execute(c.approved)
-    Repo.query!("DROP TRIGGER interrupt_apply ON spacecraft_application_bindings")
+    Repo.query!("DROP TRIGGER interrupt_apply ON mission_generation_receipts")
 
     {1, _} =
       from(e in ActivationExecutionRow, where: e.activation_request_id == ^c.id)
@@ -202,7 +210,7 @@ defmodule Cadence.Control.ActivationResumeTest do
     """)
 
     Repo.query!("""
-    CREATE TRIGGER interrupt_apply BEFORE UPDATE ON spacecraft_application_bindings
+    CREATE TRIGGER interrupt_apply BEFORE INSERT ON mission_generation_receipts
     FOR EACH ROW EXECUTE FUNCTION pg_temp.interrupt_apply()
     """)
   end

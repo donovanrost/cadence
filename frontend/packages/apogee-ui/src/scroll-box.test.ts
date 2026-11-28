@@ -70,7 +70,7 @@ describe("ApTable scrollBox", () => {
 
   it("is off by default: nothing sticky, the wrapper only scrolls sideways", () => {
     const w = mountBox(false);
-    expect(w.find("div").classes()).toEqual(["overflow-x-auto"]);
+    expect(w.find("div").classes()).toEqual(["relative", "overflow-x-auto"]);
     expect(w.findAll(".sticky")).toHaveLength(0);
     w.unmount();
   });

@@ -3,15 +3,18 @@ defmodule Cadence.Comms.TransportStoreTest do
 
   import Cadence.ReadyProviderFixtures
 
+  alias Cadence.Accounts.{OrganizationMembership, User}
+  alias Cadence.Auth.Scope
   alias Cadence.Comms.TransportStore
 
-  alias Cadence.Comms.{Transport, TransportKind}
+  alias Cadence.Comms.{Transport, TransportKind, TransportRow}
   alias Cadence.Comms.TransportKind.Definition
   alias Cadence.Comms.TransportKinds.TCPSocket
   alias Cadence.Extensions.Presentation.ConfigurationDefinition
   alias Cadence.GroundNetworks
-  alias Cadence.GroundNetworks.MissionProvider
+  alias Cadence.GroundNetworks.{MissionProvider, ProviderAudit}
   alias Cadence.Management.Transports
+  alias Cadence.Persistence.JsonDocument
 
   describe "TCP transport kind" do
     test "normalizes and summarizes TCP config" do
@@ -252,6 +255,125 @@ defmodule Cadence.Comms.TransportStoreTest do
                "id" => "service-downlink",
                "version" => 3
              }
+    end
+
+    test "declared mutual TLS fails closed until the listener gate is available" do
+      org = "org-mtls-listen"
+      mission = "mission-mtls-listen"
+      persist_mission_scope(org, mission)
+
+      transport =
+        Transport.new(%{
+          mission_id: mission,
+          display_name: "Mutual TLS downlink",
+          configuration: %{
+            "mode" => "listen",
+            "direction_capability" => "inbound",
+            "host" => "127.0.0.1",
+            "port" => 5100,
+            "framing_mode" => "raw",
+            "expected_peer_addresses" => ["127.0.0.1/32"],
+            "delivery_auth" => "mtls"
+          }
+        })
+
+      assert {:error, :provider_delivery_mtls_unavailable} =
+               TransportStore.persist_transport(org, transport)
+    end
+
+    test "only an explicit audited downgrade can replace mTLS with an allowlisted profile" do
+      org = "org-delivery-downgrade"
+      mission = "mission-delivery-downgrade"
+      persist_mission_scope(org, mission)
+      provider = persist_ready_provider!(org, mission)
+      delivery_ref = %{"id" => "delivery-cadence", "version" => 7}
+
+      transport =
+        Transport.new(%{
+          mission_id: mission,
+          display_name: "Provider downlink",
+          origin: :provider_managed,
+          mission_provider_id: provider.provider_id,
+          mission_provider_version: provider.version,
+          service_profile_ref: %{"id" => "service-downlink", "version" => 3},
+          delivery_profile_ref: delivery_ref
+        })
+
+      assert {:ok, current} = Transports.persist_transport(org, transport)
+      binding = current.transport_id
+
+      # Exercise protection of an mTLS transport before this slice can create its listener.
+      config = Map.put(current.configuration, "delivery_auth", "mtls")
+
+      assert {1, _} =
+               Repo.update_all(
+                 from(row in TransportRow,
+                   where: row.organization_id == ^org and row.transport_id == ^binding
+                 ),
+                 set: [configuration: JsonDocument.wrap_value(config)]
+               )
+
+      assert {:error, :delivery_auth_downgrade_required} =
+               Transports.version_transport(org, mission, binding, %{
+                 origin: :provider_managed,
+                 mission_provider_id: provider.provider_id,
+                 delivery_profile_ref: delivery_ref
+               })
+
+      admin_user =
+        User.new(%{
+          user_id: "admin-delivery-downgrade",
+          display_name: "Delivery Admin",
+          email: "delivery-admin@example.test"
+        })
+
+      admin =
+        Scope.new(%{
+          user: admin_user,
+          organization_id: org,
+          organization_membership:
+            OrganizationMembership.new(%{
+              organization_id: org,
+              user_id: admin_user.user_id,
+              role: :organization_admin
+            })
+        })
+
+      params = %{
+        "expected_version" => 1,
+        "reason" => "provider_compatibility",
+        "delivery_profile_ref" => delivery_ref
+      }
+
+      assert {:error, :version_conflict} =
+               Transports.downgrade_delivery_auth(
+                 admin,
+                 mission,
+                 provider.provider_id,
+                 binding,
+                 %{params | "expected_version" => 2}
+               )
+
+      assert {:ok, updated} =
+               Transports.downgrade_delivery_auth(
+                 admin,
+                 mission,
+                 provider.provider_id,
+                 binding,
+                 params
+               )
+
+      assert updated.version == 2
+      assert updated.configuration["expected_peer_addresses"] == ["127.0.0.1/32", "::1/128"]
+
+      assert [entry] =
+               ProviderAudit.list_entries(org,
+                 mission_id: mission,
+                 actions: ["provider_delivery_credential.downgrade"]
+               )
+
+      assert entry.actor_document["id"] == "admin-delivery-downgrade"
+      assert entry.decision_document["reason"] == "provider_compatibility"
     end
 
     test "rejects provider-managed transports until provider validation and sync are healthy" do

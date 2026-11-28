@@ -24,12 +24,7 @@ defmodule Cadence.Applications.TelemetryDecom do
 
   alias Cadence.Applications.SpacecraftConfiguration.Drafts, as: ConfigurationDrafts
 
-  import Ecto.Query
-
   alias Cadence.ApplicationDispatch.{BindingRule, BindingSet, CapabilityInstance}
-  alias Cadence.Applications.ApplicationBinding
-  alias Cadence.Applications.ApplicationBindingStore
-  alias Cadence.Applications.ApplicationBindingStore.BindingRow
   alias Cadence.Applications.{MissionBindingComposer, MissionBindingContribution}
 
   alias Cadence.Applications.{
@@ -37,7 +32,6 @@ defmodule Cadence.Applications.TelemetryDecom do
     ApplicationDefinition,
     ConfigurationLock,
     LifecycleContract,
-    PacketBindingConfiguration,
     PacketBindings,
     ResourceClaimDefinition,
     ResourceContract,
@@ -45,6 +39,7 @@ defmodule Cadence.Applications.TelemetryDecom do
     SurfaceQueryContribution
   }
 
+  alias Cadence.Applications.SpacecraftConfiguration.TelemetryDecomProjection
   alias Cadence.Applications.TelemetryDecom.APIDSelection
   alias Cadence.Applications.TelemetryDecom.Config
   alias Cadence.Auth.Scope
@@ -55,12 +50,10 @@ defmodule Cadence.Applications.TelemetryDecom do
   alias Cadence.Governance
   alias Cadence.Management.Activations.ActivationRequest
   alias Cadence.MissionModels
-  alias Cadence.MissionModels.TelemetryProjection
+  alias Cadence.MissionModels.{SystemSelection, TelemetryProjection}
   alias Cadence.Missions
-  alias Cadence.Repo
   alias Cadence.SourceEndpoints
   alias Cadence.SourceEndpoints.SourceEndpoint
-  alias Cadence.SpacecraftStore
   alias Cadence.Telemetry.{FieldDefinition, PacketDefinition}
 
   @application_key "telemetry_decom"
@@ -171,321 +164,27 @@ defmodule Cadence.Applications.TelemetryDecom do
     }
   end
 
-  @spec configure(binary(), binary(), binary(), map() | keyword()) ::
-          {:ok, Config.t()} | {:error, term()}
-  def configure(organization_id, mission_id, spacecraft_id, attrs)
-      when is_binary(organization_id) and is_binary(mission_id) and is_binary(spacecraft_id) and
-             is_list(attrs) do
-    configure(organization_id, mission_id, spacecraft_id, Map.new(attrs))
-  end
+  @doc "Validates a governed draft's APIDs and resolves its exact source endpoint."
+  def normalize_document(mission, spacecraft, %Revision{} = catalog, document) do
+    %{organization_id: org, mission_id: mid} = mission
 
-  def configure(organization_id, mission_id, spacecraft_id, attrs)
-      when is_binary(organization_id) and is_binary(mission_id) and is_binary(spacecraft_id) and
-             is_map(attrs) do
-    ConfigurationLock.run(organization_id, mission_id, fn ->
-      with {:ok, config_inputs} <-
-             validate_configure_inputs(organization_id, mission_id, spacecraft_id, attrs) do
-        upsert_config(organization_id, mission_id, spacecraft_id, attrs, config_inputs)
-      end
-    end)
-    |> ScopedReadUpdates.publish_result(
-      :spacecraft_configuration_changed,
-      organization_id,
-      mission_id
-    )
-  end
-
-  defp validate_configure_inputs(organization_id, mission_id, spacecraft_id, attrs) do
-    with {:ok, _mission} <- Missions.fetch_mission(organization_id, mission_id),
-         {:ok, spacecraft} <-
-           SpacecraftStore.fetch_spacecraft(organization_id, mission_id, spacecraft_id),
-         {:ok, catalog_revision_id} <- fetch_required(attrs, :catalog_revision_id),
-         {:ok, %Revision{} = revision} <-
-           Catalog.fetch_revision(organization_id, mission_id, catalog_revision_id),
-         {:ok, telemetry} <- TelemetryProjection.load(organization_id, mission_id, revision),
-         {:ok, handled_apids} <- parse_handled_apids(attrs),
-         :ok <- validate_handled_apids(telemetry.packet_definitions, handled_apids),
-         {:ok, source_endpoint_id} <-
+    with {:ok, telemetry} <- TelemetryProjection.load(org, mid, catalog),
+         {:ok, apids} <- APIDSelection.parse(document["handled_apids"]),
+         :ok <- validate_handled_apids(telemetry.packet_definitions, apids),
+         {:ok, endpoint} <-
            resolve_runtime_source_endpoint_id(
-             organization_id,
-             mission_id,
+             org,
+             mid,
              spacecraft,
-             fetch_optional(attrs, :source_endpoint_id)
+             document["telemetry_source_endpoint_id"]
            ) do
-      {:ok, %{handled_apids: handled_apids, source_endpoint_id: source_endpoint_id}}
-    end
-  end
-
-  @doc """
-  Records an already-validated configuration document as the spacecraft's stored config, without
-  re-validating it against its catalog: the change-set apply's `Review.compile` checks it in the same
-  transaction. Before 11-15 a change-set move left this row on the old catalog (001 on dev), which the
-  decom and packet-input surfaces and `Drafts.snapshot`'s overlay then acted on.
-  """
-  @spec project_configuration(binary(), binary(), binary(), map()) :: :ok | {:error, term()}
-  def project_configuration(organization_id, mission_id, spacecraft_id, document)
-      when is_map(document) do
-    attrs = %{
-      catalog_revision_id: document["catalog_revision_id"],
-      enabled: document["telemetry_enabled"]
-    }
-
-    # Parsed as configure/4 parses it, so the stored row is the same type either way (api-ops).
-    with {:ok, handled_apids} <- APIDSelection.parse(document["handled_apids"]),
-         {:ok, _binding} <-
-           store_config(organization_id, mission_id, spacecraft_id, attrs, %{
-             handled_apids: handled_apids,
-             source_endpoint_id: document["telemetry_source_endpoint_id"]
-           }) do
-      :ok
+      {:ok, %{document | "handled_apids" => apids, "telemetry_source_endpoint_id" => endpoint}}
     end
   end
 
   @doc false
-  def project_configurations(_mission, []), do: :ok
-
-  def project_configurations(mission, assignments) do
-    org = mission.organization_id
-    mid = mission.mission_id
-    documents = Map.new(assignments, &{&1.spacecraft_id, &1.document})
-
-    ApplicationBindingStore.project_many(org, mid, @application_key, documents, fn id,
-                                                                                   document,
-                                                                                   existing ->
-      project_binding(org, mid, id, document, existing)
-    end)
-  end
-
-  defp project_binding(org, mission, id, document, existing) do
-    with {:ok, apids} <- APIDSelection.parse(document["handled_apids"]) do
-      catalog = document["catalog_revision_id"]
-      source = document["telemetry_source_endpoint_id"]
-      enabled = document["telemetry_enabled"]
-      project_binding(org, mission, id, catalog, source, apids, enabled, existing)
-    end
-  end
-
-  defp project_binding(_org, _mission, _id, _catalog, nil, _apids, false, nil),
-    do: {:ok, nil}
-
-  defp project_binding(_org, _mission, _id, _catalog, nil, _apids, false, existing),
-    do: {:ok, %{existing | enabled: false}}
-
-  defp project_binding(org, mission, id, catalog, source, apids, enabled, existing) do
-    stamp = preserved_applied_stamp(existing, catalog, source, apids)
-
-    binding =
-      Map.merge(stamp, %{
-        organization_id: org,
-        mission_id: mission,
-        spacecraft_id: id,
-        application_key: @application_key,
-        application_binding_id: application_binding_id(id),
-        catalog_revision_id: catalog,
-        handled_apids: apids,
-        source_endpoint_id: source,
-        enabled: enabled
-      })
-      |> ApplicationBinding.new()
-
-    {:ok, binding}
-  end
-
-  defp upsert_config(organization_id, mission_id, spacecraft_id, attrs, config_inputs) do
-    case store_config(organization_id, mission_id, spacecraft_id, attrs, config_inputs) do
-      {:ok, binding} ->
-        {:ok,
-         binding
-         |> config_from_binding()
-         |> overlay_packet_binding_selection()}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
-  end
-
-  defp store_config(organization_id, mission_id, spacecraft_id, attrs, config_inputs) do
-    existing =
-      case ApplicationBindingStore.fetch(
-             organization_id,
-             mission_id,
-             spacecraft_id,
-             @application_key
-           ) do
-        {:ok, binding} -> binding
-        {:error, :application_binding_not_configured} -> nil
-      end
-
-    catalog_revision_id = fetch_attr!(attrs, :catalog_revision_id)
-    source_endpoint_id = config_inputs.source_endpoint_id
-    handled_apids = config_inputs.handled_apids
-
-    preserved_stamp =
-      preserved_applied_stamp(existing, catalog_revision_id, source_endpoint_id, handled_apids)
-
-    enabled = resolve_enabled(attrs, existing)
-
-    config =
-      Config.new(%{
-        spacecraft_id: spacecraft_id,
-        organization_id: organization_id,
-        mission_id: mission_id,
-        configuration_version: existing && existing.configuration_version,
-        catalog_revision_id: catalog_revision_id,
-        handled_apids: handled_apids,
-        source_endpoint_id: source_endpoint_id,
-        enabled: enabled,
-        applied_binding_set_id: preserved_stamp.applied_binding_set_id,
-        applied_binding_set_version: preserved_stamp.applied_binding_set_version,
-        applied_at: preserved_stamp.applied_at,
-        metadata: Map.get(attrs, :metadata, %{})
-      })
-
-    ApplicationBindingStore.upsert(config_to_binding(config))
-  end
-
-  defp preserved_applied_stamp(
-         %ApplicationBinding{
-           catalog_revision_id: catalog_revision_id,
-           source_endpoint_id: source_endpoint_id,
-           handled_apids: handled_apids
-         } = existing,
-         catalog_revision_id,
-         source_endpoint_id,
-         handled_apids
-       ) do
-    %{
-      applied_binding_set_id: existing.applied_binding_set_id,
-      applied_binding_set_version: existing.applied_binding_set_version,
-      applied_at: existing.applied_at
-    }
-  end
-
-  defp preserved_applied_stamp(
-         _existing_or_nil,
-         _catalog_revision_id,
-         _source_endpoint_id,
-         _handled_apids
-       ) do
-    %{applied_binding_set_id: nil, applied_binding_set_version: nil, applied_at: nil}
-  end
-
-  defp fetch_attr!(attrs, key),
-    do: Map.get(attrs, key) || Map.get(attrs, Atom.to_string(key))
-
-  defp fetch_optional(attrs, key) do
-    case fetch_attr!(attrs, key) do
-      value when is_binary(value) and value != "" -> value
-      _other -> nil
-    end
-  end
-
-  defp resolve_enabled(attrs, %ApplicationBinding{} = existing) do
-    Map.get(attrs, :enabled, Map.get(attrs, "enabled", existing.enabled))
-  end
-
-  defp resolve_enabled(attrs, nil) do
-    Map.get(attrs, :enabled, Map.get(attrs, "enabled", true))
-  end
-
-  defp config_to_binding(%Config{} = config) do
-    ApplicationBinding.new(%{
-      application_binding_id: application_binding_id(config.spacecraft_id),
-      organization_id: config.organization_id,
-      mission_id: config.mission_id,
-      spacecraft_id: config.spacecraft_id,
-      application_key: @application_key,
-      configuration_version: config.configuration_version,
-      catalog_revision_id: config.catalog_revision_id,
-      handled_apids: config.handled_apids,
-      source_endpoint_id: config.source_endpoint_id,
-      enabled: config.enabled,
-      applied_binding_set_id: config.applied_binding_set_id,
-      applied_binding_set_version: config.applied_binding_set_version,
-      applied_at: config.applied_at,
-      updated_at: config.updated_at,
-      metadata: config.metadata
-    })
-  end
-
-  defp config_from_binding(%ApplicationBinding{} = binding) do
-    %Config{
-      spacecraft_id: binding.spacecraft_id,
-      organization_id: binding.organization_id,
-      mission_id: binding.mission_id,
-      configuration_version: binding.configuration_version,
-      catalog_revision_id: binding.catalog_revision_id,
-      handled_apids: binding.handled_apids,
-      source_endpoint_id: binding.source_endpoint_id,
-      enabled: binding.enabled,
-      applied_binding_set_id: binding.applied_binding_set_id,
-      applied_binding_set_version: binding.applied_binding_set_version,
-      applied_at: binding.applied_at,
-      updated_at: binding.updated_at,
-      metadata: binding.metadata
-    }
-  end
-
-  defp overlay_packet_binding_selection(%Config{} = config) do
-    configuration =
-      config.organization_id
-      |> PacketBindings.list_for_mission(config.mission_id,
-        application_key: @application_key,
-        spacecraft_ids: [config.spacecraft_id]
-      )
-      |> List.first()
-
-    overlay_packet_binding_selection(config, configuration)
-  end
-
-  defp overlay_packet_binding_selections(configs, organization_id, mission_id) do
-    configurations =
-      PacketBindings.list_for_mission(organization_id, mission_id,
-        application_key: @application_key
-      )
-      |> Map.new(&{&1.spacecraft_id, &1})
-
-    Enum.map(configs, fn config ->
-      overlay_packet_binding_selection(config, Map.get(configurations, config.spacecraft_id))
-    end)
-  end
-
-  defp overlay_packet_binding_selection(%Config{} = config, nil), do: config
-
-  defp overlay_packet_binding_selection(
-         %Config{} = config,
-         %PacketBindingConfiguration{} = configuration
-       ) do
-    if Enum.all?(configuration.bindings, &(&1.catalog_revision_id == config.catalog_revision_id)) do
-      handled_apids =
-        configuration.bindings
-        |> Enum.map(& &1.apid)
-        |> Enum.uniq()
-        |> Enum.sort()
-
-      source_endpoint_id =
-        case configuration.bindings do
-          [binding | _] -> binding.source_endpoint_ref
-          [] -> config.source_endpoint_id
-        end
-
-      %Config{
-        config
-        | handled_apids: handled_apids,
-          source_endpoint_id: source_endpoint_id,
-          enabled: config.enabled and configuration.enabled,
-          applied_binding_set_id: configuration.applied_binding_set_id,
-          applied_binding_set_version: configuration.applied_binding_set_version,
-          applied_at: configuration.applied_at
-      }
-    else
-      config
-    end
-  end
-
-  defp application_binding_id(spacecraft_id) do
-    "application_binding:#{spacecraft_id}:#{@application_key}"
-  end
+  def configure(_organization_id, _mission_id, _spacecraft_id, _attrs),
+    do: {:error, :spacecraft_configuration_review_required}
 
   defp mission_contributors(organization_id, mission_id) do
     packet_binding_contributors =
@@ -524,42 +223,33 @@ defmodule Cadence.Applications.TelemetryDecom do
           {:ok, Config.t()} | {:error, :not_configured}
   def fetch_config(organization_id, mission_id, spacecraft_id)
       when is_binary(organization_id) and is_binary(mission_id) and is_binary(spacecraft_id) do
-    case ApplicationBindingStore.fetch(
-           organization_id,
-           mission_id,
-           spacecraft_id,
-           @application_key
-         ) do
-      {:ok, binding} ->
-        {:ok, binding |> config_from_binding() |> overlay_packet_binding_selection()}
-
-      {:error, :application_binding_not_configured} ->
-        {:error, :not_configured}
+    case TelemetryDecomProjection.list(organization_id, mission_id, [spacecraft_id]) do
+      [config] -> {:ok, config}
+      [] -> {:error, :not_configured}
     end
   end
 
   @spec list_configs(binary(), binary()) :: [Config.t()]
-  def list_configs(organization_id, mission_id)
-      when is_binary(organization_id) and is_binary(mission_id) do
-    organization_id
-    |> ApplicationBindingStore.list(mission_id, application_key: @application_key)
-    |> Enum.map(&config_from_binding/1)
-    |> overlay_packet_binding_selections(organization_id, mission_id)
+  def list_configs(organization_id, mission_id) do
+    TelemetryDecomProjection.list(organization_id, mission_id)
   end
 
-  @doc "Loads status-only configurations for one bounded spacecraft batch."
+  @doc "Loads status projections for one bounded spacecraft batch."
   @spec status_configs_for_spacecrafts(binary(), binary(), [binary()]) ::
           {:ok, %{optional(binary()) => Config.t()}} | {:error, :batch_bounds_exceeded}
   def status_configs_for_spacecrafts(organization_id, mission_id, spacecraft_ids)
       when is_binary(organization_id) and is_binary(mission_id) and is_list(spacecraft_ids) do
-    with {:ok, bindings} <-
-           ApplicationBindingStore.list_for_spacecrafts(
-             organization_id,
-             mission_id,
-             spacecraft_ids,
-             application_key: @application_key
-           ) do
-      {:ok, Map.new(bindings, &{&1.spacecraft_id, config_from_binding(&1)})}
+    ids = Enum.take(spacecraft_ids, 101)
+
+    if length(ids) <= 100 and Enum.all?(ids, &(is_binary(&1) and &1 != "")) do
+      configs =
+        organization_id
+        |> TelemetryDecomProjection.list(mission_id, ids)
+        |> Map.new(&{&1.spacecraft_id, &1})
+
+      {:ok, configs}
+    else
+      {:error, :batch_bounds_exceeded}
     end
   end
 
@@ -703,24 +393,14 @@ defmodule Cadence.Applications.TelemetryDecom do
          true <-
            active.binding_set_id == binding_set.binding_set_id and
              active.binding_set_version == binding_set.version do
-      ids = applied_configuration_ids(mission, entries)
-
-      wanted = MapSet.new(ids)
-
-      configs =
-        list_configs(mission.organization_id, mission.mission_id)
-        |> Enum.filter(&MapSet.member?(wanted, &1.spacecraft_id))
-
-      with :ok <- reconcile_application_state(configs, binding_set, ids) do
-        PacketBindings.stamp_applied_for_mission(
-          mission.organization_id,
-          mission.mission_id,
-          binding_set.binding_set_id,
-          binding_set.version,
-          application_key: @application_key,
-          spacecraft_ids: ids
-        )
-      end
+      PacketBindings.stamp_applied_for_mission(
+        mission.organization_id,
+        mission.mission_id,
+        binding_set.binding_set_id,
+        binding_set.version,
+        application_key: @application_key,
+        spacecraft_ids: applied_configuration_ids(mission, entries)
+      )
     else
       false -> {:error, :spacecraft_configuration_review_stale}
       error -> error
@@ -746,52 +426,18 @@ defmodule Cadence.Applications.TelemetryDecom do
   end
 
   defp apply_configuration_state(binding_set) do
-    with :ok <-
-           binding_set.organization_id
-           |> list_configs(binding_set.mission_id)
-           |> reconcile_application_state(binding_set) do
-      PacketBindings.stamp_applied_for_mission(
-        binding_set.organization_id,
-        binding_set.mission_id,
-        binding_set.binding_set_id,
-        binding_set.version,
-        application_key: @application_key
-      )
-    end
-  end
-
-  @doc """
-  Disable a spacecraft's Telemetry Decom configuration. The configuration is
-  kept so the user can re-enable without re-entering choices, but it will no
-  longer contribute rules on the next apply.
-  """
-  @spec disable(binary(), binary(), binary()) :: {:ok, Config.t()} | {:error, term()}
-  def disable(organization_id, mission_id, spacecraft_id) do
-    ConfigurationLock.run(organization_id, mission_id, fn ->
-      disable_configuration(organization_id, mission_id, spacecraft_id)
-    end)
-    |> ScopedReadUpdates.publish_result(
-      :spacecraft_configuration_changed,
-      organization_id,
-      mission_id
+    PacketBindings.stamp_applied_for_mission(
+      binding_set.organization_id,
+      binding_set.mission_id,
+      binding_set.binding_set_id,
+      binding_set.version,
+      application_key: @application_key
     )
   end
 
-  defp disable_configuration(organization_id, mission_id, spacecraft_id) do
-    with {:ok, %ApplicationBinding{} = binding} <-
-           ApplicationBindingStore.fetch(
-             organization_id,
-             mission_id,
-             spacecraft_id,
-             @application_key
-           ) do
-      case %ApplicationBinding{binding | enabled: false}
-           |> ApplicationBindingStore.upsert() do
-        {:ok, binding} -> {:ok, config_from_binding(binding)}
-        {:error, reason} -> {:error, reason}
-      end
-    end
-  end
+  @doc false
+  def disable(_organization_id, _mission_id, _spacecraft_id),
+    do: {:error, :spacecraft_configuration_review_required}
 
   @doc """
   Return a high-level state label for a config suitable for user-facing UI.
@@ -808,6 +454,10 @@ defmodule Cadence.Applications.TelemetryDecom do
   def status(%Config{} = config, active) do
     if applied_matches_active?(config, active), do: :applied, else: :outdated
   end
+
+  defp applied_matches_active?(%Config{applied_generation: generation}, %{generation: active})
+       when is_integer(active),
+       do: generation == active
 
   defp applied_matches_active?(
          %Config{applied_binding_set_id: applied_id, applied_binding_set_version: applied_ver},
@@ -854,25 +504,6 @@ defmodule Cadence.Applications.TelemetryDecom do
          unassigned_apids: unassigned_apids(telemetry.packet_definitions, config.handled_apids)
        }}
     end
-  end
-
-  @doc """
-  Return advisory visibility for other enabled readers of each APID.
-
-  The result never blocks configuration or activation. Normalized packet
-  bindings deliberately have no cross-application uniqueness constraint.
-  """
-  @spec list_apid_conflicts(binary(), binary(), binary()) ::
-          %{non_neg_integer() => String.t()}
-  def list_apid_conflicts(organization_id, mission_id, spacecraft_id)
-      when is_binary(organization_id) and is_binary(mission_id) and
-             is_binary(spacecraft_id) do
-    ApplicationBindingStore.list_apid_conflicts(
-      organization_id,
-      mission_id,
-      spacecraft_id,
-      @application_key
-    )
   end
 
   @type apid_row :: %{
@@ -999,68 +630,6 @@ defmodule Cadence.Applications.TelemetryDecom do
     end
   end
 
-  defp stamp_applied(configs, %BindingSet{} = binding_set) do
-    now = DateTime.utc_now()
-    by_spacecraft = Map.new(configs, &{&1.spacecraft_id, &1})
-
-    ApplicationBindingStore.project_many(
-      binding_set.organization_id,
-      binding_set.mission_id,
-      @application_key,
-      by_spacecraft,
-      fn _id, config, _existing ->
-        stamped = %{
-          config
-          | applied_binding_set_id: binding_set.binding_set_id,
-            applied_binding_set_version: binding_set.version,
-            applied_at: now
-        }
-
-        {:ok, config_to_binding(stamped)}
-      end,
-      :preserve
-    )
-  end
-
-  defp clear_disabled_application_state(organization_id, mission_id, spacecraft_ids) do
-    now = DateTime.utc_now()
-
-    from(
-      row in BindingRow,
-      where:
-        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-          row.application_key == ^@application_key and row.enabled == false
-    )
-    |> filter_stamp_spacecraft(spacecraft_ids)
-    |> Repo.update_all(
-      set: [
-        applied_binding_set_id: nil,
-        applied_binding_set_version: nil,
-        applied_at: nil,
-        updated_at: now
-      ]
-    )
-
-    :ok
-  end
-
-  defp filter_stamp_spacecraft(query, nil), do: query
-  defp filter_stamp_spacecraft(query, ids), do: where(query, [row], row.spacecraft_id in ^ids)
-
-  defp reconcile_application_state(configs, %BindingSet{} = binding_set, spacecraft_ids \\ nil) do
-    enabled_configs = Enum.filter(configs, & &1.enabled)
-    mission_id = binding_set.mission_id
-    organization_id = binding_set.organization_id
-
-    case stamp_applied(enabled_configs, binding_set) do
-      :ok ->
-        clear_disabled_application_state(organization_id, mission_id, spacecraft_ids)
-
-      {:error, reason} ->
-        {:error, reason}
-    end
-  end
-
   defp compile_runtime_artifacts(telemetry, %Config{} = config, binding_set_version) do
     packet_definitions = selected_packets(telemetry.packet_definitions, config.handled_apids)
 
@@ -1119,12 +688,6 @@ defmodule Cadence.Applications.TelemetryDecom do
     }
   end
 
-  defp parse_handled_apids(attrs) do
-    attrs
-    |> fetch_attr!(:handled_apids)
-    |> APIDSelection.parse()
-  end
-
   defp validate_handled_apids(packet_definitions, handled_apids) do
     available_apids = MapSet.new(all_packet_apids(packet_definitions))
     unknown_apids = Enum.reject(handled_apids, &MapSet.member?(available_apids, &1))
@@ -1135,10 +698,8 @@ defmodule Cadence.Applications.TelemetryDecom do
     end
   end
 
-  defp selected_packets(packet_definitions, handled_apids) do
-    allowed_apids = MapSet.new(handled_apids)
-    Enum.filter(packet_definitions, &MapSet.member?(allowed_apids, &1.apid))
-  end
+  defp selected_packets(packet_definitions, handled_apids),
+    do: SystemSelection.select(packet_definitions, {:apids, handled_apids})
 
   defp unassigned_apids(packet_definitions, handled_apids) do
     packet_definitions
@@ -1219,16 +780,6 @@ defmodule Cadence.Applications.TelemetryDecom do
   def managed_runtime_source_endpoint?(%SourceEndpoint{} = endpoint) do
     endpoint.source_endpoint_id ==
       SourceEndpoints.managed_source_endpoint_id(endpoint.spacecraft_id) or
-      Map.get(endpoint.metadata, "managed_by") in [
-        "spacecraft_application_binding",
-        "telemetry_decom"
-      ]
-  end
-
-  defp fetch_required(attrs, key) do
-    case Map.get(attrs, key) || Map.get(attrs, Atom.to_string(key)) do
-      value when is_binary(value) and value != "" -> {:ok, value}
-      _missing -> {:error, {:missing_attr, key}}
-    end
+      Map.get(endpoint.metadata, "managed_by") == "telemetry_decom"
   end
 end

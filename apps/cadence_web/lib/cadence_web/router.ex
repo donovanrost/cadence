@@ -471,6 +471,7 @@ defmodule CadenceWeb.Router do
       get("/catalog/imports/:import_run_id", CatalogController, :import_run)
       get("/catalog/revisions/:revision_id/rollout", CatalogController, :rollout)
       get("/catalog/revisions/:revision_id/apids", CatalogController, :apids)
+      get("/catalog/revisions/:revision_id/systems", CatalogController, :systems)
       # #678: the spacecraft whose saved or active configuration uses the revision, paged.
       get("/catalog/revisions/:revision_id/spacecraft", CatalogController, :revision_spacecraft)
       # L18 source files (owner: api).
@@ -501,6 +502,14 @@ defmodule CadenceWeb.Router do
       post("/providers/:provider_id/validate", MissionProviderController, :validate)
       post("/providers/:provider_id/sync", MissionProviderController, :sync)
       post("/providers/:provider_id/archive", MissionProviderController, :archive)
+
+      scope "/providers/:provider_id/delivery-credentials/:binding_id" do
+        get("/", ProviderDeliveryCredentialController, :show)
+        post("/issue", ProviderDeliveryCredentialController, :issue)
+        post("/rotate", ProviderDeliveryCredentialController, :rotate)
+        post("/revoke", ProviderDeliveryCredentialController, :revoke)
+        post("/downgrade", ProviderDeliveryCredentialController, :downgrade)
+      end
 
       get(
         "/providers/:provider_id/ephemeris/spacecraft",

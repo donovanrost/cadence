@@ -7,7 +7,8 @@ defmodule Cadence.Catalog.MissionModel.TargetLowering do
     Declaration,
     Diagnostic,
     Reference,
-    Revision
+    Revision,
+    SystemOwner
   }
 
   @telemetry_runtime_contract "mission_model_telemetry_v1"
@@ -89,6 +90,8 @@ defmodule Cadence.Catalog.MissionModel.TargetLowering do
          ]}
 
       true ->
+        owner = SystemOwner.fields(container, SystemOwner.index(revision))
+
         case lower_fields(container, entries, index) do
           {:ok, fields} ->
             {:ok,
@@ -97,6 +100,9 @@ defmodule Cadence.Catalog.MissionModel.TargetLowering do
                organization_id: revision.organization_id,
                mission_id: revision.mission_id,
                packet_name: container.name,
+               space_system_id: owner["space_system_id"],
+               space_system_path: owner["space_system_path"],
+               runtime_name: owner["runtime_name"],
                apid: value(container.definition, :apid),
                version: value(container.definition, :version, 1),
                fields: Enum.sort_by(fields, &{&1.offset_bits, &1.field_id}),
@@ -167,12 +173,16 @@ defmodule Cadence.Catalog.MissionModel.TargetLowering do
          {:ok, verifier_plans} <-
            lower_verifiers(command, declarations, argument_specs, revision.declarations) do
       operational = value(command.definition, :operational_metadata, %{})
+      owner = SystemOwner.fields(command, SystemOwner.index(revision))
 
       runtime_definition =
         document(%{
           command_id: command.semantic_id,
           mission_model_revision_id: revision.revision_id,
           name: command.name,
+          space_system_id: owner["space_system_id"],
+          space_system_path: owner["space_system_path"],
+          runtime_name: owner["runtime_name"],
           display_name: value(command.definition, :display_name, command.name),
           description: value(command.definition, :description),
           layout_id: encoding.semantic_id,

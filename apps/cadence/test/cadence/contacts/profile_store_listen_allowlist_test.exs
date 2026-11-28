@@ -9,6 +9,7 @@ defmodule Cadence.Contacts.ProfileStoreListenAllowlistTest do
   use Cadence.DataCase, async: true
 
   alias Cadence.Contacts.{ProfileStore, ProviderProfile}
+  alias Cadence.Contacts.ProfileStore.Versions
 
   setup do
     suffix = System.unique_integer([:positive])
@@ -62,6 +63,27 @@ defmodule Cadence.Contacts.ProfileStoreListenAllowlistTest do
                  %{configuration: configuration}
                )
     end
+  end
+
+  test "activating a stored listen profile in a new version requires an allowlist", c do
+    inactive = %{profile(c, nil) | lifecycle_state: :deleted}
+
+    assert {:ok, %ProviderProfile{lifecycle_state: :deleted} = stored} =
+             ProfileStore.persist_provider_profile(c.organization_id, inactive)
+
+    assert {:ok, %ProviderProfile{lifecycle_state: :active} = next} =
+             Versions.next_provider_profile(stored, %{})
+
+    assert {:error, :peer_addresses_missing} =
+             ProfileStore.persist_provider_profile(c.organization_id, next)
+
+    assert {:error, :contact_provider_profile_not_found} =
+             ProfileStore.fetch_provider_profile_version(
+               c.organization_id,
+               c.mission_id,
+               stored.provider_profile_id,
+               next.version
+             )
   end
 
   test "client mode and other adapters need no list", c do

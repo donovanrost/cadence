@@ -1,5 +1,7 @@
 import Config
 
+config :cadence_web, :request_cost, :test
+
 config :cadence_web, CadenceWeb.Endpoint,
   http: [ip: {127, 0, 0, 1}, port: 4101],
   check_origin: :conn,

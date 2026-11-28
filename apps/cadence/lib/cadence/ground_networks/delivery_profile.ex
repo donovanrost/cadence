@@ -12,6 +12,7 @@ defmodule Cadence.GroundNetworks.DeliveryProfile do
           display_name: binary(),
           direction: atom(),
           delivery_kind: binary(),
+          delivery_auth: :plaintext | :mtls,
           supported_service_profile_refs: [binary()],
           state: atom(),
           operator_summary: binary(),
@@ -27,6 +28,7 @@ defmodule Cadence.GroundNetworks.DeliveryProfile do
     :display_name,
     :direction,
     :delivery_kind,
+    :delivery_auth,
     :state,
     :operator_summary,
     supported_service_profile_refs: [],
@@ -52,6 +54,7 @@ defmodule Cadence.GroundNetworks.DeliveryProfile do
          {:ok, diagnostics} <- Validation.object(profile, "diagnostics"),
          # #990: the provider's half of the connection (egress.source_addresses).
          {:ok, egress} <- Validation.object(profile, "egress"),
+         {:ok, auth} <- delivery_auth(profile["delivery_auth"], direction, egress),
          {:ok, extensions} <- Validation.object(profile, "extensions") do
       {:ok,
        %__MODULE__{
@@ -60,6 +63,7 @@ defmodule Cadence.GroundNetworks.DeliveryProfile do
          display_name: display_name,
          direction: direction,
          delivery_kind: delivery_kind,
+         delivery_auth: auth,
          supported_service_profile_refs: service_refs,
          state: state,
          operator_summary: operator_summary,
@@ -72,4 +76,15 @@ defmodule Cadence.GroundNetworks.DeliveryProfile do
   end
 
   def from_external(_profile), do: Validation.malformed(:delivery_profile)
+
+  defp delivery_auth(auth, _direction, _egress) when auth in [nil, "plaintext"],
+    do: {:ok, :plaintext}
+
+  defp delivery_auth("mtls", :downlink, %{
+         "delivery_credential_ref" => "delivery_credential_" <> id
+       })
+       when byte_size(id) in 1..255,
+       do: {:ok, :mtls}
+
+  defp delivery_auth(_auth, _direction, _egress), do: Validation.malformed("delivery_auth")
 end

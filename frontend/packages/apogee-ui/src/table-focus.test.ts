@@ -77,3 +77,24 @@ describe("ApTable focus in a table that scrolls sideways", () => {
     w.unmount();
   });
 });
+
+describe("a hidden column label inside a table wider than the screen (#1027)", () => {
+  it("is contained by the table's own box, which is positioned", () => {
+    // jsdom has no layout: this pins the cause. An Actions column's sr-only label is absolute; an
+    // unpositioned wrapper let it escape the clip and widen the page by 148 px at 390 (Playlists).
+    for (const scrollBox of [false, true]) {
+      const w = mount(ApTable<Row>, {
+        props: {
+          columns: [...columns, { key: "actions", label: "Actions", hiddenLabel: true }],
+          rows,
+          rowKey: (r: Row) => r.id,
+          caption: "Playlists",
+          scrollBox,
+        },
+      });
+      expect(w.find("th .sr-only").exists()).toBe(true);
+      expect(w.find("div").classes()).toContain("relative");
+      w.unmount();
+    }
+  });
+});
