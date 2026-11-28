@@ -25,6 +25,7 @@ const requirement = (state: RequirementDetail["state"]): RequirementDetail => ({
   rule_summary: null,
   versions: [],
   held_by: null,
+  permissions: ["planning.requirement.edit"],
 });
 
 beforeEach(() => {

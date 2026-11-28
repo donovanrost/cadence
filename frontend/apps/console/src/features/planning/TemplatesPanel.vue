@@ -16,7 +16,7 @@ const columns: readonly ApColumn[] = [
 
 <template>
   <ApPanel index="P2" title="Templates" flush>
-    <template v-if="summary.permissions.includes('planning.edit')" #header>
+    <template v-if="summary.permissions.includes('planning.template.manage')" #header>
       <ApButton
         size="compact"
         variant="primary"

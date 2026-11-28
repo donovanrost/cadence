@@ -49,7 +49,13 @@ defmodule CadenceWeb.Console.PlanningPolicyAPITest do
            )
 
     assert data["defaults"]["horizon"]["max_horizon_seconds"] == 604_800
-    assert data["permissions"] == ["planning.edit", "planning.approve"]
+    # #1160 row 5: one token per server action, each from that action's own check.
+    assert data["permissions"] == [
+             "planning.template.manage",
+             "fleet_planning_policy.manage",
+             "planning.requirement.edit",
+             "planning.approve"
+           ]
   end
 
   # Lead 11-14: the saver's reason is stored on the version, shown on pending and in the audit.
@@ -159,8 +165,9 @@ defmodule CadenceWeb.Console.PlanningPolicyAPITest do
     assert %{"code" => "invalid_params", "details" => details} = json_response(conn, 422)["error"]
     assert Map.has_key?(details, "horizon.max_horizon_seconds")
 
+    # A member operates the mission, so edits requirements (#1160 row 4), and nothing else here.
     assert c.mia |> call(:get, c.base) |> json_response(200) |> get_in(["data", "permissions"]) ==
-             []
+             ["planning.requirement.edit"]
 
     conn = call(c.mia, :post, c.base, %{"document" => document()})
     assert json_response(conn, 403)["error"]["code"] in ["forbidden"]
