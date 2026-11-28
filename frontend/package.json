@@ -9,7 +9,6 @@
     "build:publication": "node tools/build-first-party-publication.mjs && node tools/production-publication-output-check.mjs",
     "release:package": "node tools/frontend-release-package.mjs",
     "test:publication": "node tools/production-publication-output-check.mjs",
-    "preview": "node tools/production-server.ts",
     "check": "vp check && corepack pnpm typecheck && corepack pnpm lint:structure",
     "test": "corepack pnpm -r --if-present test && corepack pnpm test:tools && corepack pnpm test:transport",
     "test:transport": "node --test tools/phoenix/*.test.mjs",

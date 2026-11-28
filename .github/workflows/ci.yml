@@ -36,7 +36,8 @@ jobs:
     # Pushes run everything. A PR runs the jobs its paths can affect:
     # - code: anything but docs (browser, console e2e, publication, JS audit)
     # - backend: code outside the console app and its kit (Elixir quality and suites). Elixir tests
-    #   still execute frontend/apps/host producer code, so that counts.
+    #   still execute frontend/apps/ops-console producer code and compile frontend/apps/host/src/routes.json,
+    #   so those count.
     # - frontend: code outside the Elixir projects (frontend quality)
     # - scale: Console client, build, fixture and the scaled server entry points
     outputs:
@@ -121,7 +122,6 @@ jobs:
               - "apps/{cadence,cadence_web,cadence_simulator}/mix.{exs,lock}"
               - "config/{config,dev,runtime}.exs"
               - "apps/{cadence,cadence_web,cadence_simulator}/config/{config,dev,runtime}.exs"
-              - "apps/cadence_web/{assets/**,priv/static/**,package.json,package-lock.json}"
               - "dev/reflect_orbital_simulator.exs"
               - "dev/reflect_orbital/{fixture,configuration,activation,live_contacts}.exs"
               - "dev/seed/**"
@@ -431,8 +431,8 @@ jobs:
           grep -Eq '^Result: [1-9][0-9]* passed' "$RUNNER_TEMP/web-publication.log" ||
             { echo "::error::No :frontend_publication test ran"; exit 1; }
 
-  # Tailwind, Vite, the federation publication and digests (assets.deploy), built once for
-  # test-web-publication and console-e2e.
+  # The federation publication and digests (assets.deploy), built once for test-web-publication
+  # and console-e2e.
   browser-assets:
     name: Browser assets (built once)
     needs: changes
@@ -446,14 +446,6 @@ jobs:
       - uses: ./.github/actions/setup-cadence
         with:
           xmllint: "false"
-      - name: Restore npm cache (LiveView assets)
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.npm
-          key: npm-v1-${{ runner.os }}-${{ hashFiles('apps/cadence_web/package-lock.json') }}
-          restore-keys: npm-v1-${{ runner.os }}-
-      - run: npm ci --prefer-offline --no-audit --no-fund
-        working-directory: apps/cadence_web
       - name: Build the browser assets (mix assets.deploy, behind the publication build lock)
         working-directory: apps/cadence_web
         run: node ../../frontend/tools/phoenix/run_federation_publication_build.mjs assets.deploy
@@ -473,12 +465,6 @@ jobs:
           path: apps/cadence_web/priv/static
           if-no-files-found: error
           retention-days: 1
-      - name: Save npm cache
-        if: ${{ !cancelled() && github.event_name == 'push' }}
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.npm
-          key: npm-v1-${{ runner.os }}-${{ hashFiles('apps/cadence_web/package-lock.json') }}
 
   # #242: the console's Playwright specs (e2e and a11y) against a real stack, one per shard.
   # Required through ci-ok (#409). A flaky spec goes to console to fix; it is not a reason to ungate.
@@ -780,10 +766,6 @@ jobs:
       - name: frontend (pnpm), production deps, HIGH and above
         working-directory: frontend
         run: corepack pnpm audit --prod --audit-level high
-      - name: apps/cadence_web (npm), production deps, HIGH and above
-        if: ${{ !cancelled() }}
-        working-directory: apps/cadence_web
-        run: npm audit --omit=dev --audit-level=high
       - name: All dependencies incl. dev tooling (reported, not blocking)
         if: ${{ !cancelled() }}
         run: |
@@ -791,7 +773,6 @@ jobs:
             echo "### JS advisories, all dependencies (not blocking)"
             echo '```'
             (cd frontend && corepack pnpm audit --audit-level moderate 2>&1 | tail -3) || true
-            (cd apps/cadence_web && npm audit --audit-level=moderate 2>&1 | tail -3) || true
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -812,7 +793,7 @@ jobs:
           node-version: "24.16.0"
       # OTP and Elixir versions come from mise.toml.
       - uses: ./.github/actions/setup-beam
-      # The frontend consumes the locked Phoenix and LiveVue JavaScript packages.
+      # The console consumes the locked Phoenix JavaScript package.
       - run: mix deps.get --check-locked
       - run: corepack enable
       - run: corepack pnpm install --frozen-lockfile

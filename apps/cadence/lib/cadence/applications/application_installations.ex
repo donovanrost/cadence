@@ -231,42 +231,6 @@ defmodule Cadence.Applications.ApplicationInstallations do
     end
   end
 
-  @spec list_for_mission(Scope.t(), binary(), keyword()) ::
-          {:ok, [ApplicationInstallation.t()]} | {:error, term()}
-  def list_for_mission(%Scope{} = current_scope, mission_id, opts \\ [])
-      when is_binary(mission_id) and is_list(opts) do
-    scope_attrs = %{
-      organization_id: current_scope.organization_id,
-      mission_id: mission_id
-    }
-
-    with true <- is_binary(scope_attrs.organization_id),
-         true <- scope_matches_mission?(current_scope.mission_id, mission_id),
-         :ok <- authorize_management(current_scope, scope_attrs),
-         {:ok, _mission} <- Missions.fetch_mission(scope_attrs.organization_id, mission_id) do
-      installations =
-        InstallationRow
-        |> where(
-          [row],
-          row.organization_id == ^scope_attrs.organization_id and row.mission_id == ^mission_id
-        )
-        |> maybe_filter_lifecycle_state(Keyword.get(opts, :lifecycle_state))
-        |> order_by(
-          [row],
-          asc: row.scope_kind,
-          asc: row.scope_id,
-          asc: row.application_key
-        )
-        |> Repo.all()
-        |> Enum.map(&InstallationRow.to_domain/1)
-
-      {:ok, installations}
-    else
-      false -> {:error, :application_installation_scope_required}
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
   @doc "Returns one bounded page of all installations in a mission."
   @spec list_for_mission_page(Scope.t(), binary(), keyword()) ::
           {:ok, Listing.Page.t()} | {:error, term()}

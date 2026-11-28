@@ -20,9 +20,6 @@ describe("design-system ownership", () => {
       expect(existsSync(join(frontend, "apps", app, "src/ui"))).toBe(false);
     expect(existsSync(join(web, "assets/vue"))).toBe(false);
     expect(existsSync(join(web, "assets/css/tokens.css"))).toBe(false);
-    expect(readFileSync(join(web, "assets/css/app.css"), "utf8")).toContain(
-      "frontend/apps/host/src/phoenix.css",
-    );
   });
   it("does not reintroduce experimental styles or DaisyUI", () => {
     for (const path of [

@@ -8,13 +8,10 @@ defmodule CadenceWeb.Router do
   pipeline :browser do
     plug(CadenceWeb.Plugs.BrowserAccepts)
     plug(:fetch_session)
-    plug(:fetch_live_flash)
-    plug(:put_root_layout, html: {CadenceWeb.Layouts, :root})
     plug(CadenceWeb.Plugs.ApplicationHostCSRF)
     plug(:protect_from_forgery)
     plug(:put_secure_browser_headers)
     plug(CadenceWeb.Plugs.FetchBrowserCurrentScope)
-    plug(CadenceWeb.Plugs.AssignUserMenuContext)
   end
 
   pipeline :require_authenticated_scope do

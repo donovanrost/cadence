@@ -96,7 +96,7 @@ void test("CSS-only packages need no artificial TypeScript project", async (t) =
 
 void test("the actual compiler rejects invalid Vue template types and accepts their repair", async (t) => {
   const { root, project } = await fixture(t);
-  const req = createRequire(resolve(import.meta.dirname, "../apps/host/package.json"));
+  const req = createRequire(resolve(import.meta.dirname, "../apps/console/package.json"));
   await mkdir(join(project, "node_modules"));
   await symlink(
     dirname(req.resolve("vue/package.json")),

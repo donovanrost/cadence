@@ -5,9 +5,6 @@
       "path": "./apps/console"
     },
     {
-      "path": "./apps/host"
-    },
-    {
       "path": "./apps/ops-console"
     },
     {

@@ -6,9 +6,6 @@
     "mountId": "application-surface",
     "queryKeys": [],
     "queryAliases": {},
-    "viewClass": "contents",
-    "metadata": {
-      "nav_item": "applications"
-    }
+    "viewClass": "contents"
   }
 ]
