@@ -174,7 +174,6 @@ defmodule Cadence.Architecture.ContextBoundary do
     "lib/cadence/control/contact_fact_consumer.ex" => :commanding,
     "lib/cadence/control/derived_telemetry.ex" => :telemetry,
     "lib/cadence/control/ingress.ex" => :telemetry,
-    "lib/cadence/control/telemetry_data_management.ex" => :telemetry,
     "lib/cadence/control/runtime_fact_consumer.ex" => :commanding,
     "lib/cadence/control/mission_runtime.ex" => :runtime,
     "lib/cadence/management/transports.ex" => :composition,

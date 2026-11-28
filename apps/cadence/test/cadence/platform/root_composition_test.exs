@@ -59,9 +59,6 @@ defmodule Cadence.Platform.RootCompositionTest do
     assert alpha.ingress_archive_consumer_policy.archive_policy ==
              alpha.ingress_archive_policy
 
-    assert bravo.data_management_policy.storage == bravo.telemetry_storage_policy
-    assert bravo.data_management_policy.history_store == bravo.history_store_policy
-
     assert alpha.telemetry_storage_policy.current_value_store_policy ==
              alpha.current_value_store_policy
 
@@ -190,10 +187,6 @@ defmodule Cadence.Platform.RootCompositionTest do
         telemetry_storage: :wrong_telemetry_storage
       },
       ingress_archive_consumer_policy: %{archive_policy: :wrong_ingress_archive},
-      data_management_policy: %{
-        storage: :wrong_telemetry_storage,
-        history_store: :wrong_history_store
-      },
       profiler_child_opts: [name: addresses.profiler],
       runtime_health_child_opts: [
         name: addresses.runtime_health,

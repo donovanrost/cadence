@@ -17,9 +17,7 @@ defmodule Cadence.Telemetry.Storage.ObservationEnvelopeObservableTripwireTest do
 
   # Reviewed 11-17: each mentions observable_id: only in an event's attributes, not in write options.
   @reviewed %{
-    "cadence/telemetry/storage.ex" => "backfill lifecycle event attrs, built from the envelope",
-    "cadence/telemetry/data_management/late_data_policy.ex" =>
-      "lifecycle event base_attrs; sample_write_opts has no observable_id"
+    "cadence/telemetry/storage.ex" => "ObservationsCommitted fact attrs, built from the envelope"
   }
 
   test "no envelope write path passes an observable_id option" do

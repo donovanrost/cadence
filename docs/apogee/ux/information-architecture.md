@@ -180,7 +180,7 @@ stations, profiles, pages. Results are **actions**: open, plot, "Command EARENDI
 | `M/ops/explore` | Ops › Telemetry (Explore) | |
 | `M/ops/dashboards/**` (directory, view, edit, settings, library, playlists, present, shares, snapshots, activity, diagnostics, export) | Ops › Telemetry › Dashboards | See §4: not on the canvas. |
 | `M/ops/data-sources/**` | Setup › Data sources | Freshness also on Readiness "Data sources". |
-| `M/ops/data-operations/**` | Setup › Data sources › Operations | Backfill / replay. |
+| `M/ops/data-operations/**` | none | Deleted with its backend (#702, decision on #144); no console screen. |
 | `M/ops/commands`, `/workspace`, `/new`, `/stages/**` | Ops › Commands, Compose | Stages become the Draft → Staged states of one request. |
 | `M/ops/commands/requests/:id`, `/queue`, `/history` | Ops › Commands › request (review / uplink & verify / history) | One URL per request; view follows state. |
 | `M/ops/activations` (binding-set activation approvals) | Setup › Changes (approval of an apply) + an action-queue item on Now ("awaits your GO") | Not on the canvas; same two-person rule as commands. |
