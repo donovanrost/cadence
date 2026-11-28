@@ -173,23 +173,39 @@ defmodule Cadence.Governance.BindingSetStorage do
     |> members_digest()
   end
 
-  @doc "A membership version's rows, read in two queries (members, then their artifacts)."
-  @spec load(BindingSetRow.t()) ::
-          {:ok, {[CapabilityInstanceRow.t()], [BindingRuleRow.t()]}} | {:error, term()}
-  def load(%BindingSetRow{} = row) do
-    members =
-      from(member in "governed_binding_set_members",
-        where:
-          member.binding_set_row_id == ^row.id and
-            member.organization_id == ^row.organization_id and
-            member.mission_id == ^row.mission_id,
-        select: %{sha: member.artifact_sha256, source_endpoint_ref: member.source_endpoint_ref}
-      )
-      |> Repo.all()
+  @doc """
+  A membership version's parts, read in two queries and checked before anything is built from them
+  (#450, mission-model's conditions): the members are exactly the version's (their count and hash
+  equal what was written with it), every referenced artifact exists (`:binding_artifact_missing`)
+  and still hashes to its key (`:binding_artifact_tampered`). `{:ok, %{members: [member], templates:
+  %{sha => template}}}`; any failure is refused, never a fallback.
+  """
+  @spec load_parts(BindingSetRow.t()) ::
+          {:ok, %{members: [member()], templates: %{binary() => map()}}} | {:error, term()}
+  def load_parts(%BindingSetRow{} = row) do
+    members = read_members(row)
+    stored = %{member_count: row.member_count, members_sha256: row.members_sha256}
 
+    with true <- members_digest(members) == stored || {:error, :binding_set_members_mismatch},
+         {:ok, templates} <- read_templates(row, members) do
+      {:ok, %{members: members, templates: templates}}
+    end
+  end
+
+  defp read_members(%BindingSetRow{} = row) do
+    from(member in "governed_binding_set_members",
+      where:
+        member.binding_set_row_id == ^row.id and member.organization_id == ^row.organization_id and
+          member.mission_id == ^row.mission_id,
+      select: %{sha: member.artifact_sha256, source_endpoint_ref: member.source_endpoint_ref}
+    )
+    |> Repo.all()
+  end
+
+  defp read_templates(%BindingSetRow{} = row, members) do
     shas = members |> Enum.map(& &1.sha) |> Enum.uniq()
 
-    templates =
+    found =
       from(artifact in "governed_binding_artifacts",
         where:
           artifact.organization_id == ^row.organization_id and
@@ -199,7 +215,27 @@ defmodule Cadence.Governance.BindingSetStorage do
       |> Repo.all()
       |> Map.new()
 
-    expand(templates, members)
+    Enum.reduce_while(shas, {:ok, found}, fn sha, {:ok, templates} ->
+      case Map.fetch(templates, sha) do
+        :error -> {:halt, {:error, {:binding_artifact_missing, sha}}}
+        {:ok, template} -> artifact_intact(sha, template, templates)
+      end
+    end)
+  end
+
+  defp artifact_intact(sha, template, templates) do
+    if ContentHash.term_sha256(template) == sha,
+      do: {:cont, {:ok, templates}},
+      else: {:halt, {:error, {:binding_artifact_tampered, sha}}}
+  end
+
+  @doc "A membership version's rows, read in two queries (members, then their artifacts)."
+  @spec load(BindingSetRow.t()) ::
+          {:ok, {[CapabilityInstanceRow.t()], [BindingRuleRow.t()]}} | {:error, term()}
+  def load(%BindingSetRow{} = row) do
+    with {:ok, %{members: members, templates: templates}} <- load_parts(row) do
+      expand(templates, members)
+    end
   end
 
   ## Templates

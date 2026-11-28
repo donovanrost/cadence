@@ -263,12 +263,27 @@ defmodule Cadence.Control.MissionRuntimeReconciler do
   defp confirm_unchanged(_state, _identity), do: :rebuild
 
   defp materialize_and_apply(state) do
-    with {:ok, %BindingSetActivation{} = activation} <-
-           Activations.fetch_active_basis_for_reconciliation(state.mission_id),
-         {:ok, %BindingSet{} = binding_set} <- fetch_binding_set(activation) do
-      apply_state(state, activation, binding_set)
-    else
+    case Activations.fetch_active_basis_for_reconciliation(state.mission_id) do
+      {:ok, %BindingSetActivation{} = activation} -> admit_and_apply(state, activation)
       {:error, reason} = error -> reconciliation_error(state, error, reason)
+    end
+  end
+
+  # A version the runtime refuses to admit (its stored hash isn't the activation's, an artifact or
+  # member isn't the version's, #450) is a failure of this generation, said as one.
+  defp admit_and_apply(state, activation) do
+    case fetch_binding_set(activation) do
+      {:ok, binding_set} ->
+        apply_state(state, activation, binding_set)
+
+      {:error, reason} = error ->
+        {error,
+         failing(%{
+           state
+           | desired_generation: activation.generation,
+             applied_basis: nil,
+             last_error: reason
+         })}
     end
   end
 
@@ -317,12 +332,15 @@ defmodule Cadence.Control.MissionRuntimeReconciler do
     )
   end
 
+  # A membership version arrives as the compact index it is stored as (its integrity checked
+  # against the activation's recorded hash), not as 10,000 hydrated rows (#450).
   defp fetch_binding_set(%BindingSetActivation{} = activation) do
-    Governance.fetch_binding_set(
+    Governance.fetch_binding_set_for_runtime(
       activation.organization_id,
       activation.mission_id,
       activation.binding_set_id,
-      activation.binding_set_version
+      activation.binding_set_version,
+      activation.binding_set_content_sha256
     )
   end
 
