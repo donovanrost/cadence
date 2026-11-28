@@ -130,9 +130,9 @@ Laptop 1 worktrees live in `~/.herdr/worktrees/cadence/<handle>`. The new agent 
 
 1. **Develop green** (Platform, today).
 2. **Retire legacy UI** (epic #209): every LiveView operations page and every federated app (`frontend/apps/host`,
-   `comms-overview`, `mission-catalog`, `organization-admin`, `spacecraft`, `telemetry-decom`, `ops-console`,
-   `surface-fixture`, `contract-probe`, `packages/ui`, `plugin-sdk`, `legacy/`) is deleted once the console
-   covers what it did. Domain Heads retire their pages; Console retires the host, shells and shared packages.
+   `comms-overview`, `organization-admin`, `telemetry-decom`, `ops-console`, `surface-fixture`, `contract-probe`,
+   `packages/ui`, `plugin-sdk`, `legacy/`) is deleted once the console covers what it did. Domain Heads retire
+   their pages; Console retires the host, shells and shared packages.
 3. **Scale baseline**: Platform builds a 500 and 1,000 spacecraft simulator load; Telemetry and the other Heads
    measure their paths against it (epic #217, M8).
 4. **Domain epics**, each Head in their own order.

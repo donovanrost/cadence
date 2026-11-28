@@ -28,7 +28,6 @@ const presentationExports = [
   "CadenceHoverTableRow",
   "CadenceInlineWarning",
   "CadenceListToolbarFrame",
-  "CadenceNarrowFormPageFrame",
   "CadenceNoticeFrame",
   "CadenceOpsListBodyFrame",
   "CadenceOpsListFrame",

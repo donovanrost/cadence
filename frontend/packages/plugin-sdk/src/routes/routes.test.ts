@@ -14,13 +14,6 @@ const frontend = new URL("../../../../", import.meta.url);
  * baseline too, which is allowed only in a deletion batch's own commit (legacy-deletion.md).
  */
 const RETAINED_BASELINE = [
-  "/missions/:mission_id",
-  "/missions/:mission_id/applications",
-  "/missions/:mission_id/catalog",
-  "/missions/:mission_id/catalog/databases/:catalog_database_id",
-  "/missions/:mission_id/catalog/imports/:import_run_id",
-  "/missions/:mission_id/catalog/new",
-  "/missions/:mission_id/catalog/revisions/:catalog_revision_id",
   "/missions/:mission_id/comms",
   "/missions/:mission_id/comms/ground-stations",
   "/missions/:mission_id/comms/ground-stations/:ground_station_id",
@@ -35,14 +28,6 @@ const RETAINED_BASELINE = [
   "/missions/:mission_id/comms/validation",
   "/missions/:mission_id/settings",
   "/missions/:mission_id/settings/:section_id",
-  "/missions/:mission_id/spacecraft",
-  "/missions/:mission_id/spacecraft/:spacecraft_id/applications",
-  "/missions/:mission_id/spacecraft/:spacecraft_id/readiness",
-  "/missions/:mission_id/spacecraft/:spacecraft_id/routing",
-  "/missions/:mission_id/spacecraft/new",
-  "/missions/:mission_id/spacecraft/profiles",
-  "/missions/:mission_id/spacecraft/profiles/:profile_id",
-  "/missions/:mission_id/spacecraft/profiles/new",
 ] as const;
 
 test("the generated catalog matches the host route catalog exactly", () => {

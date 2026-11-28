@@ -6,7 +6,6 @@
   "exports": {
     ".": "./src/index.ts",
     "./mission-commands": "./src/mission-commands.ts",
-    "./spacecraft-commanding": "./src/spacecraft-commanding.ts",
     "./command-history": "./src/command-history.ts"
   },
   "scripts": {

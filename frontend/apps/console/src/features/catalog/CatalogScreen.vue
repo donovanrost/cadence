@@ -7,7 +7,7 @@ import { canAdministerOrganization, useMissionScope, useSession } from "@/shell"
 import { ApButton, ApEmptyState, ApPageHeader, ApPanel, ApRemote, ApSegmented } from "@/ui";
 import ImportRunsPanel from "./ImportRunsPanel.vue";
 import RevisionsPanel from "./RevisionsPanel.vue";
-import { fetchCatalogIndex, revisionSummary } from "./api.ts";
+import { fetchCatalogIndex, indexRunCap, revisionSummary } from "./api.ts";
 
 /** Setup › Catalog (rail 04). Spec: docs/apogee/ux/screens/Catalog.md § A. */
 const scope = useMissionScope();
@@ -80,6 +80,7 @@ const selected = computed({
           <ImportRunsPanel
             v-if="value.database.import_runs.length > 0"
             :runs="value.database.import_runs"
+            :cap="indexRunCap"
           />
         </template>
       </template>

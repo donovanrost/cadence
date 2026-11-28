@@ -2,7 +2,6 @@ defmodule Cadence.Reads.Applications.StatusProviderTest do
   use ExUnit.Case, async: true
   alias Cadence.Applications.Status
   alias Cadence.Reads.Applications.StatusProvider
-  alias Cadence.Reads.Spacecraft.ReadinessContributions
 
   test "only bounded host-standard status data crosses the provider boundary" do
     status = %Status{state: :configured, label: "Configured", tone: :ready}
@@ -27,21 +26,6 @@ defmodule Cadence.Reads.Applications.StatusProviderTest do
     for context <- [:raise, :throw, :exit, {:return, {:error, "private details"}}, {:return, nil}] do
       assert {:error, :application_status_unavailable} =
                StatusProvider.invoke(__MODULE__, nil, context)
-    end
-  end
-
-  test "failed readiness data retains admitted identity and scope without exposing the error" do
-    context = %{"organizationId" => "org", "missionId" => "mission", "spacecraftId" => "craft"}
-
-    for result <- [{:error, "private details"}, {:ok, Status.unavailable()}, {:ok, %{}}, nil] do
-      data = ReadinessContributions.from_result("comms.routing", "Routing", context, result, nil)
-      assert data["id"] == "comms.routing"
-      assert data["context"] == context
-      assert data["version"] == 1
-      assert data["slot"] == "spacecraft.readiness"
-      assert data["availability"] == "unavailable"
-      assert data["status"]["tone"] == "blocked"
-      assert data["details"] == []
     end
   end
 

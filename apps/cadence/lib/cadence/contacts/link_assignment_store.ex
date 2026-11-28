@@ -96,20 +96,6 @@ defmodule Cadence.Contacts.LinkAssignmentStore do
     |> Map.new(&{&1.link_assignment_id, LinkAssignmentRow.to_domain(&1)})
   end
 
-  @spec list(binary(), binary()) :: [LinkAssignment.t()]
-  def list(organization_id, mission_id)
-      when is_binary(organization_id) and is_binary(mission_id) do
-    LinkAssignmentRow
-    |> where(
-      [row],
-      row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-        row.lifecycle_state == "active"
-    )
-    |> order_by([row], asc: row.link_assignment_id)
-    |> Repo.all()
-    |> Enum.map(&LinkAssignmentRow.to_domain/1)
-  end
-
   @doc "Returns one bounded page of active mission link assignments."
   @spec list_page(binary(), binary(), keyword()) :: Listing.Page.t()
   def list_page(organization_id, mission_id, opts \\ [])
