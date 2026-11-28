@@ -22,6 +22,82 @@ defmodule Cadence.Catalog.MissionModelCompilerTest do
     assert first.plans.telemetry.status == :ready
   end
 
+  describe "plan identity is the plan's, not the revision's (#443)" do
+    test "a revision that leaves a target's plan alone leaves its id alone" do
+      raw = Declaration.new(%{kind: :parameter, qualified_name: "/parameters/raw"})
+      out = Declaration.new(%{kind: :parameter, qualified_name: "/parameters/out"})
+      other = Declaration.new(%{kind: :parameter, qualified_name: "/parameters/other"})
+
+      without = layer("v1", [raw, out])
+      with_algorithm = layer("v2", [raw, out, algorithm("/algorithms/a", raw, out)])
+
+      assert {:ok, first} = Compiler.compile([without])
+      assert {:ok, second} = Compiler.compile([with_algorithm])
+      assert {:ok, third} = Compiler.compile([layer("v3", [raw, out, other])])
+
+      # Three different revisions, each with its own layer and revision ids.
+      assert length(Enum.uniq([first, second, third] |> Enum.map(& &1.revision.revision_id))) == 3
+
+      # The algorithm was added: only the algorithm plan moved.
+      assert second.plans.telemetry.plan_id == first.plans.telemetry.plan_id
+      assert second.plans.telemetry.content_sha256 == first.plans.telemetry.content_sha256
+      assert second.plans.monitoring.plan_id == first.plans.monitoring.plan_id
+      refute second.plans.algorithm.plan_id == first.plans.algorithm.plan_id
+
+      # A parameter no plan uses was added: a new revision, every plan the same.
+      for target <- [:telemetry, :monitoring, :command, :algorithm] do
+        assert third.plans[target].plan_id == first.plans[target].plan_id
+      end
+
+      # What a plan was compiled under stays on it, per revision.
+      assert first.plans.telemetry.mission_model_revision_id == first.revision.revision_id
+      assert second.plans.telemetry.mission_model_revision_id == second.revision.revision_id
+
+      refute first.plans.telemetry.mission_model_revision_id ==
+               second.plans.telemetry.mission_model_revision_id
+    end
+
+    test "the organization and the mission are part of the id" do
+      declarations = [Declaration.new(%{kind: :parameter, qualified_name: "/parameters/raw"})]
+
+      plan_ids = fn org, mission ->
+        layer =
+          Layer.new(%{
+            organization_id: org,
+            mission_id: mission,
+            name: "same",
+            declarations: systems(["/"]) ++ declarations
+          })
+
+        {:ok, result} = Compiler.compile([layer])
+        result.plans.telemetry.plan_id
+      end
+
+      same = plan_ids.("org-a", "mission-a")
+      assert plan_ids.("org-a", "mission-a") == same
+      refute plan_ids.("org-b", "mission-a") == same
+      refute plan_ids.("org-a", "mission-b") == same
+    end
+
+    test "a blocked plan and a ready one with the same body are not the same plan" do
+      parameter = Declaration.new(%{kind: :parameter, qualified_name: "/parameters/mode"})
+
+      dangling =
+        Declaration.new(%{
+          kind: :parameter,
+          qualified_name: "/parameters/dangling",
+          references: [%{expected_kind: :parameter_type, source_ref: "/types/missing"}]
+        })
+
+      assert {:ok, ready} = Compiler.compile([layer("ready", [parameter])])
+      assert {:ok, blocked} = Compiler.compile([layer("blocked", [parameter, dangling])])
+
+      assert ready.plans.monitoring.status == :ready
+      assert blocked.plans.monitoring.status == :blocked
+      refute ready.plans.monitoring.plan_id == blocked.plans.monitoring.plan_id
+    end
+  end
+
   test "resolves local, relative, and absolute references to stable identities" do
     parameter =
       Declaration.new(%{
@@ -315,6 +391,15 @@ defmodule Cadence.Catalog.MissionModelCompilerTest do
               ]
             }
           ]
+    })
+  end
+
+  defp layer(name, declarations) do
+    Layer.new(%{
+      organization_id: "org-alpha",
+      mission_id: "mission-alpha",
+      name: name,
+      declarations: systems(["/"]) ++ declarations
     })
   end
 

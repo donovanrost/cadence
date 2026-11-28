@@ -1,5 +1,14 @@
 defmodule Cadence.Catalog.MissionModel.RuntimePlan do
-  @moduledoc "Immutable target-specific executable Mission Model plan."
+  @moduledoc """
+  Immutable target-specific executable Mission Model plan.
+
+  `plan_id` and `content_sha256` name what the evaluator reads (#443): the organization and mission
+  scope, the target and its contract, the compiler version, whether the plan is admissible, and the
+  plan itself. They do not name the revision or its layers, so a revision that leaves a target's
+  plan alone leaves its id alone, and what keys on the id (a partition's carried state, the
+  decoded-definition caches) survives it. The revision a plan was compiled under stays on the plan
+  (`mission_model_revision_id`) and on everything produced with it.
+  """
 
   alias Cadence.Catalog.MissionModel.{Canonical, Diagnostic, Revision}
 
@@ -38,17 +47,17 @@ defmodule Cadence.Catalog.MissionModel.RuntimePlan do
   @spec new(Revision.t(), target(), binary(), map(), [Diagnostic.t()]) :: t()
   def new(%Revision{} = revision, target, contract_version, plan, diagnostics)
       when target in @targets and is_binary(contract_version) and is_map(plan) do
+    status = if(Enum.any?(diagnostics, &Diagnostic.blocking?/1), do: :blocked, else: :ready)
+
     basis = %{
+      organization_id: revision.organization_id,
+      mission_id: revision.mission_id,
       target: target,
       target_contract_version: contract_version,
-      mission_model_revision_id: revision.revision_id,
-      mission_model_content_sha256: revision.content_sha256,
-      layer_ids: revision.layer_ids,
       compiler_version: revision.compiler_version,
+      status: status,
       plan: plan
     }
-
-    content_sha256 = Canonical.sha256(basis)
 
     %__MODULE__{
       plan_id: Canonical.content_id("mission_model_plan", basis),
@@ -58,10 +67,10 @@ defmodule Cadence.Catalog.MissionModel.RuntimePlan do
       mission_model_content_sha256: revision.content_sha256,
       layer_ids: revision.layer_ids,
       compiler_version: revision.compiler_version,
-      status: if(Enum.any?(diagnostics, &Diagnostic.blocking?/1), do: :blocked, else: :ready),
+      status: status,
       plan: plan,
       diagnostics: diagnostics,
-      content_sha256: content_sha256
+      content_sha256: Canonical.sha256(basis)
     }
   end
 

@@ -101,6 +101,11 @@ binding records.
   `recovery-from-archive.md:166-174`), state carries across a revision when parameter and policy
   identities survive.
 - That matters for phase 3: a limit change would otherwise reset every partition's state.
+- **Built in slices (#443).** 1: `plan_id` and `content_sha256` hash the organization and mission,
+  target, contract, compiler version, status and the plan (not the revision or its layers); the
+  algorithm and monitoring plans carry only their own edges; `mission_model_runtime_plans` is keyed
+  `(revision_id, target)` with `plan_id` a plain index. 2: the snapshot keyed by partition, state
+  entries fingerprinted, carried per identity. 3: `MonitoringSeed` seeds only what wasn't carried.
 - **Load:** none directly. It removes the empty restart after every activation.
 
 **Depends on:** #155 (#99) merged, for 1a's replay safety. 1a builds on `domain/replay-ids` now.
