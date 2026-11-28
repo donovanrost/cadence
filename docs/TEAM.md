@@ -8,7 +8,7 @@ the shared worktree, "Refs not Closes") are **repealed**. Git history has them i
 
 Cadence: a multi-tenant platform for constellation-scale spacecraft operations. **500 spacecraft is the floor**,
 and nothing should have a hard ceiling. The **console** (`frontend/apps/console`, Vue 3 + `packages/apogee-ui`)
-is the UI. Everything else UI-side is legacy and is being deleted.
+is the only UI; the LiveView pages and the federated apps were deleted on 2026-11-28 (#209, DECISIONS #116).
 
 ## Ground rules
 
@@ -31,7 +31,7 @@ Heads are working engineers and may hire and fire within their headcount (below)
 | Head | Handle | Machine | Owns |
 | --- | --- | --- | --- |
 | Platform | `platform` | laptop 1 | CI (develop stays green), dev environment (per-worktree stack, seeds), build/test tooling, the scale harness (simulator at 500-1,000 spacecraft, benchmarks), `platform/`, `persistence/`, `jobs/`, `observability`, cluster runtime, migrations hygiene |
-| Console | `console` | laptop 1 | `frontend/` (console shell, router, API client, `apogee-ui`, design system, words, a11y); **deleting the federated apps and host**; console-wide quality and performance. Domain heads build their own screens; console sets the patterns and reviews them |
+| Console | `console` | laptop 1 | `frontend/` (console shell, router, API client, `apogee-ui`, design system, words, a11y); console-wide quality and performance. Domain heads build their own screens; console sets the patterns and reviews them |
 | Commanding & Approvals | `commanding` | laptop 2 | commanding, approvals/four-eyes, identity, accounts, organizations, secrets, authz. **Security reviewer** for every PR touching permissions, approvals, secrets or tenant boundaries |
 | Mission Model & Spacecraft | `mission-model` | laptop 2 | mission models, catalog/XTCE, spacecraft, spacecraft profiles, configuration, activations, applications, the change-set framework |
 | Telemetry & Data | `telemetry` | laptop 2 | ingest, decom, projections, QuestDB storage and retention, replay, derived telemetry, calibration, limits and alarms, dashboards backend |
