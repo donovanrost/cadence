@@ -248,9 +248,8 @@ defmodule Cadence.Architecture.PlaneAndContextBoundaryTest do
   end
 
   test "reviewed UI request adapters can orchestrate public owners but cannot consume their rows" do
-    for name <-
-          ~w(data_sources) do
-      path = "lib/cadence/applications/ops_console/actions/#{name}.ex"
+    for name <- ~w(writes platform_bindings) do
+      path = "lib/cadence/management/data_sources/#{name}.ex"
       assert PlaneBoundary.classify(path) == :adapter
       assert ContextBoundary.classify(path) == :adapter
 
@@ -270,11 +269,11 @@ defmodule Cadence.Architecture.PlaneAndContextBoundaryTest do
                DependencyBoundary.findings(%{path => %{"lib/cadence.ex" => "runtime"}})
     end
 
-    for path <- [
-          "lib/cadence/applications/evaluator.ex",
-          "lib/cadence/applications/ops_console/actions/unreviewed_worker.ex"
+    for {path, plane} <- [
+          {"lib/cadence/applications/evaluator.ex", :data},
+          {"lib/cadence/management/data_sources/unreviewed_worker.ex", :management}
         ] do
-      assert PlaneBoundary.classify(path) == :data
+      assert PlaneBoundary.classify(path) == plane
 
       assert [%{kind: :plane_direction}] =
                PlaneBoundary.findings_for_edge(path, "lib/cadence/control/contacts.ex", "runtime")

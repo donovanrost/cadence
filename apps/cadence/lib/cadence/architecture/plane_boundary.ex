@@ -112,11 +112,12 @@ defmodule Cadence.Architecture.PlaneBoundary do
     ]
   ]
 
-  # Reviewed Phoenix host request adapters. This is an exact ownership ledger,
-  # not an Applications prefix exemption; byte-runtime modules remain data plane.
+  # Reviewed console request adapters: the data-source writes and platform-wide bindings the
+  # console API calls, which orchestrate public owners across contexts. This is an exact
+  # ownership ledger, not a data-sources prefix exemption.
   @host_adapter_paths MapSet.new([
-                        "lib/cadence/applications/ops_console/actions/data_sources.ex",
-                        "lib/cadence/applications/ops_console/actions/platform_bindings.ex"
+                        "lib/cadence/management/data_sources/writes.ex",
+                        "lib/cadence/management/data_sources/platform_bindings.ex"
                       ])
 
   @public_composition_values MapSet.new([
@@ -197,7 +198,6 @@ defmodule Cadence.Architecture.PlaneBoundary do
     "lib/cadence/data_sources/probe_scheduler.ex" => :composition,
     "lib/cadence/observability.ex" => :adapter,
     "lib/cadence/persistence.ex" => :platform,
-    "lib/cadence/applications/action_request.ex" => :shared,
     "lib/cadence/applications/application_dependency.ex" => :shared,
     "lib/cadence/applications/application_definition.ex" => :shared,
     "lib/cadence/applications/settings_section_definition.ex" => :shared,

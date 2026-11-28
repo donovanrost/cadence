@@ -102,7 +102,7 @@ rule should come out of the Cedar work.
 | `dashboards/capabilities.ex:21` | author dashboards on a mission (`dashboard.author`) | operator (`:author_dashboards`) | mission role; perhaps the dashboard's owner or folder |
 | `applications/ops_console/actions/dashboard_workflows.ex:795` | share, snapshot, archive a dashboard | author actions: `:author_dashboards`; the rest: operator | dashboard owner and visibility; share audience (data visibility) |
 | `cadence_web/…/console/data_source_writes_controller.ex:208` | manage data sources (L11) | operator | mission role; data source's owner (organization vs shared) |
-| `applications/ops_console/actions/data_sources.ex:729` | change a data source or binding | operator for their organization's own; platform admins in admin mode for shared ones | resource owner (organization or platform); context: admin mode |
+| `management/data_sources/writes.ex:714` | change a data source or binding | operator for their organization's own; platform admins in admin mode for shared ones | resource owner (organization or platform); context: admin mode |
 | `cadence_web/…/console/catalog_controller.ex:96` | import a catalog, or import again (L18) | operator | mission role (catalog maintainer?) |
 
 ## Reads with a visibility question
