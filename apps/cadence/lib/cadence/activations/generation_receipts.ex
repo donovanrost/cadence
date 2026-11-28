@@ -90,7 +90,7 @@ defmodule Cadence.Activations.GenerationReceipts do
   end
 
   @doc false
-  def fleet_at_query(org, mission, %DateTime{} = at) do
+  def fleet_sha_at_query(org, mission, %DateTime{} = at) do
     effective =
       from(receipt in "mission_generation_receipts",
         where:
@@ -115,11 +115,7 @@ defmodule Cadence.Activations.GenerationReceipts do
         fragment("? #>> '{value,spacecraft_configuration_version}'", activation.metadata) == "2",
       where:
         fragment("? #>> '{value,fleet,mission_id}'", activation.metadata) == receipt.mission_id,
-      select: %{
-        organization_id: receipt.organization_id,
-        mission_id: receipt.mission_id,
-        fleet_sha256: fragment("? #>> '{value,fleet,sha256}'", activation.metadata)
-      }
+      select: fragment("? #>> '{value,fleet,sha256}'", activation.metadata)
     )
   end
 end

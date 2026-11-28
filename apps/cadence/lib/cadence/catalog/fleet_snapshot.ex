@@ -269,20 +269,26 @@ defmodule Cadence.Catalog.FleetSnapshot do
   def catalog_usage(_metadata), do: %{}
 
   @doc false
-  def revision_assignments_query(fleet) do
+  def revision_assignments_query(org, mission, fleet_sha) do
+    # The scalar fleet hash is resolved once. Look up entries from those members by
+    # their unique key so a generic plan can't join all of the mission's old snapshots.
+    revision =
+      from(entry in EntryRow,
+        where:
+          entry.organization_id == parent_as(:member).organization_id and
+            entry.mission_id == parent_as(:member).mission_id and
+            entry.entry_sha256 == parent_as(:member).entry_sha256,
+        limit: 1,
+        select: %{id: fragment("? #>> '{mission_model,revision_id}'", entry.entry)}
+      )
+
     from(member in MemberRow,
-      join: fleet in subquery(fleet),
-      on:
-        member.organization_id == fleet.organization_id and
-          member.mission_id == fleet.mission_id and member.fleet_sha256 == fleet.fleet_sha256,
-      join: entry in EntryRow,
-      on:
-        entry.organization_id == member.organization_id and entry.mission_id == member.mission_id and
-          entry.entry_sha256 == member.entry_sha256,
-      select: %{
-        spacecraft_id: member.spacecraft_id,
-        revision_id: fragment("? #>> '{mission_model,revision_id}'", entry.entry)
-      }
+      as: :member,
+      where: member.organization_id == ^org and member.mission_id == ^mission,
+      where: member.fleet_sha256 == subquery(fleet_sha),
+      inner_lateral_join: entry in subquery(revision),
+      on: true,
+      select: %{spacecraft_id: member.spacecraft_id, revision_id: entry.id}
     )
   end
 

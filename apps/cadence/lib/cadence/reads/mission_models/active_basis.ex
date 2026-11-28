@@ -59,9 +59,10 @@ defmodule Cadence.Reads.MissionModels.ActiveBasis do
   end
 
   defp revision_assignments_at(org, mission, at) do
+    fleet_sha = GenerationReceipts.fleet_sha_at_query(org, mission, at)
+
     org
-    |> GenerationReceipts.fleet_at_query(mission, at)
-    |> FleetSnapshot.revision_assignments_query()
+    |> FleetSnapshot.revision_assignments_query(mission, fleet_sha)
     |> subquery()
   end
 
