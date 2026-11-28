@@ -223,16 +223,6 @@ def script_expression(name):
     return f'Code.eval_string(Base.decode64!("{encoded}"))'
 
 
-def seed():
-    pod = pod_names()[0]
-    for action in ("questdb", "seed", "activate", "contacts"):
-        print(f"Preparing {action} on {pod}", flush=True)
-        rpc(pod, f'System.put_env("LAB_ACTION", "{action}"); Code.eval_file("/lab/scripts/seed.exs")')
-    # Explicitly recover the persisted activation on all replicas before starting traffic.
-    for pod in pod_names():
-        rpc(pod, f'IO.inspect(Cadence.Control.Missions.ensure_started("{MISSION}"))')
-
-
 def warm():
     for pod in pod_names():
         warm_pod(pod)
@@ -345,7 +335,7 @@ def renew_contacts():
         rpc(pod, f'for id <- Jason.decode!({json.dumps(encoded)}), do: '
                  f':ok = Cadence.Control.Contacts.stop_realized_contact_sync("{MISSION}", id)')
     print("Creating fresh synthetic contact identities", flush=True)
-    rpc(pods[0], 'System.put_env("LAB_ACTION", "contacts"); Code.eval_file("/lab/scripts/seed.exs")')
+    rpc(pods[0], 'Code.eval_file("/lab/scripts/contacts.exs")')
     kube("scale", "deployment/traffic", "--replicas=1", capture=False)
     wait_deployment("traffic")
 
@@ -874,7 +864,7 @@ def run_experiment(args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="action", required=True)
-    for name in ("build", "seed", "warm", "traffic", "renew-contacts", "new-dataset", "mesh", "status", "stop", "render"):
+    for name in ("build", "warm", "traffic", "renew-contacts", "new-dataset", "mesh", "status", "stop", "render"):
         sub.add_parser(name)
     bootstrap = sub.add_parser("up")
     bootstrap.add_argument("--replicas", type=int, choices=range(1, 7), default=3)
@@ -918,8 +908,6 @@ def main():
         wait_deployment("cadence")
     elif args.action == "startup":
         return startup(args.replicas)
-    elif args.action == "seed":
-        seed()
     elif args.action == "warm":
         warm()
     elif args.action == "new-dataset":

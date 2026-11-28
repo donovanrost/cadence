@@ -43,7 +43,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
 WORKDIR /app
 COPY --from=server-build --chown=cadence:cadence /release ./
 COPY --chown=cadence:cadence dev/reflect_orbital /lab/reflect_orbital
-COPY --chown=cadence:cadence dev/seed/rest_client.exs dev/seed/route_changes.exs /lab/seed/
 COPY --chown=cadence:cadence dev/chaos/scripts /lab/scripts
 COPY --chown=cadence:cadence dev/catalogs/demo_spacecraft.yaml /lab/demo_spacecraft.yaml
 RUN for runtime in /app/releases/*/runtime.exs; do test -f "$runtime" && cat /lab/scripts/runtime.exs >> "$runtime"; done

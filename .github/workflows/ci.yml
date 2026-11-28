@@ -123,7 +123,7 @@ jobs:
               - "apps/{cadence,cadence_web,cadence_simulator}/config/{config,dev,runtime}.exs"
               - "apps/cadence_web/{assets/**,priv/static/**,package.json,package-lock.json}"
               - "dev/reflect_orbital_simulator.exs"
-              - "dev/reflect_orbital/{fixture,configuration,planning,approver,seed}.exs"
+              - "dev/reflect_orbital/{fixture,configuration,activation,live_contacts}.exs"
               - "dev/seed/**"
               - "dev/catalogs/demo_spacecraft.yaml"
               - "apps/cadence/lib/cadence/reads/{fleet_status,passes}.ex"
