@@ -40,6 +40,7 @@ describe("Commands filters (ux U69 A5a, U72)", () => {
       q: "heater",
       target: "sc-312",
       stages: ["release_failed", "indeterminate"],
+      withdrawnRevision: null,
     });
     expect(resultLine(f, 12, true, nameOf)).toBe(
       "12 shown · Release failed, Outcome unclear · matching “heater” · on EARENDIL-312",
@@ -49,6 +50,15 @@ describe("Commands filters (ux U69 A5a, U72)", () => {
     );
     expect(emptyLine(filtersOf({ stage: "release_failed", q: "heater" }), nameOf)).toBe(
       "No commands match: Release failed · “heater”.",
+    );
+    // E2 (#546): a withdrawn revision's "50 of N" link opens the list on its waiting groups.
+    const w = filtersOf({
+      withdrawn_revision: "mission_model_revision:r3",
+      stage: "queued_for_contact",
+    });
+    expect(w.withdrawnRevision).toBe("mission_model_revision:r3");
+    expect(resultLine(w, 50, true, nameOf)).toBe(
+      "50 shown · Queued for AOS · on craft whose model approval was withdrawn",
     );
     expect(qProblem("x".repeat(101))).toBe("Keep the search under 100 characters.");
     expect(withFilter({ tab: "closed", q: "a" }, "q", null)).toEqual({ tab: "closed" });
