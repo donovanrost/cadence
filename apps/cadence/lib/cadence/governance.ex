@@ -530,8 +530,9 @@ defmodule Cadence.Governance do
 
   @doc """
   The binding set for a runtime admission, named by the hash the caller expects (the activation's):
-  a membership version comes back as a `BindingSetIndex.Membership` built from its templates and
-  members without hydrating the cross product; a rows version (old data) as the hydrated set.
+  a membership version comes back as a `BindingSetMembership` built from its templates and members
+  without hydrating the cross product; a rows version (the fallback for a set that doesn't
+  compress, #447, and versions stored before it) as the hydrated set, held to the same hash.
 
   A membership version is admitted only if all of this holds, otherwise the read is refused (closed,
   with the reason, never a fallback): its stored `content_sha256` is the expected one
@@ -555,7 +556,17 @@ defmodule Cadence.Governance do
     case binding_set_row_for_org(organization_id, mission_id, binding_set_id, version) do
       nil -> {:error, :binding_set_not_found}
       %BindingSetRow{storage_form: "membership"} = row -> membership_index(row, expected_sha256)
-      %BindingSetRow{} = row -> hydrate_binding_set(row)
+      %BindingSetRow{} = row -> rows_set(row, expected_sha256)
+    end
+  end
+
+  # The rows form is the fallback for a set that doesn't compress (#447). It stores no hash, so
+  # its hydrated set is hashed and held to the caller's, as the spec would have.
+  defp rows_set(%BindingSetRow{} = row, expected_sha256) do
+    with {:ok, %BindingSet{} = set} <- hydrate_binding_set(row) do
+      if BindingSet.content_sha256(set) == expected_sha256,
+        do: {:ok, set},
+        else: {:error, {:mission_runtime_spec_mismatch, :binding_set_content_sha256}}
     end
   end
 
@@ -589,7 +600,9 @@ defmodule Cadence.Governance do
     }
 
   # The packet definitions every template references, read once: one expansion per template (any
-  # one of its endpoints) is enough to see which definitions its instances name.
+  # one of its endpoints) is enough to see which definitions its instances name, because the
+  # endpoint fills `source_endpoint_ref` and the ids only, never a packet reference (compression
+  # replaces it in exactly those fields and refuses a template it appears elsewhere in).
   defp packets_of(members, templates) do
     sample =
       members |> Enum.uniq_by(& &1.sha) |> Enum.map(&Map.take(&1, [:sha, :source_endpoint_ref]))
@@ -620,6 +633,9 @@ defmodule Cadence.Governance do
     )
   end
 
+  # Safe to match `{:ok, _}` only because a Membership exists only after `fetch_binding_set_for_runtime`
+  # checked its parts (members, artifacts and their hashes) and loaded its packet definitions: never
+  # call this on parts that were not admitted.
   defp expand_members(%Membership{shell: shell} = index, members) do
     row = %BindingSetRow{
       binding_set_id: shell.binding_set_id,

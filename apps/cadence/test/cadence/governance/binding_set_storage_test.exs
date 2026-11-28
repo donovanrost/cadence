@@ -385,8 +385,8 @@ defmodule Cadence.Governance.BindingSetStorageTest do
         Repo.query!("SELECT artifact_sha256 FROM governed_binding_artifacts LIMIT 1")
 
       Repo.query!(
-        "UPDATE governed_binding_artifacts SET template = '{\"instances\": [], \"rules\": []}' WHERE artifact_sha256 = $1",
-        [sha]
+        "UPDATE governed_binding_artifacts SET template = $2 WHERE artifact_sha256 = $1",
+        [sha, %{"instances" => [], "rules" => []}]
       )
 
       {tampered, _, _} = runtime_read_unchecked("fleet", 1, row.content_sha256)
@@ -399,7 +399,14 @@ defmodule Cadence.Governance.BindingSetStorageTest do
       assert {:error, {:binding_artifact_missing, ^sha}} = missing
     end
 
-    test "a rows version (old data) comes back as the hydrated set" do
+    test "a rows version is held to the expected hash too (it stores none)" do
+      assert :ok = persist_as_rows(fleet("old", 1, 3))
+
+      assert {:error, {:mission_runtime_spec_mismatch, :binding_set_content_sha256}} =
+               Governance.fetch_binding_set_for_runtime(@org, @mission, "old", 1, "not-its-hash")
+    end
+
+    test "a rows version (old data, or a set that doesn't compress) comes back as the hydrated set" do
       assert :ok = persist_as_rows(fleet("old", 1, 3))
       {:ok, full} = Governance.fetch_binding_set(@org, @mission, "old", 1)
       sha = BindingSet.content_sha256(full)
