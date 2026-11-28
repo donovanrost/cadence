@@ -23,11 +23,20 @@ defmodule Cadence.Alarms.Episodes do
   | alarm → lower alarm severity | `deescalated`; the acknowledgement is kept |
   | alarm → normal | `cleared` (auto-clear; it does not wait for an ack) |
   | alarm → same severity | last value / evaluation time only |
+  | a change of the rules in force while an episode is open | `rule_changed` (the episode is untouched) |
+
+  `rule_changed` (#451 T2): the monitoring evaluator says in a result's metadata that the rules in
+  force on a parameter changed (their digest). If an episode of that subject is open and was opened
+  before this sample, one event records it: the digests and the ids of the rules then in force. Its
+  id is derived from `(episode id, rule ids, from digest, to digest)`, inserted if absent
+  (DECISIONS #99), so a replayed batch writes it once and a re-cut batch writes the same one. With no
+  open episode nothing is recorded: the new rules simply apply to the next alarm.
   """
 
   import Ecto.Query
 
   alias Cadence.Alarms.{EpisodeEventRow, EpisodeRow}
+  alias Cadence.Catalog.MissionModel.Canonical
   alias Cadence.Ids
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Platform.ReplayId
@@ -65,6 +74,56 @@ defmodule Cadence.Alarms.Episodes do
       {:ok, :changed} -> {:ok, {:changed, observation.mission_id}}
       {:ok, :unchanged} -> {:ok, :unchanged}
       {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Records a `rule_changed` event on the subject's open episode (see the module doc). `observation`
+  is `Sources.rule_changed/3`'s. Returns what `record/2` does, so the caller notifies after commit.
+  """
+  @spec rule_changed(module(), map()) ::
+          {:ok, {:changed, String.t()} | :unchanged} | {:error, term()}
+  def rule_changed(repo, %{rule_change: change} = observation) do
+    observation = precise(observation)
+
+    case lock_active(repo, observation) do
+      nil ->
+        {:ok, :unchanged}
+
+      %EpisodeRow{} = episode ->
+        # An episode this very sample opened ran under the new rules from the start.
+        if DateTime.compare(episode.opened_at, observation.observed_at) == :lt,
+          do: insert_rule_changed(repo, episode, observation, change),
+          else: {:ok, :unchanged}
+    end
+  end
+
+  defp insert_rule_changed(repo, episode, observation, change) do
+    id =
+      Canonical.content_id(
+        "alarm_event",
+        {episode.episode_id, "rule_changed", change.rule_ids, change.from, change.to}
+      )
+
+    row = %{
+      event_id: id,
+      episode_id: episode.episode_id,
+      organization_id: episode.organization_id,
+      mission_id: episode.mission_id,
+      kind: "rule_changed",
+      at: observation.observed_at,
+      source_ref: observation.ref,
+      payload: %{
+        "from" => change.from,
+        "to" => change.to,
+        "rule_ids" => change.rule_ids,
+        "policy_id" => get_in(observation, [:context, "policy_id"])
+      }
+    }
+
+    case repo.insert_all(EpisodeEventRow, [row], on_conflict: :nothing, returning: [:event_id]) do
+      {1, _rows} -> {:ok, {:changed, episode.mission_id}}
+      {0, []} -> {:ok, :unchanged}
     end
   end
 

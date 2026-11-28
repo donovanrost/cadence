@@ -54,7 +54,7 @@ defmodule Cadence.SemanticRuntime.MonitoringRuleDigestTest do
     assert r3.violation_count == 1
     assert r3.transition == nil
     assert r3.effective_state == :normal
-    assert r3.metadata == %{rule_changed: %{from: "digest-1", to: "digest-2"}}
+    assert r3.metadata == %{rule_changed: %{from: "digest-1", to: "digest-2", rule_ids: []}}
     assert s3.rule_digest == "digest-2"
 
     # Two more under the new rules reach the three, and the alarm opens.
@@ -76,7 +76,7 @@ defmodule Cadence.SemanticRuntime.MonitoringRuleDigestTest do
     assert r2.effective_state == :critical
     assert r2.transition == nil
     assert r2.conformance_count == 1
-    assert r2.metadata == %{rule_changed: %{from: "digest-1", to: "digest-2"}}
+    assert r2.metadata == %{rule_changed: %{from: "digest-1", to: "digest-2", rule_ids: []}}
 
     {r3, _s3} = run(new, 3, 50, s2)
     assert r3.transition == %{from: :critical, to: :normal}
