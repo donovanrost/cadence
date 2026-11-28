@@ -145,7 +145,7 @@ defmodule Cadence.Catalog.MissionModel.Target do
          |> Enum.filter(&(&1.kind == :algorithm))
          |> order_algorithms(edges)
          |> Enum.map(&lower_algorithm/1),
-       "edges" => edges
+       "edges" => own_edges(declarations, :algorithm, edges)
      }, []}
   end
 
@@ -156,7 +156,7 @@ defmodule Cadence.Catalog.MissionModel.Target do
          declarations
          |> Enum.filter(&(&1.kind == :monitoring_policy))
          |> Enum.map(&lower_monitoring/1),
-       "edges" => edges
+       "edges" => own_edges(declarations, :monitoring_policy, edges)
      }, []}
   end
 
@@ -165,6 +165,16 @@ defmodule Cadence.Catalog.MissionModel.Target do
 
   defp lower_plan(:command, revision, declarations, _edges),
     do: TargetLowering.command(revision, declarations)
+
+  # The edges that leave this target's own declarations: what the plan's algorithms or policies
+  # read and write. The revision's other edges belong to other targets, and carrying them would
+  # change every plan whenever any declaration changed (#443).
+  defp own_edges(declarations, kind, edges) do
+    own =
+      for %Declaration{kind: ^kind, semantic_id: id} <- declarations, into: MapSet.new(), do: id
+
+    Enum.filter(edges, &MapSet.member?(own, &1.from))
+  end
 
   defp lower_algorithm(declaration) do
     inputs =
