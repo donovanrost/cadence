@@ -1,25 +1,7 @@
 defmodule Cadence.Commanding.LifecyclePolicy do
   @moduledoc """
-  Applies command-stage, request-release and queue-entry lifecycle guards.
+  Applies request-release and queue-entry lifecycle guards.
   """
-
-  @spec ensure_stage_editable(map()) :: :ok | {:error, term()}
-  def ensure_stage_editable(%{
-        lifecycle_state: lifecycle_state,
-        command_stage_id: command_stage_id
-      }) do
-    ensure_stage_editable(lifecycle_state, command_stage_id)
-  end
-
-  @spec ensure_staged_item_editable(map()) :: :ok | {:error, term()}
-  def ensure_staged_item_editable(%{lifecycle_state: "draft"}), do: :ok
-
-  def ensure_staged_item_editable(%{
-        staged_command_item_id: staged_command_item_id,
-        lifecycle_state: lifecycle_state
-      }) do
-    {:error, {:staged_command_item_not_editable, staged_command_item_id, lifecycle_state}}
-  end
 
   @spec ensure_request_releasable(map()) :: :ok | {:error, term()}
   def ensure_request_releasable(%{lifecycle_state: "queued"}), do: :ok
@@ -63,18 +45,6 @@ defmodule Cadence.Commanding.LifecyclePolicy do
         %DateTime{}
       ) do
     {:error, {:command_queue_entry_not_releasable, command_queue_entry_id, lifecycle_state}}
-  end
-
-  defp ensure_stage_editable(lifecycle_state, _command_stage_id)
-       when lifecycle_state in [:draft, :in_review, :ready_to_submit] do
-    :ok
-  end
-
-  defp ensure_stage_editable(lifecycle_state, _command_stage_id)
-       when lifecycle_state in ["draft", "in_review", "ready_to_submit"], do: :ok
-
-  defp ensure_stage_editable(lifecycle_state, command_stage_id) do
-    {:error, {:command_stage_not_editable, command_stage_id, lifecycle_state}}
   end
 
   defp ensure_queue_entry_not_before_elapsed(%{not_before: nil}, _attempted_at),

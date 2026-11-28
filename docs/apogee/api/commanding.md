@@ -730,11 +730,10 @@ endpoints are removed, and a call to one is a `404`:
 | `POST /command_requests/:id/approve` · `/reject` | Decide the group: `POST /api/v1/missions/:mission_id/command-groups/:id/decision` (GO, GO excluding, send back, NO-GO). |
 | `POST /command_requests/:id/enqueue` | The group's GO queues its members (or its submission, when its policy needs no second GO). |
 | `POST /command_stages/:id/submit` | Submit a group. A command stage no longer turns into requests. |
+| `GET`, `POST /command_stages`; `GET`, `PATCH /command_stages/:id`; `GET`, `POST /command_stages/:id/items`; `GET`, `PATCH /staged_command_items/:id` | Nothing: the stage workbench is deleted. A shared batch is a command group; Compose's autosaved draft is private. |
 
 Still there: the reads `GET /command_requests` (and `/:id`), `GET /command_approvals`,
-`GET /command_queue_entries` and the release `POST /command_queue_entries/:id/release`, and the
-command stage and staged item writes other than submit (a command stage is retired in #708's
-last step).
+`GET /command_queue_entries` and the release `POST /command_queue_entries/:id/release`.
 
 The command pages of the pre-console host that could queue a command without a group preflight
 (the command workspace's queue action, the stage queue and the single-request authoring page,
@@ -743,7 +742,7 @@ second-GO rule.
 
 ## REST commanding: actors (#465)
 
-Every actor object the pre-console REST commanding API sends (a command stage's `owner`, a command
+Every actor object the pre-console REST commanding API sends (a command
 request's `requested_by`, an approval's `decided_by`, a queue entry's `enqueued_by`, a release
 attempt's `released_by`, alone or inside the release answer) is `{kind, id,
 name}` or `null`, never the stored actor document (#146, through #472's `ActorRef`):

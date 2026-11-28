@@ -44,7 +44,7 @@ pushes are not replayed.
 | resource | fires on |
 | --- | --- |
 | `alarms` | a point's limit state **changed** (transitions only, not every evaluation), or any alarm episode changed (raised, escalated, cleared, acknowledged, assigned, noted). Use this for the alarm and episode lists, the action queue and fleet state |
-| `commanding` | command stages, requests, approvals, queue, release attempts, verifiers |
+| `commanding` | command requests, approvals, queue, release attempts, verifiers |
 | `spacecraft` | spacecraft and profile configuration, packet bindings, app installations |
 | `telemetry` | new samples committed (source watermark), backfills, revision-state changes. This fires about every 500 ms on live feeds, so throttle telemetry-driven refetches client-side |
 | `contacts` | contact facts (scheduled/realized contacts, contact actions) and, once domain publishes it, reservation, plan and run changes. See contacts.md |
