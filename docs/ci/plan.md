@@ -294,9 +294,9 @@ Services: `postgres:17` (tmpfs) and `questdb/questdb:9.4.3`. Then, in order, wit
    simulator starts in the background (`--sname ci_sim`, clean snapshot dir).
 3. Phoenix in the background (`elixir --sname cadence_ci -S mix phx.server`), with a readiness
    poll on `/sign-in`.
-4. Seeds: `reflect_orbital_demo.exs` (500 spacecraft), `apogee_qa_personas.exs`,
-   `reflect_orbital_planning.exs`, then `reflect_orbital_activate.exs --single-operator` over
-   distribution to `cadence_ci`. Seeding per shard keeps "today"-relative planning data fresh.
+4. Seeds: `dev/seed/earendil.exs` (500 spacecraft), then `dev/seed/qa.exs`, both against the
+   running server. They use the dev mailbox for the second-person sessions. Seeding per shard
+   keeps "today"-relative planning data fresh.
 5. `playwright test` (below). `CI=1`, `BASE_URL=http://127.0.0.1:4011`.
 6. Always upload the blob report, `test-results/` (traces and screenshots on failure) and the
    Phoenix and simulator logs.
@@ -334,7 +334,7 @@ That's one less process per shard, no HMR, faster page loads, and it tests what 
 
 The fixed cost is the stack, not the tests, so speed comes from bring-up, not more shards: warm
 `_build/dev`, background boots in parallel with migrations, and a cached seeded-DB snapshot
-(`pg_dump -Fc` keyed by the hash of `dev/reflect_orbital*`, `dev/apogee_qa_personas.exs` and
+(`pg_dump -Fc` keyed by the hash of `dev/seed/*`, `dev/reflect_orbital*` and
 `priv/repo/migrations`) **if** seeding measures over 90 s. qa's ~1-min "fast real-server
 subset" (`shell planning-requirements palette setup-readiness`) isn't needed as a CI gate,
 because the full suite fits the budget. It stays useful as an on-demand `workflow_dispatch`
