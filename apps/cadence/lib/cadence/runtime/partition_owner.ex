@@ -65,6 +65,7 @@ defmodule Cadence.Runtime.PartitionOwner do
     MonitoringSeed,
     PartitionBuilder,
     RuntimeRecords,
+    ScidRoutesCache,
     SemanticTimerSchedule
   }
 
@@ -391,6 +392,7 @@ defmodule Cadence.Runtime.PartitionOwner do
              semantic_timers: semantic_timers,
              persistence_policy: persistence_policy,
              tm_pipeline_state: tm_pipeline_state,
+             scid_routes: ScidRoutesCache.build(active_activation, partition_key),
              tm_continuity_state: %{},
              tm_frame_remainder: <<>>,
              persist_runtime_records?: persist_runtime_records?,
@@ -558,6 +560,7 @@ defmodule Cadence.Runtime.PartitionOwner do
                %{
                  state
                  | active_activation: activation,
+                   scid_routes: ScidRoutesCache.build(activation, state.partition_key),
                    plan_index: acquire_plan_index(state.monitoring_plan_cache, activation),
                    dispatch_cache:
                      DispatchCache.acquire(
@@ -1122,17 +1125,21 @@ defmodule Cadence.Runtime.PartitionOwner do
   defp decode_tm_packet_records(protocol_family, %RawEvidence{} = raw_evidence, state) do
     raw_evidence = AdmittedFraming.overlay(raw_evidence, state.active_activation.source_framing)
 
+    {routes, scid_routes} = current_scid_routes(state)
+
     case TMFrameIngress.process(
            raw_evidence,
            state.tm_pipeline_state,
            state.tm_continuity_state,
-           state.tm_frame_remainder
+           state.tm_frame_remainder,
+           scid_routes: routes
          ) do
       {:ok, decode_result, rest, next_tm_pipeline_state, next_tm_continuity_state} ->
         {:ok, decode_result,
          %{
            state
-           | tm_pipeline_state: next_tm_pipeline_state,
+           | scid_routes: ScidRoutesCache.note_refusals(scid_routes, decode_result),
+             tm_pipeline_state: next_tm_pipeline_state,
              tm_continuity_state: next_tm_continuity_state,
              tm_frame_remainder: rest
          }, empty_runtime_records()}
@@ -1141,6 +1148,10 @@ defmodule Cadence.Runtime.PartitionOwner do
         {:error, {protocol_family, reason}}
     end
   end
+
+  # The endpoint's SCID routes (E1b), refreshed on a clock and after a refusal (ScidRoutesCache).
+  defp current_scid_routes(%{scid_routes: cache} = state),
+    do: ScidRoutesCache.current(cache, state.active_activation, state.partition_key)
 
   defp execute_dispatches(
          %{packet_records: []} = decode_result,

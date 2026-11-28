@@ -33,6 +33,22 @@ defmodule Cadence.Protocol.Origin do
           relay: nil | %{via_source_endpoint_id: binary(), via_scid: non_neg_integer()}
         }
 
+  @doc """
+  The origin of a packet a relay endpoint carried for another craft (E1b): `kind: :relayed`, with
+  `relay` naming the endpoint it arrived on and that endpoint's own SCID. The endpoint, frame facts
+  and APID are those of the evidence it arrived in, as for `direct/3`.
+  """
+  @spec relayed(RawEvidence.t(), map(), non_neg_integer(), non_neg_integer() | nil) :: t()
+  def relayed(%RawEvidence{} = raw_evidence, tm, apid, via_scid) do
+    endpoint = raw_evidence.source_endpoint_ref || raw_evidence.source_ref
+
+    %{
+      direct(raw_evidence, tm, apid)
+      | kind: :relayed,
+        relay: %{via_source_endpoint_id: endpoint, via_scid: via_scid}
+    }
+  end
+
   @doc "The descriptor's version."
   @spec version() :: pos_integer()
   def version, do: @version

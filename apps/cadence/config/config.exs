@@ -136,6 +136,16 @@ config :cadence,
   # pause, budget and interval are its defaults; the archives follow the observation retention.
   retention: [enabled?: true],
   telemetry_current_value_store: [module: Cadence.Telemetry.CurrentValueStore.ETS],
+  # What a source endpoint's partition may accept by frame SCID (#1078 P5 E1b): its own craft's and
+  # a relay's declared origins'. A relay's routes are re-read every `refresh_ms`, any other
+  # endpoint's every `idle_refresh_ms` and, after a batch was refused, `retry_ms` later: a craft's
+  # SCID is edited with no activation.
+  scid_routes: [
+    module: Cadence.Control.ScidRoutes,
+    refresh_ms: 60_000,
+    idle_refresh_ms: 300_000,
+    retry_ms: 5_000
+  ],
   # QuestDB day-partition retention (#693; Cadence.Telemetry.Storage.QuestDB.Retention): partitions
   # wholly older than `retention_days` are dropped. One platform setting: the table is shared.
   telemetry_observation_retention: [enabled?: true, retention_days: 30],

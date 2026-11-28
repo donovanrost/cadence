@@ -12,6 +12,7 @@ defmodule Cadence.Protocol.TMFrameIngress do
 
   alias Cadence.Ingress.RawEvidence
   alias Cadence.IngressJournal.Identity
+  alias Cadence.Protocol.ScidRoutes
 
   alias Cadence.Protocol.{
     ProtocolAnomaly,
@@ -26,6 +27,7 @@ defmodule Cadence.Protocol.TMFrameIngress do
 
   @type result :: %{
           packet_records: [PacketRecord.t()],
+          relayed_packet_records: [PacketRecord.t()],
           transfer_frame_records: [TransferFrameRecord.t()],
           protocol_anomalies: [ProtocolAnomaly.t()]
         }
@@ -35,11 +37,25 @@ defmodule Cadence.Protocol.TMFrameIngress do
     TMFramePipeline.init(default_sdu_type: :space_packet)
   end
 
-  @spec process(RawEvidence.t(), TMFramePipeline.state(), continuity_state(), binary()) ::
+  @doc """
+  Decodes one evidence. `opts[:scid_routes]` is the source endpoint's `Protocol.ScidRoutes` (#1078
+  E1b): frames whose SCID is neither the endpoint's own craft's nor a declared relay origin's are
+  refused before reassembly (`scid_mismatch`, counted by a telemetry event), and the packets of a
+  relayed origin craft come back in `relayed_packet_records`, never in `packet_records`.
+  """
+  @spec process(RawEvidence.t(), TMFramePipeline.state(), continuity_state(), binary(), keyword()) ::
           {:ok, result(), binary(), TMFramePipeline.state(), continuity_state()}
           | {:error, term(), TMFramePipeline.state(), continuity_state()}
-  def process(%RawEvidence{} = raw_evidence, pipeline_state, continuity_state, frame_remainder)
-      when is_map(continuity_state) and is_binary(frame_remainder) do
+  def process(
+        %RawEvidence{} = raw_evidence,
+        pipeline_state,
+        continuity_state,
+        frame_remainder,
+        opts \\ []
+      )
+      when is_map(continuity_state) and is_binary(frame_remainder) and is_list(opts) do
+    scid_routes = Keyword.get(opts, :scid_routes)
+
     with {:ok, codec_opts} <- frame_codec_opts(raw_evidence),
          {:ok, pipeline_state, frame_remainder, next_continuity_state} <-
            prepare_receive_stream(raw_evidence, pipeline_state, continuity_state, frame_remainder),
@@ -50,10 +66,10 @@ defmodule Cadence.Protocol.TMFrameIngress do
              buffer,
              codec_opts,
              pipeline_state,
-             decode_context(raw_evidence, absolute_base_offset)
+             decode_context(raw_evidence, absolute_base_offset, scid_routes)
            ),
-         {:ok, packet_records} <-
-           build_packet_records(raw_evidence, sdu_octets, absolute_base_offset) do
+         {:ok, packet_records, relayed_records} <-
+           build_packet_records(raw_evidence, sdu_octets, absolute_base_offset, scid_routes) do
       transfer_frame_records =
         build_transfer_frame_records(raw_evidence, frame_infos, absolute_base_offset, buffer)
 
@@ -68,9 +84,13 @@ defmodule Cadence.Protocol.TMFrameIngress do
           next_pipeline_state
         )
 
+      emit_scid_events(raw_evidence, decode_anomalies, relayed_records)
+
       {:ok,
        %{
          packet_records: packet_records,
+         # A relay's packets for another craft (E1b-1: not routed yet, so not processed).
+         relayed_packet_records: relayed_records,
          transfer_frame_records: transfer_frame_records,
          protocol_anomalies: protocol_anomalies,
          resume_offset: resume_offset(raw_evidence, rest, frame_offsets),
@@ -195,28 +215,44 @@ defmodule Cadence.Protocol.TMFrameIngress do
 
   # Without a source time a frame's time IS its receipt time: each frame takes the receipt time
   # of the journal record its bytes arrived in, not the first record of a merged batch.
-  defp decode_context(%RawEvidence{source_time: nil} = raw_evidence, absolute_base_offset) do
+  defp decode_context(%RawEvidence{source_time: nil} = raw_evidence, absolute_base_offset, index) do
     raw_evidence
-    |> base_context()
+    |> base_context(index)
     |> Map.put(
       :frame_timestamp,
       &RawEvidence.receipt_time_at(raw_evidence, absolute_base_offset + &1)
     )
   end
 
-  defp decode_context(%RawEvidence{} = raw_evidence, _absolute_base_offset),
-    do: base_context(raw_evidence)
+  defp decode_context(%RawEvidence{} = raw_evidence, _absolute_base_offset, index),
+    do: base_context(raw_evidence, index)
 
   # The pass's one spacecraft's SCID, when the path resolved one (DECISIONS #102): frames with
   # another SCID are refused before reassembly.
-  defp base_context(%RawEvidence{} = raw_evidence) do
+  #
+  # With the endpoint's relay index (#1078 E1b) the index decides: a relay endpoint accepts its own
+  # craft's SCID and its declared origins' (the pass's one spacecraft would refuse them), and an
+  # endpoint whose craft has a SCID now refuses the others even when the evidence names none.
+  defp base_context(%RawEvidence{} = raw_evidence, index) do
     context = %{direction: raw_evidence.direction, sdu_kind_hint: :space_packet}
+    named = metadata_value(raw_evidence.metadata || %{}, :spacecraft_scid)
 
-    case metadata_value(raw_evidence.metadata || %{}, :spacecraft_scid) do
-      scid when is_integer(scid) -> Map.put(context, :expected_scid, scid)
-      _none -> context
+    cond do
+      routed?(index) and (ScidRoutes.relay?(index) or not is_integer(named)) ->
+        context
+        |> Map.put(:scid_router, &ScidRoutes.classify(index, &1))
+        |> Map.put(:expected_scid, index.own_scid)
+
+      is_integer(named) ->
+        Map.put(context, :expected_scid, named)
+
+      true ->
+        context
     end
   end
+
+  defp routed?(%ScidRoutes{} = index), do: ScidRoutes.checks?(index)
+  defp routed?(_none), do: false
 
   # A packet is received when the frame completing it is: that frame's stamp (receipt fallback).
   defp packet_receipt_time(%RawEvidence{source_time: nil} = raw_evidence, sdu),
@@ -227,17 +263,87 @@ defmodule Cadence.Protocol.TMFrameIngress do
   defp generation_time_source(%RawEvidence{source_time: nil}), do: :receipt
   defp generation_time_source(%RawEvidence{}), do: :onboard
 
-  defp build_packet_records(%RawEvidence{} = raw_evidence, sdu_octets, absolute_base_offset)
+  defp build_packet_records(
+         %RawEvidence{} = raw_evidence,
+         sdu_octets,
+         absolute_base_offset,
+         scid_routes
+       )
        when is_list(sdu_octets) do
     sdu_octets
     |> Enum.with_index()
-    |> Enum.reduce_while({:ok, []}, fn {sdu, ordinal}, {:ok, acc} ->
-      reduce_packet_record(raw_evidence, sdu, {ordinal, absolute_base_offset}, acc)
+    |> Enum.reduce_while({:ok, [], []}, fn {sdu, ordinal}, {:ok, direct, relayed} ->
+      add_packet_record(
+        raw_evidence,
+        sdu,
+        {ordinal, absolute_base_offset},
+        scid_routes,
+        {direct, relayed}
+      )
     end)
     |> case do
-      {:ok, packet_records} -> {:ok, Enum.reverse(packet_records)}
+      {:ok, direct, relayed} -> {:ok, Enum.reverse(direct), Enum.reverse(relayed)}
       {:error, reason} -> {:error, reason}
     end
+  end
+
+  # One reassembled packet, into the endpoint's own craft's records or (a relay's origin craft's)
+  # the relayed ones, which carry that craft and a relayed origin.
+  defp add_packet_record(raw_evidence, sdu, position, scid_routes, {direct, relayed}) do
+    case route(scid_routes, sdu) do
+      {:relayed, craft} ->
+        routing = [spacecraft_id: craft, relay: %{via_scid: scid_routes.own_scid}]
+
+        with {:cont, {:ok, relayed}} <-
+               reduce_packet_record(raw_evidence, sdu, position, relayed, routing),
+             do: {:cont, {:ok, direct, relayed}}
+
+      _direct ->
+        with {:cont, {:ok, direct}} <- reduce_packet_record(raw_evidence, sdu, position, direct),
+             do: {:cont, {:ok, direct, relayed}}
+    end
+  end
+
+  # What a reassembled packet's frame was on this endpoint (`ScidRoutes.classify/2`).
+  defp route(%ScidRoutes{} = index, sdu) do
+    if ScidRoutes.checks?(index) and is_integer(sdu.scid),
+      do: ScidRoutes.classify(index, sdu.scid),
+      else: :direct
+  end
+
+  defp route(_no_index, _sdu), do: :direct
+
+  # The counts a misconfigured SCID shows up in: refused frames, and relayed packets that are
+  # decoded but not routed yet (E1b-1).
+  defp emit_scid_events(raw_evidence, decode_anomalies, relayed_records) do
+    for %{anomaly_kind: kind, scid: scid, metadata: metadata} <- decode_anomalies,
+        kind in [:scid_mismatch, :relay_origin_archived] do
+      :telemetry.execute(
+        [:cadence, :protocol, :scid_check, :refused],
+        %{frames: Map.get(metadata, :frames, 1)},
+        %{
+          mission_id: raw_evidence.mission_id,
+          source_endpoint_id: raw_evidence.source_endpoint_ref,
+          reason: kind,
+          scid: scid,
+          expected_scid: Map.get(metadata, :expected_scid)
+        }
+      )
+    end
+
+    relayed_records
+    |> Enum.frequencies_by(& &1.spacecraft_id)
+    |> Enum.each(fn {craft, count} ->
+      :telemetry.execute(
+        [:cadence, :protocol, :relay, :not_routed],
+        %{packets: count},
+        %{
+          mission_id: raw_evidence.mission_id,
+          source_endpoint_id: raw_evidence.source_endpoint_ref,
+          origin_spacecraft_id: craft
+        }
+      )
+    end)
   end
 
   # `buffer` is the bytes the frames were decoded from (a remainder, then this evidence's), which
@@ -334,10 +440,10 @@ defmodule Cadence.Protocol.TMFrameIngress do
 
   defp anomaly_metadata(_raw_evidence, anomaly), do: Map.get(anomaly, :metadata, %{})
 
-  defp reduce_packet_record(%RawEvidence{} = raw_evidence, sdu, position, acc) do
+  defp reduce_packet_record(%RawEvidence{} = raw_evidence, sdu, position, acc, routing \\ []) do
     with :ok <- validate_tm_sdu_kind(sdu),
          {:ok, %PacketRecord{} = packet_record} <-
-           decode_tm_packet_record(raw_evidence, sdu, position) do
+           decode_tm_packet_record(raw_evidence, sdu, position, routing) do
       packet_record = %{packet_record | journal_frame: journal_frame(raw_evidence, sdu, position)}
       {:cont, {:ok, [packet_record | acc]}}
     else
@@ -352,23 +458,28 @@ defmodule Cadence.Protocol.TMFrameIngress do
     {:error, {:unsupported_tm_sdu_kind, sdu.sdu_kind_hint}}
   end
 
-  defp decode_tm_packet_record(%RawEvidence{} = raw_evidence, sdu, position) do
-    SpacePacketDecoder.decode_packet(raw_evidence, sdu.octets,
-      packet_id: packet_id(raw_evidence, sdu, position),
-      protocol_family: raw_evidence.protocol_family,
-      source_time: sdu.timestamp || raw_evidence.source_time,
-      receipt_time: packet_receipt_time(raw_evidence, sdu),
-      provenance: %{
-        generation_time_source: generation_time_source(raw_evidence),
-        tm: %{
-          scid: sdu.scid,
-          vcid: sdu.vcid,
-          map_id: sdu.map_id,
-          quality: sdu.quality,
-          source_frames: sdu.source_frames,
-          metadata: Map.drop(sdu.meta, [:raw_frame_offset_bytes, :raw_frame_length_bytes])
-        }
-      }
+  defp decode_tm_packet_record(%RawEvidence{} = raw_evidence, sdu, position, routing) do
+    SpacePacketDecoder.decode_packet(
+      raw_evidence,
+      sdu.octets,
+      routing ++
+        [
+          packet_id: packet_id(raw_evidence, sdu, position),
+          protocol_family: raw_evidence.protocol_family,
+          source_time: sdu.timestamp || raw_evidence.source_time,
+          receipt_time: packet_receipt_time(raw_evidence, sdu),
+          provenance: %{
+            generation_time_source: generation_time_source(raw_evidence),
+            tm: %{
+              scid: sdu.scid,
+              vcid: sdu.vcid,
+              map_id: sdu.map_id,
+              quality: sdu.quality,
+              source_frames: sdu.source_frames,
+              metadata: Map.drop(sdu.meta, [:raw_frame_offset_bytes, :raw_frame_length_bytes])
+            }
+          }
+        ]
     )
   end
 

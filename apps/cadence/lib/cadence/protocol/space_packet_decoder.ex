@@ -36,7 +36,7 @@ defmodule Cadence.Protocol.SpacePacketDecoder do
       raw_evidence
       |> base_provenance()
       |> Map.merge(Keyword.get(opts, :provenance, %{}))
-      |> with_origin(raw_evidence, packet.apid)
+      |> with_origin(raw_evidence, packet.apid, Keyword.get(opts, :relay))
 
     {:ok,
      %PacketRecord{
@@ -47,7 +47,7 @@ defmodule Cadence.Protocol.SpacePacketDecoder do
        evidence_id: raw_evidence.evidence_id,
        mission_id: raw_evidence.mission_id,
        source_endpoint_ref: raw_evidence.source_endpoint_ref,
-       spacecraft_id: raw_evidence.spacecraft_id,
+       spacecraft_id: Keyword.get(opts, :spacecraft_id, raw_evidence.spacecraft_id),
        protocol_family: Keyword.get(opts, :protocol_family, raw_evidence.protocol_family),
        packet_kind: Keyword.get(opts, :packet_kind, :space_packet),
        apid: packet.apid,
@@ -63,9 +63,16 @@ defmodule Cadence.Protocol.SpacePacketDecoder do
 
   # The packet's origin (#1078 E1a): provenance only, so no id depends on it. Only the part the
   # packet's own fields can't give back is archived (`Origin.stored/1`).
-  defp with_origin(provenance, raw_evidence, apid) do
+  defp with_origin(provenance, raw_evidence, apid, relay) do
     tm = Map.get(provenance, :tm) || %{}
-    Map.put(provenance, :origin, raw_evidence |> Origin.direct(tm, apid) |> Origin.stored())
+
+    origin =
+      case relay do
+        %{via_scid: via_scid} -> Origin.relayed(raw_evidence, tm, apid, via_scid)
+        _direct -> Origin.direct(raw_evidence, tm, apid)
+      end
+
+    Map.put(provenance, :origin, Origin.stored(origin))
   end
 
   defp base_provenance(%RawEvidence{} = raw_evidence) do
