@@ -170,42 +170,49 @@ defmodule Cadence.Commanding.Groups.Validation do
   defp pick(%SourceEndpoint{} = endpoint, _failure), do: {endpoint, nil}
 
   defp validate_members(resolved, draft, org, mission, requested_by, now, snapshot) do
-    {members, failures} =
+    # The member requests first, so the reads they share (targets, fleet entries, each model's
+    # basis) happen once for the whole group (#1041), not once per member.
+    pending =
       for %{failure: nil} = target <- resolved,
-          {command, position} <- Enum.with_index(draft.commands),
-          reduce: {[], []} do
-        {members, failures} ->
-          request = member_request(org, mission, target, command, draft, requested_by, now)
-
-          case RequestValidation.validate_on_snapshot(request, snapshot) do
-            {:ok, enriched, state} ->
-              member = %{
-                target_index: target.index,
-                position: position,
-                request: enriched,
-                target_token: state.target_token,
-                # U51: the target's own pinned verifiers for this command (per-spacecraft basis).
-                verifier_plans:
-                  Enum.filter(
-                    state.snapshot.catalog.verifier_plans,
-                    &(&1.command_id == enriched.command_id)
-                  )
-              }
-
-              {[member | members], failures}
-
-            {:error, reason} ->
-              failure = %{
-                target_index: target.index,
-                spacecraft_id: target.spacecraft_id,
-                position: position,
-                command_id: command.command_id,
-                reason: reason
-              }
-
-              {members, [failure | failures]}
-          end
+          {command, position} <- Enum.with_index(draft.commands) do
+        {target, command, position,
+         member_request(org, mission, target, command, draft, requested_by, now)}
       end
+
+    context = RequestValidation.prepare(Enum.map(pending, &elem(&1, 3)), snapshot)
+
+    {members, failures, _context} =
+      Enum.reduce(pending, {[], [], context}, fn {target, command, position, request},
+                                                 {members, failures, context} ->
+        case RequestValidation.validate_prepared(request, context) do
+          {{:ok, enriched, state}, context} ->
+            member = %{
+              target_index: target.index,
+              position: position,
+              request: enriched,
+              target_token: state.target_token,
+              # U51: the target's own pinned verifiers for this command (per-spacecraft basis).
+              verifier_plans:
+                Enum.filter(
+                  state.snapshot.catalog.verifier_plans,
+                  &(&1.command_id == enriched.command_id)
+                )
+            }
+
+            {[member | members], failures, context}
+
+          {{:error, reason}, context} ->
+            failure = %{
+              target_index: target.index,
+              spacecraft_id: target.spacecraft_id,
+              position: position,
+              command_id: command.command_id,
+              reason: reason
+            }
+
+            {members, [failure | failures], context}
+        end
+      end)
 
     {Enum.reverse(members), Enum.reverse(failures)}
   end

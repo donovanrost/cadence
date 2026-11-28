@@ -31,55 +31,146 @@ defmodule Cadence.Commanding.RequestValidation do
   transaction: target identities are read `FOR SHARE`. Returns the enriched
   request and `%{target, target_token, snapshot}`.
   """
-  def validate_on_snapshot(%CommandRequest{} = request, snapshot, expected_target \\ nil),
-    do: resolve_authoring_request(request, snapshot, expected_target)
+  def validate_on_snapshot(%CommandRequest{} = request, snapshot, expected_target \\ nil) do
+    context = prepare([request], snapshot)
+    {result, _context} = validate_prepared(request, context, expected_target)
+    result
+  end
 
-  defp resolve_authoring_request(request, snapshot, expected_target) do
-    with {:ok, target} <-
-           SourceEndpoints.fetch_command_authoring_target(
-             request.organization_id,
-             request.mission_id,
-             request.source_endpoint_ref
-           ),
+  @doc """
+  Reads, once, what validating `requests` against `snapshot` needs (#1041): every distinct target
+  (one `FOR SHARE` read, in endpoint order), the targets' fleet entries (one read), and each
+  distinct model's basis and decoded catalog (once per model, not per target). Returns a context
+  for `validate_prepared/3`, which also remembers what it decodes (a command's plan, the values
+  an argument set resolves to, an enumerated argument's choices), so a group of thousands of
+  members costs a fixed number of reads. Must run inside a transaction, like
+  `validate_on_snapshot/3`.
+  """
+  def prepare([], snapshot), do: %{snapshot: snapshot, targets: %{}, bases: %{}, memo: %{}}
+
+  def prepare([%CommandRequest{} = first | _] = requests, snapshot) do
+    targets =
+      SourceEndpoints.fetch_command_authoring_targets(
+        first.organization_id,
+        first.mission_id,
+        Enum.map(requests, & &1.source_endpoint_ref)
+      )
+
+    found = for {_id, {:ok, target}} <- targets, do: target
+
+    %{
+      snapshot: snapshot,
+      targets: targets,
+      bases: ActiveBasis.for_targets(snapshot, found),
+      memo: %{}
+    }
+  end
+
+  @doc """
+  `validate_on_snapshot/3` for a request `prepare/2` was given: `{result, context}`, the result
+  exactly what `validate_on_snapshot/3` returns, the context carrying what this request decoded
+  for the next.
+  """
+  def validate_prepared(%CommandRequest{} = request, context, expected_target \\ nil) do
+    with {:ok, target} <- Map.fetch!(context.targets, request.source_endpoint_ref),
          target_token = authoring_digest(target),
          true <- is_nil(expected_target) or target_token == expected_target,
-         {:ok, snapshot} <- ActiveBasis.for_target(snapshot, target),
-         {:ok, basis} <-
-           MissionModelPlanDecoder.command_basis(snapshot.basis.runtime_plans, request.command_id),
-         revision = snapshot.basis.mission_model_revision_id,
-         true <- request.mission_model_revision_id in [nil, revision],
-         request = %{request | mission_model_revision_id: revision},
-         basis =
-           basis
-           |> Map.put(:mission_model_revision_id, revision)
-           |> Map.put(:runtime_plan_id, basis.plan_id),
-         {:ok, values} <- Invocation.resolve(basis.runtime_definition, request.argument_values),
-         :ok <- WireEncoding.validate(basis.runtime_definition, values),
-         :ok <- validate_choices(request, basis.runtime_definition, values) do
-      {:ok, enrich(request, basis, values),
-       %{target: target, target_token: target_token, snapshot: snapshot}}
+         {:ok, snapshot} <- Map.fetch!(context.bases, target.source_endpoint_id) do
+      resolve(request, %{target: target, target_token: target_token, snapshot: snapshot}, context)
     else
-      false -> {:error, :command_authoring_basis_changed}
-      {:error, reason} -> {:error, reason}
+      false -> {{:error, :command_authoring_basis_changed}, context}
+      {:error, reason} -> {{:error, reason}, context}
+    end
+  end
+
+  defp resolve(request, %{snapshot: snapshot} = state, context) do
+    revision = snapshot.basis.mission_model_revision_id
+    key = {:command_basis, revision, request.command_id}
+
+    {command_basis, context} =
+      remember(context, key, fn ->
+        MissionModelPlanDecoder.command_basis(snapshot.basis.runtime_plans, request.command_id)
+      end)
+
+    with {:ok, basis} <- command_basis,
+         true <- request.mission_model_revision_id in [nil, revision] do
+      request = %{request | mission_model_revision_id: revision}
+
+      basis =
+        basis
+        |> Map.put(:mission_model_revision_id, revision)
+        |> Map.put(:runtime_plan_id, basis.plan_id)
+
+      resolve_values(request, basis, state, context)
+    else
+      false -> {{:error, :command_authoring_basis_changed}, context}
+      {:error, reason} -> {{:error, reason}, context}
+    end
+  end
+
+  # The values an argument set resolves to, and whether they encode, depend only on the model's
+  # definition and the arguments: the same for every target that sends them.
+  defp resolve_values(request, basis, state, context) do
+    definition = basis.runtime_definition
+
+    values_key =
+      {:values, definition.mission_model_revision_id, request.command_id, request.argument_values}
+
+    {values, context} =
+      remember(context, values_key, fn ->
+        with {:ok, values} <- Invocation.resolve(definition, request.argument_values),
+             :ok <- WireEncoding.validate(definition, values) do
+          {:ok, values}
+        end
+      end)
+
+    with {:ok, values} <- values,
+         {:ok, context} <- validate_choices(request, definition, values, context) do
+      {{:ok, enrich(request, basis, values), state}, context}
+    else
+      {:error, reason} -> {{:error, reason}, context}
+      {:error, reason, context} -> {{:error, reason}, context}
+    end
+  end
+
+  defp remember(%{memo: memo} = context, key, compute) do
+    case Map.fetch(memo, key) do
+      {:ok, result} ->
+        {result, context}
+
+      :error ->
+        result = compute.()
+        {result, %{context | memo: Map.put(memo, key, result)}}
     end
   end
 
   @doc false
   defdelegate authoring_digest(value), to: Cadence.Commanding.AuthoringIdentity, as: :digest
 
-  defp validate_choices(request, definition, values) do
+  # One read of an enumerated argument's choices per model and argument set.
+  defp validate_choices(request, definition, values, context) do
     specs = Enum.filter(definition.argument_specs, &(&1.base_type == :enumerated))
+    ids = Enum.map(specs, & &1.argument_id)
+    key = {:choices, definition.mission_model_revision_id, ids}
 
-    with {:ok, choices} <-
-           MissionModels.command_argument_choices(
-             request.organization_id,
-             request.mission_id,
-             definition.mission_model_revision_id,
-             Enum.map(specs, & &1.argument_id)
-           ) do
-      Enum.reduce_while(specs, :ok, fn spec, :ok ->
-        validate_choice(spec, values, choices)
+    {choices, context} =
+      remember(context, key, fn ->
+        MissionModels.command_argument_choices(
+          request.organization_id,
+          request.mission_id,
+          definition.mission_model_revision_id,
+          ids
+        )
       end)
+
+    with {:ok, choices} <- choices,
+         :ok <-
+           Enum.reduce_while(specs, :ok, fn spec, :ok ->
+             validate_choice(spec, values, choices)
+           end) do
+      {:ok, context}
+    else
+      {:error, reason} -> {:error, reason, context}
     end
   end
 

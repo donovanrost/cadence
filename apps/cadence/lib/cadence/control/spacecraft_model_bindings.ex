@@ -156,6 +156,46 @@ defmodule Cadence.Control.SpacecraftModelBindings do
     end
   end
 
+  @doc """
+  `command_basis/2` for many source endpoints at once: `%{source_id => {:ok, basis} | {:error,
+  reason}}`, with the same answer for each. The fleet entries are one read, and each distinct
+  mission-model manifest is loaded once (a fleet of thousands runs a few revisions).
+  """
+  @spec command_bases(map(), [binary()]) :: %{binary() => {:ok, map()} | {:error, term()}}
+  def command_bases(activation, source_ids) do
+    case FleetSnapshot.entries_for_sources(activation.metadata, source_ids) do
+      {:ok, entries} ->
+        loaded =
+          entries
+          |> Map.values()
+          |> Enum.filter(& &1["commanding_enabled"])
+          |> Enum.map(& &1["mission_model"])
+          |> Enum.uniq()
+          |> Map.new(
+            &{&1,
+             MissionModels.command_authoring_basis(
+               activation.organization_id,
+               activation.mission_id,
+               &1
+             )}
+          )
+
+        Map.new(source_ids, fn id ->
+          {id, command_base(Map.get(entries, id), loaded)}
+        end)
+
+      {:error, reason} ->
+        Map.new(source_ids, &{&1, {:error, reason}})
+    end
+  end
+
+  defp command_base(nil, _loaded), do: {:error, :spacecraft_model_not_active}
+
+  defp command_base(%{"commanding_enabled" => true, "mission_model" => manifest}, loaded),
+    do: Map.fetch!(loaded, manifest)
+
+  defp command_base(_entry, _loaded), do: {:error, :spacecraft_commanding_not_active}
+
   defp commanding_entry?({_id, entry}), do: entry["commanding_enabled"]
 
   defp command_entry(metadata, nil) do

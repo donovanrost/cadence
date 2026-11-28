@@ -180,7 +180,7 @@ defmodule Cadence.Control.Commanding.GroupAbort do
   defp after_commit({:ok, %{value: value, lanes: lanes}}, org, mission) do
     ScopedReadUpdates.publish(:commanding_changed, org, mission)
     settle_timeline(value, org, mission)
-    Enum.each(lanes, &Dispatcher.kick_lane(ProcessNamespace.default(), org, mission, &1))
+    Dispatcher.kick_lanes(ProcessNamespace.default(), org, mission, lanes)
     {:ok, value}
   end
 
