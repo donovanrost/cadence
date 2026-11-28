@@ -21,6 +21,7 @@ defmodule Cadence.Reads.ConfigLabels do
   alias Cadence.SpacecraftType.Schema
 
   @spacecraft_keyed ~w(spacecraft_override spacecraft_routes)
+  @relay_origins "relay.origin_spacecraft_ids"
 
   @doc "Adds display fields to a preview's conflict items and diffs."
   @spec preview(binary(), binary(), map() | nil) :: map() | nil
@@ -30,6 +31,7 @@ defmodule Cadence.Reads.ConfigLabels do
     items = Enum.flat_map(preview.checks, & &1.items) ++ preview.diffs
     names = names(organization_id, mission_id, items, %{})
     fields = schemas(organization_id, mission_id, items)
+    relay_names = relay_names(organization_id, mission_id, items)
 
     %{
       preview
@@ -40,12 +42,12 @@ defmodule Cadence.Reads.ConfigLabels do
               | items:
                   Enum.map(check.items, fn item ->
                     item
-                    |> decorate(names, fields)
+                    |> decorate(names, fields, relay_names)
                     |> spacecraft_sample(organization_id, mission_id)
                   end)
             }
           end),
-        diffs: Enum.map(preview.diffs, &decorate(&1, names, fields))
+        diffs: Enum.map(preview.diffs, &decorate(&1, names, fields, relay_names))
     }
   end
 
@@ -83,31 +85,76 @@ defmodule Cadence.Reads.ConfigLabels do
 
     names = names(organization_id, mission_id, entries, documented)
     fields = schemas(organization_id, mission_id, entries)
-    %{revision | entries: Enum.map(entries, &decorate(&1, names, fields))}
+    relay_names = relay_names(organization_id, mission_id, entries)
+    %{revision | entries: Enum.map(entries, &decorate(&1, names, fields, relay_names))}
   end
 
   def revision(_organization_id, _mission_id, revision), do: revision
 
-  defp decorate(%{kind: kind, entity_id: id} = item, names, fields) do
+  defp decorate(%{kind: kind, entity_id: id} = item, names, fields, relay_names) do
     labels = Map.get(fields, kind, %{})
 
     item
     |> Map.put(:entity_name, Map.get(names, {kind, id}))
-    |> label_list(:paths, labels)
-    |> label_list(:fields, labels)
+    |> label_list(:paths, labels, relay_names)
+    |> label_list(:fields, labels, relay_names)
   end
 
-  defp decorate(item, _names, _fields), do: item
+  defp decorate(item, _names, _fields, _relay_names), do: item
 
-  defp label_list(item, key, labels) do
+  defp label_list(item, key, labels, relay_names) do
     case Map.get(item, key) do
       list when is_list(list) ->
         labeled = Enum.map(list, &label(&1, labels))
-        Map.put(item, key, listener_labels(labeled, item))
+        labeled = labeled |> listener_labels(item) |> relay_labels(item, relay_names)
+        Map.put(item, key, labeled)
 
       _none ->
         item
     end
+  end
+
+  defp relay_names(organization_id, mission_id, items) do
+    ids =
+      for %{kind: "source_endpoint"} = item <- items,
+          field <- Map.get(item, :fields, []) ++ Map.get(item, :paths, []),
+          %{path: @relay_origins, before: before, after: after_value} <- [field],
+          id <- (before || []) ++ (after_value || []),
+          do: id
+
+    case SpacecraftStore.fetch_spacecrafts_in_batches(organization_id, mission_id, ids) do
+      {:ok, spacecraft} ->
+        Map.new(spacecraft, fn {id, craft} ->
+          {id, with_scid(craft.display_name, craft.scid)}
+        end)
+
+      {:error, _invalid_ids} ->
+        %{}
+    end
+  end
+
+  defp with_scid(name, scid) when is_integer(scid), do: "#{name} (SCID #{scid})"
+  defp with_scid(name, _scid), do: name
+
+  defp relay_labels(fields, %{kind: "source_endpoint"}, names) do
+    Enum.map(fields, fn
+      %{path: @relay_origins, before: before, after: after_value} = field ->
+        Map.merge(field, %{
+          before_label: describe_origins(before, names),
+          after_label: describe_origins(after_value, names)
+        })
+
+      field ->
+        field
+    end)
+  end
+
+  defp relay_labels(fields, _item, _names), do: fields
+
+  defp describe_origins(ids, _names) when ids in [nil, []], do: "No relay origins"
+
+  defp describe_origins(ids, names) do
+    Enum.map_join(ids, ", ", &Map.get(names, &1, "Unavailable spacecraft"))
   end
 
   defp label(%{path: path} = entry, labels) do

@@ -14,6 +14,7 @@ defmodule Cadence.SourceEndpoints.SourceEndpoint do
           source_ref: binary() | nil,
           scid: non_neg_integer() | nil,
           display_name: binary() | nil,
+          relay: %{required(String.t()) => [binary()]} | nil,
           metadata: map()
         }
 
@@ -25,6 +26,7 @@ defmodule Cadence.SourceEndpoints.SourceEndpoint do
     :source_ref,
     :scid,
     :display_name,
+    :relay,
     metadata: %{}
   ]
 
@@ -38,6 +40,7 @@ defmodule Cadence.SourceEndpoints.SourceEndpoint do
       source_ref: Map.get(attrs, :source_ref),
       scid: Map.get(attrs, :scid),
       display_name: Map.get(attrs, :display_name),
+      relay: Map.get(attrs, :relay),
       metadata: Map.get(attrs, :metadata, %{})
     }
   end
