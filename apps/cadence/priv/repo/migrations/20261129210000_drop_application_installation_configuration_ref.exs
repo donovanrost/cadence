@@ -3,18 +3,54 @@ defmodule Cadence.Repo.Migrations.DropApplicationInstallationConfigurationRef do
 
   # #669 b: an optional application declares no actions, so no action provider hands the host a
   # configuration reference to pin on its installation. The reference copied a version the
-  # application's own configuration row already holds; nothing reads it, so no data moves.
+  # application's own configuration row already holds; nothing reads it, so no data moves. The
+  # installation events lose the configuration versions and the configuration_updated type with it.
+  @event_types_with_configuration "('installed', 'reinstalled', 'enabled', 'disabled', 'uninstalled', 'application_upgraded', 'configuration_updated')"
+  @event_types "('installed', 'reinstalled', 'enabled', 'disabled', 'uninstalled', 'application_upgraded')"
+
   def up do
-    drop(constraint(:application_installations, :application_installations_configuration_ref_check))
+    drop(
+      constraint(:application_installations, :application_installations_configuration_ref_check)
+    )
 
     alter table(:application_installations) do
       remove(:configuration_kind)
       remove(:configuration_id)
       remove(:configuration_version)
     end
+
+    drop(
+      constraint(:application_installation_events, :application_installation_events_type_check)
+    )
+
+    create(
+      constraint(:application_installation_events, :application_installation_events_type_check,
+        check: "event_type IN #{@event_types}"
+      )
+    )
+
+    alter table(:application_installation_events) do
+      remove(:previous_configuration_version)
+      remove(:current_configuration_version)
+    end
   end
 
   def down do
+    alter table(:application_installation_events) do
+      add(:previous_configuration_version, :integer)
+      add(:current_configuration_version, :integer)
+    end
+
+    drop(
+      constraint(:application_installation_events, :application_installation_events_type_check)
+    )
+
+    create(
+      constraint(:application_installation_events, :application_installation_events_type_check,
+        check: "event_type IN #{@event_types_with_configuration}"
+      )
+    )
+
     alter table(:application_installations) do
       add(:configuration_kind, :string)
       add(:configuration_id, :string)
