@@ -40,6 +40,8 @@ const wire = (o: Record<string, unknown> = {}) => ({
   catalog_revision: { id: "cr-4", number: 4, label: "FSW 2.4", database_id: "db-1" },
   decision: null,
   viewer_can_decide: true,
+  affected_groups: null,
+  affected_groups_count: null,
   viewer_is_importer: false,
   cannot_decide_because: null,
   plans_ready: true,
@@ -88,6 +90,8 @@ describe("the approval panel", () => {
     const t = text(
       panel({
         viewer_can_decide: false,
+        affected_groups: null,
+        affected_groups_count: null,
         viewer_is_importer: true,
         cannot_decide_because: "self_approval",
       }),
@@ -107,6 +111,8 @@ describe("the approval panel", () => {
     const decided = {
       status: "approved",
       viewer_can_decide: false,
+      affected_groups: null,
+      affected_groups_count: null,
       cannot_decide_because: "not_approvable",
       comparison: { ...comparison, against: null },
       decision: {
@@ -129,6 +135,8 @@ describe("the approval panel", () => {
       panel({
         status: "rejected",
         viewer_can_decide: false,
+        affected_groups: null,
+        affected_groups_count: null,
         cannot_decide_because: "not_approvable",
         decision: {
           kind: "rejected",
@@ -347,6 +355,8 @@ describe("no earlier configuration (U90)", () => {
       panel({
         status: "approved",
         viewer_can_decide: false,
+        affected_groups: null,
+        affected_groups_count: null,
         cannot_decide_because: "not_approvable",
         comparison: first(),
         decision: {
