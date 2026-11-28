@@ -20,7 +20,15 @@ defmodule Cadence.Spacecraft.ConfigKinds.ScidHoldsTest do
 
   defmodule Sharing do
     @moduledoc false
-    def shared(_org, _mission, scid), do: Process.get({:shared, scid}, [])
+    def shared_many(_org, _mission, scids),
+      do:
+        for(
+          scid <- scids,
+          shared = Process.get({:shared, scid}, []),
+          shared != [],
+          into: %{},
+          do: {scid, shared}
+        )
   end
 
   describe "holds/3 (the kind's folded item)" do
@@ -142,11 +150,11 @@ defmodule Cadence.Spacecraft.ConfigKinds.ScidHoldsTest do
     end
 
     test "only another mission of the organization on a shared account counts", ctx do
-      assert ScidSharing.shared(ctx.org, ctx.alpha, 42) == [
-               %{mission_id: ctx.bravo, provider_accounts: [%{id: ctx.ksat, name: "KSAT"}]}
-             ]
-
-      assert ScidSharing.shared(ctx.org, ctx.alpha, 43) == []
+      assert ScidSharing.shared_many(ctx.org, ctx.alpha, [42, 43]) == %{
+               42 => [
+                 %{mission_id: ctx.bravo, provider_accounts: [%{id: ctx.ksat, name: "KSAT"}]}
+               ]
+             }
     end
 
     test "a viewer who can open the other mission sees it named", ctx do

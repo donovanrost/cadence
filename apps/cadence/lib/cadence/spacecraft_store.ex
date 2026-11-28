@@ -503,39 +503,6 @@ defmodule Cadence.SpacecraftStore do
     |> Repo.all()
   end
 
-  @doc "Whether another spacecraft of the mission already uses `scid`."
-  @spec scid_taken?(binary(), binary(), non_neg_integer()) :: boolean()
-  def scid_taken?(organization_id, mission_id, scid)
-      when is_binary(organization_id) and is_binary(mission_id) and is_integer(scid) do
-    SpacecraftRow
-    |> where(
-      [row],
-      row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-        row.scid == ^scid
-    )
-    |> Repo.exists?()
-  end
-
-  @doc """
-  The OTHER missions of the organization with an active spacecraft flying `scid` (the same-SCID
-  HOLD, ux U81 §1). Never across organizations.
-  """
-  @spec missions_flying_scid(binary(), non_neg_integer(), binary()) :: [binary()]
-  def missions_flying_scid(organization_id, scid, except_mission_id)
-      when is_binary(organization_id) and is_integer(scid) and is_binary(except_mission_id) do
-    SpacecraftRow
-    |> where(
-      [row],
-      row.organization_id == ^organization_id and row.scid == ^scid and
-        row.mission_id != ^except_mission_id
-    )
-    |> active()
-    |> distinct(true)
-    |> select([row], row.mission_id)
-    |> order_by([row], asc: row.mission_id)
-    |> Repo.all()
-  end
-
   @doc """
   Spacecraft pinned to a profile, ordered by name. Options: `version:` (only that version),
   `spacecraft_ids:` (only those spacecraft).
