@@ -796,6 +796,8 @@ jobs:
         run: scripts/ci/tune_postgres.sh
       - id: setup
         uses: ./.github/actions/setup-cadence
+        with:
+          node: "false"
 
       # Each suite runs even when an earlier one fails, so one run reports every problem.
       - name: ccsds
@@ -987,6 +989,8 @@ jobs:
       - name: Tune Postgres for throwaway test data
         run: scripts/ci/tune_postgres.sh
       - uses: ./.github/actions/setup-cadence
+        with:
+          node: "false"
       # The tag reaches develop with ui/apogee-spa. Until a branch has it, this step only reports that.
       - name: mix test --only ingest_journal_matrix (journal off)
         working-directory: apps/cadence
