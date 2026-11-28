@@ -150,6 +150,9 @@ alone for ground limits. With `scope=point` it means the same point under any co
   - `source_stopped`: the source stopped reporting the condition, so the episode was reconciled;
   - `rule_retired`: a generation dropped the rule that raised it, so nothing evaluates it any more
     and the episode was cleared when that generation was applied (#451);
+  - `rule_disabled`: the rule that raised it was turned off for this spacecraft (a per-spacecraft
+    override with `disabled`), so nothing evaluates it there any more and the episode was cleared
+    when that state change was recorded (#451);
   - null while the episode is open.
 
   Clears are always automatic. Acknowledgement is the human action, recorded in
