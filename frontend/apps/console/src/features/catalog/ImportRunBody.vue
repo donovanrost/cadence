@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { canAdministerOrganization, useMissionScope, useSession } from "@/shell";
+import { useMissionScope } from "@/shell";
+import { useCanStage } from "@/features/changes/index.ts";
 import { ApCallout } from "@/ui";
 import DiffPanel from "./DiffPanel.vue";
 import DiffStrip from "./DiffStrip.vue";
@@ -13,10 +14,9 @@ import { formatBytes, rolloutTarget, type ImportRunDetail } from "./importRun.ts
 
 /** File line, verdict, stats, diff (when available) and diagnostics for one import run. */
 const props = defineProps<{ run: ImportRunDetail }>();
-// Staging a rollout needs manage_mission, which the server grants to organization admins (qa #4).
+// Staging a rollout needs config.stage (operate_mission, #1160); the server enforces it.
 const scope = useMissionScope();
-const session = useSession();
-const canStage = computed(() => canAdministerOrganization(session, scope.value.organization));
+const canStage = useCanStage(scope.value.mission.id);
 const target = computed(() => rolloutTarget(props.run));
 const fileLine = computed(() =>
   [

@@ -3,7 +3,7 @@ import { computed, ref } from "vue";
 import { useNoteFocus } from "./useNoteFocus.ts";
 import { useRemoteQuery } from "@/api";
 import { useMissionInvalidation } from "@/live";
-import { canAdministerOrganization, useMissionScope, useSession } from "@/shell";
+import { useMissionScope, useSession } from "@/shell";
 import {
   ApBreadcrumb,
   ApCallout,
@@ -32,10 +32,7 @@ useMissionInvalidation(
   ["activations", "attention"],
   page.refetch,
 );
-const viewer = computed(() => ({
-  userId: session.user.id,
-  orgAdmin: canAdministerOrganization(session, scope.value.organization),
-}));
+const viewer = computed(() => ({ userId: session.user.id }));
 const note = ref<DecidedNote | null>(null);
 const crumbs: readonly ApCrumb[] = [
   { label: "Changes", to: { name: "setup.changes" } },

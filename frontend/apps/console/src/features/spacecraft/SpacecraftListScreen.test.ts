@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { computed } from "vue";
 import { createMemoryHistory, createRouter } from "vue-router";
 import { missionId } from "@/api/index.ts";
+import { configState } from "@/features/changes/fixtures.ts";
 import SpacecraftListScreen from "./SpacecraftListScreen.vue";
 
 vi.mock("@/live", () => ({ useMissionInvalidation: () => undefined }));
@@ -11,10 +12,10 @@ vi.mock("@/shell", async (original) => ({
   useMissionScope: () =>
     computed(() => ({
       mission: { id: missionId("m-1"), name: "EARENDIL" },
-      organization: { id: "org-1" },
+      // #1160: an operator who isn't an organization admin.
+      organization: { id: "org-1", capabilities: [] },
     })),
-  useSession: () => ({}),
-  canAdministerOrganization: () => true,
+  useSession: () => ({ user: { id: "u-op" }, capabilities: [] }),
 }));
 
 const row = (n: number) => ({
@@ -32,13 +33,15 @@ const row = (n: number) => ({
 });
 
 /** `total` craft, `size` a page, answering `q` by name and the cursor as the first index. */
-function server(total: number, size: number) {
+function server(total: number, size: number, permissions: readonly string[] = ["config.stage"]) {
   const urls: string[] = [];
   vi.stubGlobal(
     "fetch",
     vi.fn((input: string) => {
       urls.push(input);
       const url = new URL(input, "http://x");
+      if (url.pathname.endsWith("/config"))
+        return Promise.resolve(new Response(JSON.stringify({ data: configState(permissions) })));
       const q = url.searchParams.get("q");
       const cursor = url.searchParams.get("cursor");
       const all = Array.from({ length: total }, (_, i) => i + 1).filter(
@@ -136,6 +139,22 @@ describe("Setup › Spacecraft directory (#796)", () => {
     // The later page sent no counts: the subtitle and the shown-of-total keep the first page's.
     expect(w.text()).toContain("450 spacecraft");
     expect(w.text()).toContain("400 of 450");
+    w.unmount();
+  });
+
+  it("offers Add spacecraft to an operator who isn't an admin: it stages a change (#1160)", async () => {
+    server(0, 200);
+    const w = await mountScreen();
+    expect(w.findAll("a").filter((a) => a.text() === "Add spacecraft")).toHaveLength(2);
+    expect(w.text()).toContain("Add one spacecraft or a whole launch batch");
+    w.unmount();
+  });
+
+  it("without config.stage, offers none and names who adds spacecraft (#1160)", async () => {
+    server(0, 200, []);
+    const w = await mountScreen();
+    expect(w.findAll("a").filter((a) => a.text() === "Add spacecraft")).toHaveLength(0);
+    expect(w.text()).toContain("Mission operators add spacecraft to this mission.");
     w.unmount();
   });
 

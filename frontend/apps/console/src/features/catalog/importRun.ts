@@ -1,5 +1,6 @@
 import type { MissionId } from "@/api/index.ts";
 import { decoders, request, type ApiResult, type Decoded, type Reader } from "@/api";
+import { catalogPermissions } from "./api.ts";
 import type { RolloutTarget } from "./rollout.ts";
 
 /** Contract: docs/apogee/api/setup.md (C3) = setup-shapes.md §C3 + declaration_count. */
@@ -78,6 +79,8 @@ export const importRunReader = object({
   ),
   base_revision: nullable(object({ id: token, number: count })),
   diff: nullable(diff),
+  /** #1160: Replace file (a new import) is the upload's check. */
+  permissions: catalogPermissions,
 });
 
 export type ImportRunDetail = Decoded<typeof importRunReader>;

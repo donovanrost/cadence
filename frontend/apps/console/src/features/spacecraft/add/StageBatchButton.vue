@@ -38,7 +38,7 @@ const noGoCount = computed(() => {
   return batchChecks(r.report, profile).filter((c) => c.verdict === "nogo").length;
 });
 const reason = computed((): string | null => {
-  if (!props.canManage) return "Only an organization admin can add spacecraft.";
+  if (!props.canManage) return "Only mission operators can add spacecraft.";
   if (!ops.value) return "Complete the earlier steps first.";
   if (!ops.value.ok) {
     // ux audit S4: the count of the step's NO-GO checks; a batch refused for another reason (an

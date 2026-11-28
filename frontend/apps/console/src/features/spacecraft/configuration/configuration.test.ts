@@ -19,6 +19,20 @@ describe("the configuration workspace snapshot", () => {
     });
   });
 
+  it("reads who may save a draft from the server's own check, can_save (#1160 row 2)", () => {
+    // can_save is :operate_mission, the check a draft save makes; can_request is a different one.
+    const approval = (o: Record<string, unknown>) => ({
+      ...snapshotWire().approval,
+      ...o,
+    });
+    const read = (a: unknown) => decode(snapshotReader, snapshotWire({ approval: a }));
+    const operator = read(approval({ can_request: false, can_save: true }));
+    if (!operator.ok) throw operator.error;
+    expect(operator.value.approval.can_save).toBe(true);
+    const { can_save: _dropped, ...older } = approval({});
+    expect(read(older).ok).toBe(false);
+  });
+
   it("reads a craft that was never set up and never saved", () => {
     const r = decode(snapshotReader, snapshotWire({ active: null, saved_version: null }));
     if (!r.ok) throw r.error;

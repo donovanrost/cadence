@@ -8,17 +8,13 @@ defmodule Cadence.Catalog.Reimport do
   its importer (`Catalog.ModelImporters`).
   """
 
-  alias Cadence.Auth.{Policy, Scope}
+  alias Cadence.Auth.Scope
   alias Cadence.Catalog
-  alias Cadence.Catalog.Actor
+  alias Cadence.Catalog.{Actor, Upload}
 
   def execute(%Scope{} = scope, mission_id, artifact_id)
       when is_binary(mission_id) and is_binary(artifact_id) do
-    with :ok <-
-           Policy.authorize(scope, :operate_mission, %{
-             organization_id: scope.organization_id,
-             mission_id: mission_id
-           }),
+    with :ok <- Upload.authorize(scope, mission_id),
          {:ok, actor} <- Actor.from_scope(scope),
          {:ok, artifact} <-
            Catalog.fetch_artifact(scope.organization_id, mission_id, artifact_id),

@@ -80,6 +80,7 @@ const withBlockers = {
     }),
   ],
   recent_changes: null,
+  permissions: ["catalog.import"],
 };
 
 const allReady = {
@@ -98,6 +99,7 @@ const allReady = {
       actor: { name: "QA Org Admin" },
     },
   ],
+  permissions: ["catalog.import"],
 };
 
 async function withReadiness(page: Page, data: unknown) {
@@ -215,15 +217,15 @@ test.describe("setup readiness", () => {
 });
 
 test.describe("setup readiness, organization member", () => {
-  test.use({
-    storageState: storageStateFor("operator"),
-    allowedDiagnostics: allow(/\/readiness -> 404/, /status of 404/),
-  });
+  test.use({ storageState: storageStateFor("operator") });
 
-  test("is not offered Add spacecraft / Import catalog", async ({ page }) => {
+  // #1160: both are any mission operator's (staging is reviewed; an import needs an admin's approval).
+  test("is offered Add spacecraft and Import catalog, from the server's own checks", async ({
+    page,
+  }) => {
     await openConsole(page, screen);
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Add spacecraft" })).toHaveCount(0);
-    await expect(page.getByRole("link", { name: "Import catalog" })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Add spacecraft" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Import catalog" })).toBeVisible();
   });
 });

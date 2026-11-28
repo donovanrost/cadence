@@ -613,6 +613,9 @@ Rules (v1), by area:
   actor: {name} | null}]`. `[]` when nothing has been applied yet (show the panel empty, or omit
   it). `version_label` is the revision number; open `GET /config/revisions/:n` for the detail.
   It's `null` only if the revisions can't be read.
+- `permissions` (#1160): `["catalog.import"] | []`, the header's Import catalog, from the check
+  an import makes (`Catalog.Upload.authorize/2`, `:operate_mission`). Add spacecraft reads
+  `config.stage` from `GET /config` instead.
 
 ## `GET /api/v1/missions/:mission_id/profiles/:profile_id`
 
@@ -685,6 +688,10 @@ The shape is setup-shapes.md §C1. `?database_id=` selects a database (default: 
 `database` is `null` when the mission has none. Refetch on `invalidate` with `catalog`.
 
 - `revisions`: newest first, at most 50. `import_runs`: newest first, at most 20.
+- `permissions` (#1160): `["catalog.import"] | []`, whether the caller may import. It comes from
+  the check the upload and a reimport make (`Catalog.Upload.authorize/2`: any mission operator;
+  the candidate revision still needs an organization admin's approval, `:approve_mission_model`).
+  C3 and the source-file page send the same.
 - `revisions[].declaration_count` comes from the producing import run. `current_revision`
   also has `command_count` and `telemetry_count` (commands and telemetry parameters in its
   declarations); they're `null` only when the revision's model can't be read. Revisions in the
@@ -748,6 +755,7 @@ The shape is setup-shapes.md §C3, plus `declaration_count`.
   `revision_number` below its own), or `null` (first revision, or no revision produced). It's the
   same base as the revision read's `breaking_base` (the model approval gate above).
 - `requested_by`: as the index's run row (C1 above).
+- `permissions` (#1160): as C1's; Replace file starts a new import.
 - `diff` (DECISIONS #9 v1, from the two revisions alone): `null` when there's no base or either
   revision can't be read: it has no model, its model revision isn't stored for this mission, or its
   declarations can't be queried (#367: a missing model is never read as an empty one, which would

@@ -3,7 +3,8 @@ import { computed, ref } from "vue";
 import { useRoute, type RouteLocationRaw } from "vue-router";
 import { useRemoteQuery } from "@/api";
 import { useMissionInvalidation } from "@/live";
-import { canAdministerOrganization, useMissionScope, useSession } from "@/shell";
+import { useMissionScope } from "@/shell";
+import { useCanStage } from "@/features/changes/index.ts";
 import {
   ApBreadcrumb,
   ApButton,
@@ -39,9 +40,8 @@ useMissionInvalidation(
   refetch,
 );
 
-const session = useSession();
 /** Profile.md: read-only without config.stage; same gate as the routing editor. */
-const canStage = computed(() => canAdministerOrganization(session, scope.value.organization));
+const canStage = useCanStage(scope.value.mission.id);
 const editing = ref<string | null>(null);
 const sectionParam = computed(() =>
   typeof route.params.section === "string" ? route.params.section : null,

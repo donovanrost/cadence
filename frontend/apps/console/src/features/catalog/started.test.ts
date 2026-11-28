@@ -24,6 +24,7 @@ function started(requested_by?: unknown): string {
       revisions: [],
       import_runs: [row(requested_by)],
     },
+    permissions: [],
   });
   if (!r.ok) throw new Error(r.error.message);
   const run = r.value.database?.import_runs[0];

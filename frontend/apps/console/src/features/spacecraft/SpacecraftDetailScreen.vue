@@ -4,7 +4,8 @@ import { computed } from "vue";
 import { useRoute } from "vue-router";
 import { spacecraftIdParam, useRemoteQuery } from "@/api";
 import { useMissionInvalidation } from "@/live";
-import { canAdministerOrganization, useMissionScope, useSession } from "@/shell";
+import { useMissionScope } from "@/shell";
+import { useCanStage } from "@/features/changes/index.ts";
 import { ApBreadcrumb, ApButton, ApPageHeader, ApRemote, ApTag, type ApCrumb } from "@/ui";
 import SpacecraftAdmin from "./SpacecraftAdmin.vue";
 import ExtraRouteEditor from "./ExtraRouteEditor.vue";
@@ -16,9 +17,8 @@ import { CONFIGURATION_WORKSPACE_LIVE } from "./configuration/api.ts";
 /** Setup › Spacecraft › one (ux U6: Profile layout, `Open in Ops →`). */
 const route = useRoute("setup.spacecraft.one");
 const scope = useMissionScope();
-const session = useSession();
 /** L17: Edit and Archive stage into the change set (the same gate as stations' edits). */
-const canStage = computed(() => canAdministerOrganization(session, scope.value.organization));
+const canStage = useCanStage(scope.value.mission.id);
 const editing = computed(() => canStage.value && route.query.edit === "1");
 /** U79: `?route=new` adds an extra route, `?route=<id>` edits one (Routing's Add / Edit). */
 const routeId = computed(() =>

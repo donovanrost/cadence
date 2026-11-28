@@ -12,7 +12,8 @@ import {
   ApPanel,
   ApRemote,
 } from "@/ui";
-import { canAdministerOrganization, useMissionScope, useSession } from "@/shell";
+import { useMissionScope } from "@/shell";
+import { useCanStage } from "@/features/changes/index.ts";
 import SpacecraftTable from "./SpacecraftTable.vue";
 import type { DirectorySummary } from "./api.ts";
 import { useSpacecraftDirectory } from "./useSpacecraftDirectory.ts";
@@ -24,9 +25,8 @@ const query = ref("");
 const directory = useSpacecraftDirectory(missionId, query);
 const { state, refetch } = directory;
 
-// Setup writes need manage_mission, which the server grants to organization admins (qa #4).
-const session = useSession();
-const canManage = computed(() => canAdministerOrganization(session, scope.value.organization));
+// #1160: adding a spacecraft stages a change (config.stage, any mission operator).
+const canManage = useCanStage(scope.value.mission.id);
 
 /** The subtitle reads the server's whole-mission counts, whatever the filter or pages loaded. */
 const subtitle = (s: DirectorySummary) =>
@@ -126,7 +126,7 @@ async function loadMore() {
               :sentence="
                 canManage
                   ? 'Add one spacecraft or a whole launch batch from a profile or a manifest.'
-                  : 'An organization admin adds spacecraft to this mission.'
+                  : 'Mission operators add spacecraft to this mission.'
               "
             >
               <ApButton v-if="canManage" variant="primary" :to="{ name: 'setup.spacecraft.new' }"

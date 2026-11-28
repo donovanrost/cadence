@@ -185,6 +185,6 @@ export function checkFallback(error: ApiError): string {
     return `Not checked: the server's reply wasn't understood. ${retry}`;
   // A refusal for who you are: retrying never helps, so no "try again" (fe-ops, #432).
   if (error.kind === "forbidden")
-    return "Not checked: you can't change this profile's routing. Mission admins and organization admins can.";
+    return "Not checked: you can't change this profile's routing. Mission operators can.";
   return `Not checked: Cadence couldn't run the check. ${retry}`;
 }

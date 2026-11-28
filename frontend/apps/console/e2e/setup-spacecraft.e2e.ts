@@ -134,9 +134,10 @@ test.describe("setup spacecraft directory, organization member", () => {
     await expect(directory(page).locator("tbody tr")).toHaveCount(FIRST_PAGE);
   });
 
-  test("is not offered Add spacecraft (no manage_mission capability)", async ({ page }) => {
+  // #1160: adding spacecraft stages a reviewed change, so any mission operator may (config.stage).
+  test("is offered Add spacecraft", async ({ page }) => {
     await openConsole(page, screen);
     await expect(directory(page)).toBeVisible();
-    await expect(page.getByRole("link", { name: "Add spacecraft" })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Add spacecraft" }).first()).toBeVisible();
   });
 });
