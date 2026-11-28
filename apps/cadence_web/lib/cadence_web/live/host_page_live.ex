@@ -71,8 +71,6 @@ defmodule CadenceWeb.HostPageLive do
           timeline_page: OpsTimelinePage.load(socket.assigns.current_scope, info)
         )
         |> CadenceWeb.OpsExplorationPage.prepare(info, path)
-        |> CadenceWeb.OpsCommandPage.prepare(info, path)
-        |> CadenceWeb.OpsCommandHistoryPage.prepare(info, path)
         |> CadenceWeb.OpsAlarmConditionsPage.prepare(info, path)
 
       socket =

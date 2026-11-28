@@ -34,13 +34,6 @@ defmodule Cadence.Applications.OpsConsole do
       actions: []
     },
     %{
-      id: "commands",
-      purpose: :operations,
-      label: "Commands",
-      path: "/missions/:mission_id/ops/commands",
-      actions: []
-    },
-    %{
       id: "telemetry_explore",
       purpose: :operations,
       label: "Telemetry Explore",
@@ -116,7 +109,6 @@ defmodule Cadence.Applications.OpsConsole do
   # intentional: every declared surface participates in the partition.
   @residual_action_ledger %{
     "workspace" => [],
-    "commands" => [],
     "telemetry_explore" => [],
     "data_sources" => [],
     "data_source_registration" => [],
