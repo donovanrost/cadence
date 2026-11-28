@@ -9,7 +9,7 @@ defmodule Cadence.Telemetry.Handlers.DefinitionBoundTelemetryHandler do
   alias Cadence.ApplicationDispatch.WorkItem
   alias Cadence.Capabilities.Definitions.DefinitionBoundTelemetry, as: Definition
   alias Cadence.Platform.ContentHash
-  alias Cadence.Protocol.PacketRecord
+  alias Cadence.Protocol.{Origin, PacketRecord}
   alias Cadence.Telemetry.{Extractor, PacketDefinition, Sample}
 
   @impl true
@@ -98,6 +98,7 @@ defmodule Cadence.Telemetry.Handlers.DefinitionBoundTelemetryHandler do
       generation_time_source: generation_time_source(packet_record),
       frame_ref: frame_ref(packet_record),
       journal_frame: packet_record.journal_frame,
+      origin: Origin.from_packet(packet_record),
       provenance: %{
         evidence_id: packet_record.evidence_id,
         packet_id: packet_record.packet_id,

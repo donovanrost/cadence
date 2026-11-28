@@ -39,6 +39,7 @@ defmodule Cadence.Telemetry.Sample do
           generation_time_source: :onboard | :receipt | nil,
           frame_ref: frame_ref() | nil,
           journal_frame: journal_frame() | nil,
+          origin: map() | nil,
           provenance: map()
         }
 
@@ -68,6 +69,10 @@ defmodule Cadence.Telemetry.Sample do
     # The journal frame that produced it (DECISIONS #99): keys its monitoring effects' replay-safe
     # ids. Runtime only: never stored with the observation, never in provenance.
     :journal_frame,
+    # Where the packet came from (`Cadence.Protocol.Origin`, #1078 E1a); a derived sample takes its
+    # trigger's. Runtime only, like `journal_frame`: the observation row gains nothing, and a
+    # stored sample's origin is read back from its archived packet (`Reads.SampleOrigin`).
+    :origin,
     provenance: %{}
   ]
 

@@ -958,7 +958,8 @@ resolved bindings) and its allowlisted projection.
 - `status`: `ready | not_found | ambiguous | timeout | unsupported | unavailable`; `sample` is `null`
   unless `ready`.
 - `sample`: `{point_id, point_name, sample_id, spacecraft_id, receipt_time, generation_time,
-  quality: good | suspect | bad, raw_value, engineering_value, engineering_unit, source, record}`.
+  quality: good | suspect | bad, raw_value, engineering_value, engineering_unit, source, record,
+  origin, origin_reason}`.
   - `raw_value` / `engineering_value`: `{state: ready | not_recorded | limited | unsupported, text,
     format: json | hex | null}`; `limited` = too large to show (no text), not a cut-off value.
   - `engineering_unit`: from the point's catalog definition, or `null`.
@@ -968,6 +969,15 @@ resolved bindings) and its allowlisted projection.
   - `record`: `{packet_id, evidence_id, packet_definition_id, packet_definition_name,
     packet_definition_version, validity_state: canonical | duplicate | conflict | superseded |
     advisory | null}` (`advisory`: kept for reference, never the record of truth).
+  - `origin` / `origin_reason` (#1078 P5 E1a): where the sample's packet came from, read back from
+    the archived packet (the observation row doesn't hold it). `origin`: `{v: 1, kind: direct |
+    relayed, source_endpoint_id, scid, vcid, map_id, apid, relay: null | {via_source_endpoint_id,
+    via_scid}}`, or `null` with `origin_reason` saying why: `packet_not_archived` (the packet is no
+    longer in the protocol archive, or never was, while the observation still exists),
+    `origin_not_recorded` (archived before origins were recorded), `timer_triggered` (a derived value
+    a timer produced: no packet), `archive_unavailable` (the archive couldn't be read now). Never a
+    guess: `origin_reason` is `null` exactly when `origin` is present. A derived value shows its
+    trigger's packet's origin.
 - Every name/label is `null` when it can't be resolved. The console never shows the id in its place
   (ux U25): it drops that part of the line; ids appear in Technical details only.
 - Errors: `422 invalid_params` (`point_id` / `spacecraft_id` missing, `receipt_time` or `at` not
