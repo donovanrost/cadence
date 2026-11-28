@@ -90,14 +90,7 @@ defmodule Cadence.Governance.BindingSetStorageMeasureTest do
       handler,
       [:cadence, :repo, :query],
       fn _event, _measurements, metadata, _config ->
-        if self() == test_pid do
-          :counters.add(counter, 1, 1)
-
-          case metadata[:result] do
-            {:ok, %{num_rows: rows}} when is_integer(rows) -> :counters.add(counter, 2, rows)
-            _other -> :ok
-          end
-        end
+        if self() == test_pid, do: count_query(counter, metadata[:result])
       end,
       nil
     )
@@ -119,6 +112,15 @@ defmodule Cadence.Governance.BindingSetStorageMeasureTest do
       rows_added: after_sizes.rows - before.rows,
       bytes_added: after_sizes.bytes - before.bytes
     }
+  end
+
+  defp count_query(counter, result) do
+    :counters.add(counter, 1, 1)
+
+    case result do
+      {:ok, %{num_rows: rows}} when is_integer(rows) -> :counters.add(counter, 2, rows)
+      _other -> :ok
+    end
   end
 
   defp sizes do
