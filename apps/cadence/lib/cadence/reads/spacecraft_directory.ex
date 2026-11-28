@@ -175,7 +175,9 @@ defmodule Cadence.Reads.SpacecraftDirectory do
   defp approval_withdrawn(pin),
     do: %{
       revision_id: pin.revision_id,
-      decision: Map.take(pin.decision, [:kind, :by, :at, :reason])
+      decision: Map.take(pin.decision, [:kind, :by, :at, :reason]),
+      # U109's way out (console, #924): an earlier approved version, or nil.
+      earlier_approved: pin.earlier_approved
     }
 
   defp profile(%Spacecraft{spacecraft_type_id: nil}, _profiles), do: nil
