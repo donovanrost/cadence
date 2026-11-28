@@ -4,11 +4,12 @@ defmodule Cadence.SemanticRuntime do
   partitions and replay.
   """
 
-  alias Cadence.Catalog.MissionModel.Canonical
+  alias Cadence.Platform.ContentBasis
 
   alias Cadence.SemanticRuntime.{
     AlgorithmPlan,
     ExpressionEvaluator,
+    IdBasis,
     MonitoringEvaluator,
     MonitoringPlan,
     PlanIndex,
@@ -160,32 +161,14 @@ defmodule Cadence.SemanticRuntime do
       quality = if stale?, do: :bad, else: worst_quality(Map.values(inputs))
       source_update_ids = Enum.map(Map.values(inputs), & &1.update_id)
 
-      updates =
-        Enum.map(outputs, fn {output, value} ->
-          Update.new(%{
-            update_id:
-              Canonical.content_id("parameter_update", {
-                algorithm.algorithm_id,
-                output.parameter_id,
-                trigger.trigger_id,
-                value
-              }),
-            parameter_id: output.parameter_id,
-            qualified_name: output.qualified_name,
-            value: value,
-            raw_value: nil,
-            quality: quality,
-            generation_time: latest_generation_time(Map.values(inputs), trigger.at),
-            receipt_time: trigger.at,
-            producer_kind: :algorithm,
-            producer_id: algorithm.algorithm_id,
-            source_update_ids: source_update_ids,
-            metadata: derived_metadata(inputs, trigger)
-          })
-        end)
-
-      {:ok, updates,
-       %State{state | algorithm_state: Map.put(state.algorithm_state, state_key, algorithm_state)}}
+      with {:ok, updates} <-
+             derived_updates(algorithm, outputs, trigger, inputs, quality, source_update_ids) do
+        {:ok, updates,
+         %State{
+           state
+           | algorithm_state: Map.put(state.algorithm_state, state_key, algorithm_state)
+         }}
+      end
     else
       # A missing input leaves nothing to compute, whatever the policy. Erroring here failed the
       # whole evidence, so nothing committed, `latest` never filled, and the journal retried the
@@ -193,6 +176,52 @@ defmodule Cadence.SemanticRuntime do
       :missing -> {:skip, state}
       :stale -> {:skip, state}
       {:error, reason} -> {:error, reason}
+    end
+  end
+
+  # One update per output; its id is a versioned basis of named scalars (#950), so a value that
+  # has no canonical form is refused with a reason instead of hashed by accident.
+  defp derived_updates(algorithm, outputs, trigger, inputs, quality, source_update_ids) do
+    outputs
+    |> Enum.reduce_while({:ok, []}, fn {output, value}, {:ok, acc} ->
+      case derived_update(algorithm, output, value, trigger, inputs, quality, source_update_ids) do
+        {:ok, update} -> {:cont, {:ok, [update | acc]}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+    |> case do
+      {:ok, reversed} -> {:ok, Enum.reverse(reversed)}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp derived_update(algorithm, output, value, trigger, inputs, quality, source_update_ids) do
+    case IdBasis.value(value) do
+      {:ok, canonical} ->
+        {:ok,
+         Update.new(%{
+           update_id:
+             ContentBasis.digest("parameter_update", 1,
+               algorithm_id: algorithm.algorithm_id,
+               parameter_id: output.parameter_id,
+               trigger_id: trigger.trigger_id,
+               value: canonical
+             ),
+           parameter_id: output.parameter_id,
+           qualified_name: output.qualified_name,
+           value: value,
+           raw_value: nil,
+           quality: quality,
+           generation_time: latest_generation_time(Map.values(inputs), trigger.at),
+           receipt_time: trigger.at,
+           producer_kind: :algorithm,
+           producer_id: algorithm.algorithm_id,
+           source_update_ids: source_update_ids,
+           metadata: derived_metadata(inputs, trigger)
+         })}
+
+      {:error, reason} ->
+        {:error, {:unsupported_derived_value, output.parameter_id, reason}}
     end
   end
 

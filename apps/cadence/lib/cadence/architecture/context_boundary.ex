@@ -96,6 +96,7 @@ defmodule Cadence.Architecture.ContextBoundary do
     "lib/cadence/semantic_runtime/alarm_level.ex" => :catalog,
     "lib/cadence/semantic_runtime/algorithm_plan.ex" => :catalog,
     "lib/cadence/semantic_runtime/expression_evaluator.ex" => :catalog,
+    "lib/cadence/semantic_runtime/id_basis.ex" => :catalog,
     "lib/cadence/semantic_runtime/monitoring_evaluator.ex" => :catalog,
     "lib/cadence/semantic_runtime/monitoring_plan.ex" => :catalog,
     "lib/cadence/semantic_runtime/monitoring_result.ex" => :catalog,
