@@ -162,7 +162,9 @@ defmodule Cadence.CommandGroupFixtures do
         })
       )
 
-    # An applied monitoring change set, as revision 1, approved the layer.
+    # A monitoring change set applied directly approved the layer: recorded during its apply, as
+    # the revision the apply writes, and held to the applied set at commit (#451 M2; the
+    # sandbox never commits, so SET CONSTRAINTS ALL IMMEDIATE stands in).
     Ledger.ensure_head(c.org, c.mission)
 
     {:ok, set} =
@@ -178,21 +180,41 @@ defmodule Cadence.CommandGroupFixtures do
 
     set =
       set
-      |> Ecto.Changeset.change(
-        state: "applied",
-        applied_revision_number: 1,
-        policy_document: %{"approval_required" => true}
-      )
+      |> Ecto.Changeset.change(policy_document: %{"approval_required" => false})
       |> Repo.update!()
 
-    {:ok, _version} =
-      AuthoredVersions.record(
-        c.org,
-        c.mission,
-        layer.layer_id,
-        set.change_set_id,
-        1
-      )
+    {:ok, {:ok, _version}} =
+      Repo.transaction(fn ->
+        head = Ledger.lock_head(c.org, c.mission)
+        number = head.revision_number + 1
+        result = AuthoredVersions.record(c.org, c.mission, layer.layer_id, set, number)
+
+        {:ok, revision} =
+          Ledger.record(
+            head,
+            %{
+              kind: "change_set",
+              change_set_id: set.change_set_id,
+              applied_by: %{"kind" => "user", "id" => "u"},
+              submitted_by: %{"kind" => "user", "id" => "u"},
+              applied_at: DateTime.utc_now(),
+              reason: "monitoring",
+              summary: "monitoring"
+            },
+            []
+          )
+
+        set
+        |> Ecto.Changeset.change(
+          state: "applied",
+          applied_revision_number: revision.revision_number
+        )
+        |> Repo.update!()
+
+        Repo.query!("SET CONSTRAINTS ALL IMMEDIATE")
+        Repo.query!("SET CONSTRAINTS ALL DEFERRED")
+        result
+      end)
 
     {:ok, head_revision} =
       Compositions.effective_revision(
