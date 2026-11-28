@@ -22,6 +22,7 @@ defmodule Cadence.MissionModels do
     RuntimePlanRow
   }
 
+  alias Cadence.Persistence.JsonDocument
   alias Cadence.Repo
 
   @doc "Builds the exact revision and compiled-plan identity manifest for activation requests."
@@ -76,7 +77,9 @@ defmodule Cadence.MissionModels do
          %CompilerResult{plans: %{command: own} = plans} = result,
          %RuntimePlan{} = base
        ) do
-    if without_revision(own.plan) == without_revision(base.plan),
+    # The fresh plan is in memory (atom values), the base's as stored (JSON): compare both in the
+    # stored form, the encoding persistence applies (commanding-eng's report on #1106).
+    if without_revision(JsonDocument.encode(own.plan)) == without_revision(base.plan),
       do:
         {:ok,
          %{
