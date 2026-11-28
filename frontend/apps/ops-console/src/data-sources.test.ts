@@ -1,14 +1,14 @@
 import { mount } from "@vue/test-utils";
 import { expect, test } from "vite-plus/test";
-import { OpsDataSources } from "../../data-sources";
-import ReaderEntry from "../../../../../apps/ops-console/src/OpsDataSources.vue";
-import RegistrationEntry from "../../../../../apps/ops-console/src/OpsDataSourceRegistration.vue";
-import SettingsEntry from "../../../../../apps/ops-console/src/OpsDataSourceSettings.vue";
-import type { Page } from "./presentation-contract";
+import DataSourcesWorkspaceLink from "./DataSourcesWorkspaceLink.vue";
+import ReaderEntry from "./OpsDataSources.vue";
+import RegistrationEntry from "./OpsDataSourceRegistration.vue";
+import SettingsEntry from "./OpsDataSourceSettings.vue";
+import type { DataSourcesPresentation as Page } from "./data-sources-presentation";
 // The four SFC entry constructors are checked by vue-tsc.
 /* oxlint-disable typescript/no-unsafe-assignment */
 const entries = {
-  owner: OpsDataSources,
+  link: DataSourcesWorkspaceLink,
   reader: ReaderEntry,
   registration: RegistrationEntry,
   settings: SettingsEntry,
@@ -39,7 +39,7 @@ test("compatibility entry contains unavailable or malformed subjects", () => {
     { mission_id: "mission", mode: "settings", data_source_id: null },
     { mission_id: "mission", mode: "registration", data_source_id: "unexpected" },
   ] satisfies Page[]) {
-    const w = mount(OpsDataSources, { props: { page } });
+    const w = mount(DataSourcesWorkspaceLink, { props: { page } });
     expect(w.find("#sources-open-workspace").exists()).toBe(false);
     w.unmount();
   }

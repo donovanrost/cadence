@@ -6,8 +6,6 @@ import OpsContactDetail from "./OpsContactDetail.vue";
 import OpsContactPlanShow from "./OpsContactPlanShow.vue";
 import OpsContactRecord from "./OpsContactRecord.vue";
 import OpsContactSchedule from "./OpsContactSchedule.vue";
-import OpsDataOperations from "./OpsDataOperations.vue";
-import OpsDataOperationsManage from "./OpsDataOperationsManage.vue";
 import OpsDataSourceRegistration from "./OpsDataSourceRegistration.vue";
 import OpsDataSourceSettings from "./OpsDataSourceSettings.vue";
 import OpsDataSources from "./OpsDataSources.vue";
@@ -28,8 +26,6 @@ export const OPS_COMPONENTS: Record<string, Component> = {
   OpsContactPlanShow,
   OpsContactRecord,
   OpsContactSchedule,
-  OpsDataOperations,
-  OpsDataOperationsManage,
   OpsDataSourceRegistration,
   OpsDataSourceSettings,
   OpsDataSources,

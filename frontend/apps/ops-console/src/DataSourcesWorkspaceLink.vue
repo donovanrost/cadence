@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import type { Page } from "./presentation-contract";
+import type { DataSourcesPresentation as Page } from "./data-sources-presentation";
 defineOptions({ inheritAttrs: false });
 const props = defineProps<{ page: Page }>();
 const href = computed(() => {
