@@ -59,6 +59,16 @@ defmodule Cadence.Commanding.CommandTokenTest do
     entries
   end
 
+  # A fleet entry as `pin_fleet!/2` builds one, with `changes` on top.
+  defp entry(c, id, changes) do
+    {:ok, entries} =
+      FleetSnapshot.entries(
+        JsonDocument.unwrap_value(Repo.get!(ActiveBindingSetRow, c.mission).metadata)
+      )
+
+    Map.merge(Map.fetch!(entries, id), changes)
+  end
+
   defp all_on(c, manifest), do: Map.new(c.spacecraft, &{&1, manifest})
 
   defp hazardous(c),
@@ -98,27 +108,29 @@ defmodule Cadence.Commanding.CommandTokenTest do
       refute token(c) == before
     end
 
-    test "a change to a craft's command plan changes it", c do
-      before = token(c)
-      other = put_in(c.manifests.base, ["plans", "command", "content_sha256"], "other-content")
+    test "a change to a craft's command plan changes the fleet's command digest", c do
+      digest = fn manifest ->
+        {:ok, fleet} =
+          FleetSnapshot.store(
+            c.mission,
+            Map.new(c.spacecraft, fn id ->
+              {id, entry(c, id, %{"mission_model" => manifest})}
+            end)
+          )
 
-      new_generation!(c, all_on(c, c.manifests.base), fn id, entry ->
-        if id == hd(c.spacecraft), do: Map.put(entry, "mission_model", other), else: entry
-      end)
+        {:ok, digest} = FleetSnapshot.command_digest(FleetSnapshot.metadata(fleet, nil))
+        digest
+      end
 
-      refute token(c) == before
-    end
+      base = c.manifests.base
+      other_plan = put_in(base, ["plans", "command", "plan_id"], "mission_model_plan:other")
+      other_revision = Map.put(base, "revision_id", "mission_model_revision:other")
+      other_monitoring = put_in(base, ["plans", "monitoring", "plan_id"], "mission_model_plan:m")
 
-    test "a craft's commanding switched off changes it", c do
-      before = token(c)
-
-      new_generation!(c, all_on(c, c.manifests.base), fn id, entry ->
-        if id == List.last(c.spacecraft),
-          do: Map.put(entry, "commanding_enabled", false),
-          else: entry
-      end)
-
-      refute token(c) == before
+      refute digest.(other_plan) == digest.(base)
+      # Neither the revision it runs nor its other plans are what a command resolves against.
+      assert digest.(other_revision) == digest.(base)
+      assert digest.(other_monitoring) == digest.(base)
     end
   end
 
