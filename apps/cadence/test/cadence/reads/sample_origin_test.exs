@@ -9,7 +9,7 @@ defmodule Cadence.Reads.SampleOriginTest do
   @moduletag :tmp_dir
 
   alias Cadence.Ingress.RawEvidence
-  alias Cadence.Protocol.{PacketRecord, RecordArchive}
+  alias Cadence.Protocol.{Origin, PacketRecord, RecordArchive}
   alias Cadence.Protocol.RecordArchive.FileSystem
   alias Cadence.Reads.SampleOrigin
   alias Cadence.Repo
@@ -145,13 +145,18 @@ defmodule Cadence.Reads.SampleOriginTest do
       mission_id: mission,
       protocol_family: :tm,
       packet_kind: :space_packet,
+      source_endpoint_ref: origin && origin.source_endpoint_id,
       apid: 42,
       sequence_flags: 3,
       sequence_count: 1,
       secondary_header?: false,
       packet_data: <<1, 2>>,
       receipt_time: @receipt,
-      provenance: if(origin, do: %{origin: origin}, else: %{})
+      provenance:
+        if(origin,
+          do: %{origin: Origin.stored(origin), tm: %{scid: 11, vcid: 2, map_id: nil}},
+          else: %{}
+        )
     }
   end
 

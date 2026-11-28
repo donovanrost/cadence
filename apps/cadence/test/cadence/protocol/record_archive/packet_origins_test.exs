@@ -139,7 +139,10 @@ defmodule Cadence.Protocol.RecordArchive.PacketOriginsTest do
   end
 
   defp packet(mission, id, origin) do
-    provenance = if origin, do: %{origin: origin}, else: %{}
+    provenance =
+      if origin,
+        do: %{origin: Origin.stored(origin), tm: %{scid: 11, vcid: 2, map_id: nil}},
+        else: %{}
 
     %PacketRecord{
       packet_id: id,
@@ -147,6 +150,7 @@ defmodule Cadence.Protocol.RecordArchive.PacketOriginsTest do
       mission_id: mission,
       protocol_family: :tm,
       packet_kind: :space_packet,
+      source_endpoint_ref: origin && origin.source_endpoint_id,
       apid: 42,
       sequence_flags: 3,
       sequence_count: 1,

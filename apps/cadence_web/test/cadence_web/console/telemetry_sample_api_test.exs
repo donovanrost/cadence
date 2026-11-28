@@ -13,7 +13,7 @@ defmodule CadenceWeb.Console.TelemetrySampleAPITest do
   alias Cadence.Ingress.RawEvidence
   alias Cadence.IngressArchive.Postgres.RawEvidenceRow
   alias Cadence.Management.DataSources
-  alias Cadence.Protocol.PacketRecord
+  alias Cadence.Protocol.{Origin, PacketRecord}
   alias Cadence.Protocol.RecordArchive.Postgres.PacketRecordRow
   alias Cadence.Reads.ConsoleSample
   alias Cadence.Repo
@@ -103,13 +103,17 @@ defmodule CadenceWeb.Console.TelemetrySampleAPITest do
         mission_id: c.mission,
         protocol_family: :tm,
         packet_kind: :space_packet,
+        source_endpoint_ref: origin.source_endpoint_id,
         apid: 42,
         sequence_flags: 3,
         sequence_count: 1,
         secondary_header?: false,
         packet_data: <<1, 2>>,
         receipt_time: c.sample.receipt_time,
-        provenance: %{origin: origin}
+        provenance: %{
+          origin: Origin.stored(origin),
+          tm: %{scid: origin.scid, vcid: origin.vcid, map_id: origin.map_id}
+        }
       })
     )
   end

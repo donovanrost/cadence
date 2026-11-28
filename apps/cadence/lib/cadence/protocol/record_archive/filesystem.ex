@@ -124,7 +124,14 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
       if Map.get(entry, "record_kind") == @packet_record_kind and
            Map.get(entry, "mission_id") == mission_id and MapSet.member?(wanted, id) and
            not Map.has_key?(acc, id) do
-        Map.put(acc, id, Origin.from_provenance(Map.get(entry, "provenance")))
+        origin =
+          Origin.rebuild(
+            Map.get(entry, "provenance"),
+            Map.get(entry, "source_endpoint_ref"),
+            Map.get(entry, "apid")
+          )
+
+        Map.put(acc, id, origin)
       else
         acc
       end

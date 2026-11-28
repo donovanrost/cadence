@@ -61,10 +61,11 @@ defmodule Cadence.Protocol.SpacePacketDecoder do
      }}
   end
 
-  # The packet's origin (#1078 E1a): provenance only, so no id depends on it.
+  # The packet's origin (#1078 E1a): provenance only, so no id depends on it. Only the part the
+  # packet's own fields can't give back is archived (`Origin.stored/1`).
   defp with_origin(provenance, raw_evidence, apid) do
     tm = Map.get(provenance, :tm) || %{}
-    Map.put(provenance, :origin, Origin.direct(raw_evidence, tm, apid))
+    Map.put(provenance, :origin, raw_evidence |> Origin.direct(tm, apid) |> Origin.stored())
   end
 
   defp base_provenance(%RawEvidence{} = raw_evidence) do

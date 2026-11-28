@@ -305,8 +305,8 @@ defmodule Cadence.Protocol.RecordArchive do
       do: call_backend(policy, :fetch_packet_records, [mission_id, scope])
 
   @doc """
-  The origin (`Cadence.Protocol.Origin`) of each archived packet named in `packet_ids`, in one
-  lookup: `%{packet_id => origin | nil}`. A packet that is not in the archive (retention dropped it,
+  The origin (`Cadence.Protocol.Origin`, rebuilt whole from the archived packet's stored origin and
+  its own fields) of each archived packet named in `packet_ids`, in one lookup: `%{packet_id => origin | nil}`. A packet that is not in the archive (retention dropped it,
   or it never was) has no key; one archived before origins were recorded maps to `nil`. Scoped to
   the mission.
   """

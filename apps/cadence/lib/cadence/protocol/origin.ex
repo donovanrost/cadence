@@ -10,10 +10,12 @@ defmodule Cadence.Protocol.Origin do
   `source_ref`, as the observation's own context names it). `kind` is `:direct` until a relay
   endpoint routes a frame to its origin craft (E1b, which fills `relay`).
 
-  Where it is kept: on the archived packet (`PacketRecord.provenance.origin`) and, in memory, on the
-  sample (`Cadence.Telemetry.Sample.origin`, runtime only) so a later slice can key per-origin state
-  on it. It is **not** written to the observation store: that row gains nothing in E1a, and a
-  sample's origin is read back from its archived packet (`Cadence.Reads.SampleOrigin`).
+  Where it is kept: on the archived packet, as `PacketRecord.provenance.origin`, only `stored/1` of
+  it (`v`, `kind`, `relay`: the rest is the packet's own fields, rebuilt by `rebuild/3`), and, in
+  memory, whole on the sample (`Cadence.Telemetry.Sample.origin`, runtime only) so a later slice can
+  key per-origin state on it. It is **not** written to the observation store: that row gains
+  nothing in E1a, and a sample's origin is read back from its archived packet
+  (`Cadence.Reads.SampleOrigin`).
   """
 
   alias Cadence.Ingress.RawEvidence
@@ -55,19 +57,53 @@ defmodule Cadence.Protocol.Origin do
   end
 
   @doc """
-  The origin held in a packet's provenance, in the JSON form an archive hands back (string keys,
-  `kind` a string) or as decode built it; `nil` when the packet has none (it was archived before
-  E1a).
+  What the archive keeps of an origin: only what the packet's own fields can't give back (`v`,
+  `kind` and `relay`). The endpoint, SCID, VCID, MAP id and APID duplicate the archived packet's
+  `source_endpoint_ref`, `tm` provenance and `apid`, so storing them again would cost bytes in the
+  protocol archive for nothing (measured on the filesystem backend: +0.1 B per packet against
+  +2 to +7 B per packet compressed, +134 B uncompressed, for the full descriptor).
   """
-  @spec from_provenance(term()) :: map() | nil
-  def from_provenance(%{} = provenance) do
-    case Map.get(provenance, :origin) || Map.get(provenance, "origin") do
-      %{} = origin -> origin
-      _none -> nil
+  @spec stored(t()) :: map()
+  def stored(%{} = origin), do: %{v: origin.v, kind: origin.kind, relay: origin.relay}
+
+  @doc "The full origin of an archived packet (`rebuild/3` over its record)."
+  @spec from_packet(struct()) :: t() | nil
+  def from_packet(%{provenance: provenance, source_endpoint_ref: ref, apid: apid}),
+    do: rebuild(provenance, ref, apid)
+
+  @doc """
+  The full origin rebuilt from a packet's stored one and its own fields: the endpoint it arrived on
+  (`source_endpoint_ref`, else the provenance's `source_ref`, as `direct/3` named it), the frame's
+  SCID, VCID and MAP id (provenance `tm`) and the packet's `apid`. Reads the JSON form an archive
+  hands back (string keys, `kind` a string) as well as decode's. `nil` when the packet has no
+  stored origin (it was archived before E1a).
+  """
+  @spec rebuild(term(), binary() | nil, non_neg_integer() | nil) :: map() | nil
+  def rebuild(%{} = provenance, source_endpoint_ref, apid) do
+    case fetch(provenance, :origin) do
+      %{} = stored ->
+        tm = fetch(provenance, :tm) || %{}
+
+        %{
+          v: fetch(stored, :v),
+          kind: fetch(stored, :kind),
+          source_endpoint_id: source_endpoint_ref || fetch(provenance, :source_ref),
+          scid: fetch(tm, :scid),
+          vcid: fetch(tm, :vcid),
+          map_id: fetch(tm, :map_id),
+          apid: apid,
+          relay: fetch(stored, :relay)
+        }
+
+      _none ->
+        nil
     end
   end
 
-  def from_provenance(_provenance), do: nil
+  def rebuild(_provenance, _source_endpoint_ref, _apid), do: nil
+
+  defp fetch(%{} = map, key), do: Map.get(map, key, Map.get(map, Atom.to_string(key)))
+  defp fetch(_other, _key), do: nil
 
   @doc "An origin as plain JSON values (string keys, atoms as strings)."
   @spec to_json(map()) :: map()

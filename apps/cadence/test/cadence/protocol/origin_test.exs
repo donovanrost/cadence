@@ -31,7 +31,7 @@ defmodule Cadence.Protocol.OriginTest do
     test "a TM packet's origin names its endpoint, frame facts and APID, with no relay" do
       [packet] = decode(frames())
 
-      assert packet.provenance.origin == %{
+      assert Origin.from_packet(packet) == %{
                v: 1,
                kind: :direct,
                source_endpoint_id: "endpoint-e1a",
@@ -41,8 +41,26 @@ defmodule Cadence.Protocol.OriginTest do
                apid: 42,
                relay: nil
              }
+    end
 
-      assert Origin.from_provenance(packet.provenance) == packet.provenance.origin
+    test "the archive keeps only what the packet's own fields can't give back" do
+      [packet] = decode(frames())
+
+      # The endpoint, SCID, VCID, MAP id and APID are the packet's own (source_endpoint_ref, tm,
+      # apid), so the archived origin is v, kind and relay: no duplicated bytes per packet.
+      assert packet.provenance.origin == %{v: 1, kind: :direct, relay: nil}
+      assert packet.provenance.tm.scid == 11
+      assert packet.source_endpoint_ref == "endpoint-e1a"
+      assert packet.apid == 42
+    end
+
+    test "the origin the decoder built is what Origin.direct/3 and stored/1 say" do
+      [packet] = decode(frames())
+      evidence = evidence(frames(), 0)
+      direct = Origin.direct(evidence, packet.provenance.tm, packet.apid)
+
+      assert Origin.stored(direct) == packet.provenance.origin
+      assert Origin.from_packet(packet) == direct
     end
 
     test "a packet's origin is the same however the journal is batched" do
@@ -56,34 +74,61 @@ defmodule Cadence.Protocol.OriginTest do
       assert {:ok, %{packet_records: [recut]}, _rest, _pipeline, _continuity} =
                process(second, byte_size(first), rest, pipeline, continuity)
 
-      assert recut.provenance.origin == whole.provenance.origin
+      assert Origin.from_packet(recut) == Origin.from_packet(whole)
       assert recut.packet_id == whole.packet_id
     end
 
-    test "the origin reads back from an archive entry's JSON (string keys, kind a string)" do
+    test "the origin rebuilds from an archive entry's JSON (string keys, kind a string)" do
       [packet] = decode(frames())
       [entry] = FileSystem.build_entries(evidence(frames(), 0), [], [packet])
       json = entry |> Jason.encode!() |> Jason.decode!()
 
-      assert Origin.from_provenance(json["provenance"]) == %{
-               "v" => 1,
-               "kind" => "direct",
-               "source_endpoint_id" => "endpoint-e1a",
-               "scid" => 11,
-               "vcid" => 2,
-               "map_id" => nil,
-               "apid" => 42,
-               "relay" => nil
+      assert Origin.rebuild(json["provenance"], json["source_endpoint_ref"], json["apid"]) == %{
+               v: 1,
+               kind: "direct",
+               source_endpoint_id: "endpoint-e1a",
+               scid: 11,
+               vcid: 2,
+               map_id: nil,
+               apid: 42,
+               relay: nil
              }
 
-      assert Origin.to_json(packet.provenance.origin) ==
-               Origin.from_provenance(json["provenance"])
+      assert Origin.to_json(Origin.from_packet(packet)) ==
+               Origin.to_json(
+                 Origin.rebuild(json["provenance"], json["source_endpoint_ref"], json["apid"])
+               )
+    end
+
+    test "an endpoint-less packet's origin names its source ref, as decode did" do
+      stored = %{origin: %{v: 1, kind: :direct, relay: nil}, source_ref: "antenna-a", tm: %{}}
+
+      assert %{source_endpoint_id: "antenna-a", scid: nil, apid: 9} =
+               Origin.rebuild(stored, nil, 9)
     end
 
     test "a packet archived before origins were recorded has none" do
-      assert Origin.from_provenance(%{}) == nil
-      assert Origin.from_provenance(%{"evidence_id" => "e"}) == nil
-      assert Origin.from_provenance(nil) == nil
+      assert Origin.rebuild(%{}, "endpoint", 42) == nil
+      assert Origin.rebuild(%{"evidence_id" => "e"}, "endpoint", 42) == nil
+      assert Origin.rebuild(nil, "endpoint", 42) == nil
+    end
+  end
+
+  describe "archive bytes" do
+    test "the origin adds a handful of bytes to an archived entry, not the full descriptor" do
+      [packet] = decode(frames())
+      stripped = %{packet | provenance: Map.delete(packet.provenance, :origin)}
+      full = put_in(packet.provenance[:origin], Origin.from_packet(packet))
+      evidence = evidence(frames(), 0)
+
+      size = fn p ->
+        evidence |> FileSystem.build_entries([], [p]) |> :erlang.term_to_binary() |> byte_size()
+      end
+
+      # Stored: v, kind and relay (what the archive keeps). The full descriptor would add the
+      # endpoint, SCID, VCID, MAP id and APID again.
+      assert size.(packet) - size.(stripped) < 60
+      assert size.(full) - size.(stripped) > 2 * (size.(packet) - size.(stripped))
     end
   end
 
@@ -149,7 +194,7 @@ defmodule Cadence.Protocol.OriginTest do
       [packet] = decode(frames())
 
       for sample <- samples(packet) do
-        assert sample.origin == packet.provenance.origin
+        assert sample.origin == Origin.from_packet(packet)
         refute Map.has_key?(sample.provenance, :origin)
         refute Map.has_key?(sample.provenance, "origin")
       end
@@ -174,7 +219,7 @@ defmodule Cadence.Protocol.OriginTest do
       triggered =
         DerivedSamples.build(update(trigger.sample_id, packet.packet_id), activation(), origins)
 
-      assert triggered.origin == packet.provenance.origin
+      assert triggered.origin == Origin.from_packet(packet)
       assert triggered.packet_id == packet.packet_id
       refute Map.has_key?(triggered.provenance, :origin)
 

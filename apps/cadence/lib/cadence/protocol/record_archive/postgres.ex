@@ -119,10 +119,15 @@ defmodule Cadence.Protocol.RecordArchive.Postgres do
     origins =
       PacketRecordRow
       |> where([packet], packet.mission_id == ^mission_id and packet.packet_id in ^packet_ids)
-      |> select([packet], {packet.packet_id, packet.provenance})
+      |> select([packet], {
+        packet.packet_id,
+        packet.provenance,
+        packet.source_endpoint_ref,
+        packet.apid
+      })
       |> repo(backend_opts).all()
-      |> Map.new(fn {packet_id, provenance} ->
-        {packet_id, Origin.from_provenance(provenance)}
+      |> Map.new(fn {packet_id, provenance, endpoint, apid} ->
+        {packet_id, Origin.rebuild(provenance, endpoint, apid)}
       end)
 
     {:ok, origins}
