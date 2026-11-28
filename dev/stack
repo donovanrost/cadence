@@ -197,6 +197,7 @@ case "$command" in
     (cd "$root/apps/cadence_web" && mise exec -- mix ecto.drop -r Cadence.Repo)
     if docker inspect "$container" >/dev/null 2>&1; then docker rm "$container" >/dev/null; fi
     rm -rf "$root/var/questdb" "$root/var/reflect_orbital"
+    rm -f "$state/seed.ids"
     if [ "$no_seed" = true ]; then "$0" up --no-seed; else "$0" up; fi
     ;;
   up)
@@ -211,9 +212,7 @@ case "$command" in
     start_process console "$root/frontend" corepack pnpm --filter @cadence/console dev --host 127.0.0.1
     wait_http "http://127.0.0.1:$console_port/console/" console
     if [ "$no_seed" = false ]; then
-      for seed in reflect_orbital_demo apogee_qa_personas reflect_orbital_planning apogee_qa_mission; do
-        run_mix run --no-start "../../dev/$seed.exs"
-      done
+      "$0" seed-rest
     fi
     status
     ;;
@@ -226,6 +225,13 @@ case "$command" in
       fi
     done
     MIX_INSTALL_DIR="$state/mix-install" mise exec -- elixir "$root/dev/seed/earendil.exs"
+    if [ -f "$state/seed.ids" ]; then
+      set_env E2E_ORG_ID "$(sed -n '1p' "$state/seed.ids")"
+      set_env E2E_MISSION_ID "$(sed -n '2p' "$state/seed.ids")"
+    else
+      echo "REST seed did not write $state/seed.ids" >&2
+      exit 1
+    fi
     MIX_INSTALL_DIR="$state/mix-install" mise exec -- elixir "$root/dev/seed/qa.exs"
     ;;
 esac

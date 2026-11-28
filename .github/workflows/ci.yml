@@ -610,6 +610,8 @@ jobs:
       EARENDIL_PROVIDER_URL: http://127.0.0.1:4111
       # The public demo token (mise.toml), not a secret.
       EARENDIL_DEMO_PROVIDER_TOKEN: earendil-local-provider
+      EARENDIL_INGRESS_BASE_PORT: "43100"
+      EARENDIL_UPLINK_BASE_PORT: "48100"
       OTEL_EXPORTER_OTLP_ENDPOINT: ""
       # Serve the built console from priv/static/console (browser-assets), not a Vite dev server.
       CONSOLE_VITE_ORIGIN: ""
@@ -618,8 +620,6 @@ jobs:
       CADENCE_ADMIN_DISPLAY_NAME: CI Administrator
       # No dev code reloader or asset watchers on this server (apps/cadence_web/config/dev.exs).
       CADENCE_CI_SERVER: "1"
-      # The demo seed and planning act as this user (default admin@example.com): the CI admin.
-      EARENDIL_DEMO_EMAIL: ci-admin@example.invalid
       BASE_URL: http://127.0.0.1:4402
       E2E_WORKERS: "2"
       CI: "1"
@@ -681,15 +681,14 @@ jobs:
           (mix phx.server > "$RUNNER_TEMP/server.log" 2>&1 &)
           curl --retry-connrefused --retry 120 --retry-delay 1 -fsS -o /dev/null http://127.0.0.1:4402/console/sign-in
           curl -fsS -o /dev/null http://127.0.0.1:4402/console/
-      # Never reflect_orbital_activate.exs (director 11-18); E2E_MUTATE stays unset.
-      - name: Seed the demo, the QA personas and planning (timed)
-        working-directory: apps/cadence_web
+      - name: Seed the demo and QA missions through REST (timed)
         run: |
-          for script in reflect_orbital_demo apogee_qa_personas reflect_orbital_planning; do
-            start=$SECONDS
-            mix run --no-start "../../dev/$script.exs"
-            echo "seed $script: $((SECONDS - start)) s"
-          done
+          start=$SECONDS
+          MIX_INSTALL_DIR="$RUNNER_TEMP/mix-install" elixir dev/seed/earendil.exs
+          MIX_INSTALL_DIR="$RUNNER_TEMP/mix-install" elixir dev/seed/qa.exs
+          echo "E2E_ORG_ID=$(sed -n '1p' var/stack/seed.ids)" >> "$GITHUB_ENV"
+          echo "E2E_MISSION_ID=$(sed -n '2p' var/stack/seed.ids)" >> "$GITHUB_ENV"
+          echo "REST seed wall: $((SECONDS - start)) s"
       - name: Console specs (this shard)
         id: specs
         working-directory: frontend/apps/console
@@ -1077,8 +1076,11 @@ jobs:
         run: |
           set +x
           password=$(openssl rand -base64 30 | tr -d '/+=')
+          persona=$(openssl rand -base64 30 | tr -d '/+=')
           echo "::add-mask::$password"
+          echo "::add-mask::$persona"
           echo "CADENCE_ADMIN_PASSWORD=$password" >> "$GITHUB_ENV"
+          echo "E2E_PERSONA_PASSWORD=$persona" >> "$GITHUB_ENV"
       # The REST client reads the CSRF meta tag from this route; no JS or browser assets run.
       - name: Supply a minimal console shell for CSRF bootstrap
         run: |

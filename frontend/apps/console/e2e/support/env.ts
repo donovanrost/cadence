@@ -51,7 +51,7 @@ export const ADMIN_STORAGE_STATE = storageStateFor("admin");
  */
 export const DEFAULT_STORAGE_STATE = storageStateFor("orgAdmin");
 
-// Seeded demo data (dev/reflect_orbital_demo.exs). Override when testing another dataset.
+// Seeded demo data (dev/seed/earendil.exs). dev/stack writes the generated ids to mise.local.toml.
 export const DEMO = {
   organizationName: process.env["E2E_ORG_NAME"] ?? "Reflect Orbital",
   organizationId: process.env["E2E_ORG_ID"] ?? "org-reflect-orbital-demo",

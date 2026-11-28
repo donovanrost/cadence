@@ -1,6 +1,6 @@
 Code.require_file("rest_client.exs", __DIR__)
 
-defmodule Cadence.Dev.RouteChanges do
+defmodule EarendilRouteChanges do
   @moduledoc "Stages the development fixtures' routing changes through the Console API."
 
   import EarendilRestClient, only: [request!: 3, request!: 4]

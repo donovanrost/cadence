@@ -6,7 +6,7 @@ defmodule QaRestPlanning do
   @anchor "2026-01-01T00:00:00Z"
   @minimum_duration 300
 
-  def seed(client, mission_id) do
+  def seed(client, approver, mission_id) do
     path = "/missions/#{mission_id}/contact-planning"
     {client, policy} = request!(client, :get, path <> "/policy")
 
@@ -22,6 +22,18 @@ defmodule QaRestPlanning do
 
         client
       end
+
+    {client, policy} = request!(client, :get, path <> "/policy")
+
+    if policy["pending"] do
+      {_, result} =
+        request!(approver, :post, path <> "/policy/#{policy["pending"]["version"]}/decision", %{
+          decision: "approve",
+          comment: "Seed Earendil planning policy"
+        })
+
+      unless result["state"] == "active", do: raise("planning policy approval failed")
+    end
 
     count = planning_count!()
     {client, fleet} = request!(client, :get, "/missions/#{mission_id}/spacecraft")
@@ -39,9 +51,9 @@ defmodule QaRestPlanning do
       end)
 
     if spacecraft == [],
-      do: IO.puts("  planning templates wait on the applied Earendil fleet (#745)")
+      do: IO.puts("  planning templates wait on an applied Earendil fleet")
 
-    IO.puts("  planning policy draft and #{length(spacecraft)} recurring templates present")
+    IO.puts("  active planning policy and #{length(spacecraft)} recurring templates present")
     client
   end
 

@@ -1,7 +1,9 @@
 Mix.install([:req, :jason])
 Code.require_file("rest_client.exs", __DIR__)
+Code.require_file("invitations.exs", __DIR__)
 Code.require_file("qa_personas.exs", __DIR__)
 Code.require_file("planning.exs", __DIR__)
+Code.require_file("route_changes.exs", __DIR__)
 Code.require_file("qa_missions.exs", __DIR__)
 
 defmodule QaRestSeed do
@@ -24,8 +26,18 @@ defmodule QaRestSeed do
 
     {client, organization_id, mission_id} = phase("QA scope", fn -> scope(client) end)
     client = phase("QA personas", fn -> QaRestPersonas.seed(client, organization_id) end)
-    client = phase("QA planning", fn -> QaRestPlanning.seed(client, mission_id) end)
-    phase("QA missions", fn -> QaRestMissions.seed(client, organization_id) end)
+
+    {client, approver} =
+      EarendilInvitations.ensure_person(
+        client,
+        organization_id,
+        "qa-org-admin-2@example.com",
+        "organization_admin",
+        "QA Org Admin 2"
+      )
+
+    client = phase("QA planning", fn -> QaRestPlanning.seed(client, approver, mission_id) end)
+    phase("QA missions", fn -> QaRestMissions.seed(client, approver, organization_id) end)
     IO.puts("QA REST seed total: #{elapsed(started)}")
   end
 

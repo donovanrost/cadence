@@ -1,4 +1,7 @@
 Mix.install([:req, :jason])
+Code.require_file("rest_client.exs", __DIR__)
+Code.require_file("invitations.exs", __DIR__)
+Code.require_file("route_changes.exs", __DIR__)
 Code.require_file("earendil_dashboard_import.exs", __DIR__)
 Code.require_file("earendil_orbits.exs", __DIR__)
 Code.require_file("earendil_simulator.exs", __DIR__)
@@ -6,9 +9,15 @@ Code.require_file("earendil_simulator.exs", __DIR__)
 defmodule EarendilSeed do
   @moduledoc false
 
-  import EarendilRestClient, only: [request!: 3, request!: 4, request!: 5, sign_in: 3]
+  alias EarendilRouteChanges, as: RouteChanges
+
+  import EarendilRestClient,
+    only: [request!: 3, request!: 4, request!: 5, request_envelope!: 3, sign_in: 3]
 
   @batch_size 100
+  # #1020: approval admits each craft inside one 15-second database transaction. Keep the seed's
+  # independent reviews bounded until mission-model makes a 1,000-craft approval fixed-query.
+  @configuration_review_batch 250
   @run_id "run-earendil-demo-v1"
   # The simulator's loopback admin token (a public local fixture, allowlisted in .gitleaks.toml).
   @sim_admin_token "earendil-local-admin"
@@ -46,32 +55,61 @@ defmodule EarendilSeed do
     {client, organization_id, mission_id} =
       phase("organization and mission", fn -> scope(client, email) end)
 
-    # D3 (#544): the profile pins a composition only once its catalog is approved, which needs a
-    # second person (#745); until then the profile carries no catalog pin.
-    {client, _revision_id} = phase("catalog import", fn -> seed_catalog(client, mission_id) end)
+    {client, revision_id} = phase("catalog import", fn -> seed_catalog(client, mission_id) end)
+
+    {_client, approver} =
+      phase("second administrator", fn ->
+        EarendilInvitations.ensure_person(
+          client,
+          organization_id,
+          "qa-org-admin-2@example.com",
+          "organization_admin",
+          "QA Org Admin 2"
+        )
+      end)
+
+    phase("catalog approval", fn -> approve_catalog(approver, mission_id, revision_id) end)
+    {client, catalog} = request!(client, :get, "/missions/#{mission_id}/catalog")
+    composition_id = get_in(catalog, ["database", "current_revision", "composition_id"])
+    unless composition_id, do: fail!("catalog pin", "current revision has no composition_id")
     site_rows = Enum.take(@site_rows, sites)
     phase("simulator run", fn -> EarendilSimulator.ensure(count, site_rows, @sim_admin_token) end)
 
-    {client, _provider_id} =
+    deliveries =
+      phase("simulator delivery profiles", fn ->
+        EarendilSimulator.ensure_deliveries(site_rows)
+      end)
+
+    {client, provider} =
       phase("provider account and mission provider", fn ->
         ensure_provider(client, organization_id, mission_id)
       end)
 
     client = phase("dashboard source probe", fn -> probe_dashboard_source(client, mission_id) end)
-    seed_fleet(client, mission_id, count, site_rows)
+    client = seed_fleet(client, approver, mission_id, count, site_rows, composition_id)
+
+    client =
+      phase("provider transports and spacecraft routes", fn ->
+        seed_routes(client, approver, mission_id, count, site_rows, provider, deliveries)
+      end)
+
+    client =
+      phase("spacecraft sources and configuration drafts", fn ->
+        seed_configurations(client, approver, mission_id, count)
+      end)
+
     client = phase("orbits", fn -> EarendilOrbits.seed(client, mission_id) end)
     phase("dashboard import", fn -> seed_dashboards(client, organization_id, mission_id) end)
 
     IO.puts("Earendil: organization #{organization_id}, mission #{mission_id}")
 
-    IO.puts("  #{sites} station and profile changes await the fleet's independent review")
-    IO.puts("  second-person invitations and approval wait on #745")
+    IO.puts("  #{sites} station and profile changes approved by the second administrator")
 
-    IO.puts(
-      "  the profile's catalog pin waits on catalog approval (#745), then Setup › Catalog › Roll out"
-    )
+    IO.puts("  configuration activation approved by the second administrator")
 
-    IO.puts("  spacecraft configuration drafts wait on an applied fleet and bulk review #734")
+    ids_path = Path.expand("../../var/stack/seed.ids", __DIR__)
+    File.mkdir_p!(Path.dirname(ids_path))
+    File.write!(ids_path, "#{organization_id}\n#{mission_id}\n")
     IO.puts("total: #{elapsed(started)}")
   end
 
@@ -130,6 +168,40 @@ defmodule EarendilSeed do
         await_catalog(client, path, run_id, remaining - 1)
     end
   end
+
+  defp approve_catalog(approver, mission_id, catalog_revision_id) do
+    path = "/missions/#{mission_id}/mission-model-revisions"
+    {approver, candidates} = request!(approver, :get, path)
+
+    case Enum.find(candidates["revisions"], &catalog_revision?(&1, catalog_revision_id)) do
+      nil ->
+        # An idempotent rerun has no candidate after approval.
+        {_, approved} = request!(approver, :get, path <> "?status=approved")
+
+        unless Enum.any?(approved["revisions"], &catalog_revision?(&1, catalog_revision_id)),
+               do: fail!("catalog approval", "revision is neither candidate nor approved")
+
+      revision ->
+        revision_path = path <> "/#{revision["id"]}"
+
+        {approver, comparison} =
+          request!(approver, :post, revision_path <> "/comparison", %{})
+
+        unless comparison["passed"], do: fail!("catalog comparison", comparison)
+
+        {_, approved} =
+          request!(approver, :post, revision_path <> "/approve", %{
+            comparison_report_id: comparison["report_id"]
+          })
+
+        unless approved["status"] == "approved", do: fail!("catalog approval", approved)
+    end
+
+    :ok
+  end
+
+  defp catalog_revision?(revision, id),
+    do: get_in(revision, ["catalog_revision", "id"]) == id
 
   @verified_commands ~w(NOOP RESET_COUNTERS SET_MODE)
   @verifiers """
@@ -237,29 +309,359 @@ defmodule EarendilSeed do
     unless validate["result"]["ok"], do: fail!("provider validate", validate["result"])
     {client, sync} = request!(client, :post, provider_path <> "/#{provider_id}/sync", %{})
     unless sync["result"]["ok"], do: fail!("provider sync", sync["result"])
-    {client, provider_id}
+    {client, sync["provider"]}
   end
 
-  defp seed_fleet(client, mission_id, count, site_rows) do
+  defp seed_fleet(client, approver, mission_id, count, site_rows, composition_id) do
     {client, existing} =
       phase("fleet read", fn ->
-        {client, body} = request!(client, :get, "/missions/#{mission_id}/spacecraft")
-        {client, MapSet.new(Enum.map(body["spacecraft"], & &1["scid"]))}
+        fleet_scids(client, mission_id, nil, MapSet.new())
       end)
 
     missing = Enum.reject(1..count, &MapSet.member?(existing, &1))
     {client, config} = request!(client, :get, "/missions/#{mission_id}/config")
 
-    cond do
-      missing == [] ->
-        IO.puts("Earendil fleet: #{count} spacecraft already present")
+    client =
+      cond do
+        missing == [] ->
+          IO.puts("Earendil fleet: #{count} spacecraft already present")
+          client
 
-      config["change_set"] ->
-        IO.puts("Earendil fleet: a change set is open; review it before rerunning the seed")
+        config["change_set"] ->
+          IO.puts("Earendil fleet: resuming the open change set")
+          client
 
-      true ->
-        stage_fleet(client, mission_id, missing, site_rows)
+        true ->
+          stage_fleet(client, mission_id, missing, site_rows, composition_id)
+      end
+
+    approve_change_set(client, approver, mission_id)
+    client
+  end
+
+  defp fleet_scids(client, mission_id, cursor, found) do
+    path = "/missions/#{mission_id}/spacecraft?limit=500"
+    path = if cursor, do: path <> "&cursor=" <> URI.encode_www_form(cursor), else: path
+    {client, envelope} = request_envelope!(client, :get, path)
+    found = Enum.reduce(envelope["data"]["spacecraft"], found, &MapSet.put(&2, &1["scid"]))
+
+    case get_in(envelope, ["meta", "next_cursor"]) do
+      nil -> {client, found}
+      next -> fleet_scids(client, mission_id, next, found)
     end
+  end
+
+  defp approve_change_set(client, approver, mission_id) do
+    path = "/missions/#{mission_id}/config"
+    {client, %{"change_set" => set}} = request!(client, :get, path)
+
+    set =
+      if set && set["state"] == "open" do
+        {_, submitted} =
+          request!(client, :post, path <> "/change-sets/#{set["id"]}/submit", %{
+            reason: "Seed synthetic Earendil fleet",
+            expected_version: set["version"]
+          })
+
+        submitted
+      else
+        set
+      end
+
+    if set && set["state"] == "in_review" do
+      {_, approved} =
+        request!(
+          approver,
+          :post,
+          path <> "/change-sets/#{set["change_set_id"] || set["id"]}/review",
+          %{
+            decision: "approve",
+            expected_version: set["version"]
+          }
+        )
+
+      unless approved["state"] == "applied", do: fail!("fleet approval", approved)
+    end
+  end
+
+  defp seed_routes(client, approver, mission_id, count, site_rows, provider, deliveries) do
+    {client, %{"transports" => transports}} =
+      request!(client, :get, "/missions/#{mission_id}/transports")
+
+    present = MapSet.new(transports, & &1["id"])
+    sites = length(site_rows)
+
+    transport_ops =
+      Enum.flat_map(site_rows, fn {slug, name, _region, _code, _lat, _lon, _antennas} ->
+        site_id = "earendil-#{slug}"
+        station_id = "ground_station_earendil_#{String.replace(slug, "-", "_")}"
+
+        for {direction, suffix, service_id} <- [
+              {"downlink", "", "service-realtime-ttc-downlink"},
+              {"uplink", "-uplink", "service-realtime-ttc-uplink"}
+            ],
+            id = "transport-#{site_id}#{suffix}",
+            not MapSet.member?(present, id) do
+          delivery = deliveries[site_id][direction]
+
+          %{
+            kind: "transport",
+            action: "create",
+            entity_id: id,
+            document: %{
+              display_name: "#{name} S-band #{direction}",
+              origin: "provider_managed",
+              ground_station_id: station_id,
+              mission_provider_id: provider["id"],
+              mission_provider_version: provider["version"],
+              service_profile_ref: %{id: service_id, version: 1},
+              delivery_profile_ref: %{id: delivery["id"], version: delivery["version"]},
+              metadata: %{"ground_station_id" => site_id, "synthetic" => true}
+            }
+          }
+        end
+      end)
+
+    existing =
+      RouteChanges.extra_route_ids(
+        client,
+        mission_id,
+        "spacecraft_type_earendil_demo"
+      )
+
+    routes =
+      1..count
+      |> Enum.flat_map(fn index ->
+        craft_id =
+          "spacecraft-earendil-#{index |> Integer.to_string() |> String.pad_leading(3, "0")}"
+
+        primary = Enum.at(site_rows, rem(index - 1, sites))
+        candidate = Enum.at(site_rows, rem(index - 1 + div(sites, 2), sites))
+
+        [
+          route_op(craft_id, primary, "primary", "primary", "none"),
+          route_op(craft_id, candidate, "candidate", "candidate", "none"),
+          route_op(craft_id, primary, "uplink", "none", "primary")
+        ]
+      end)
+      |> Enum.reject(&MapSet.member?(existing, &1.entity_id))
+
+    case RouteChanges.submit(
+           client,
+           mission_id,
+           "earendil-routes",
+           "Seed Earendil extra routes",
+           transport_ops ++ routes
+         ) do
+      :applied -> :ok
+      {:in_review, _id, _version} -> approve_change_set(client, approver, mission_id)
+    end
+
+    IO.puts("  #{count} craft with two downlinks and one uplink route")
+    client
+  end
+
+  defp route_op(craft_id, {slug, name, _, _, _, _, _}, role, downlink, uplink) do
+    site_id = "earendil-#{slug}"
+    station_id = "ground_station_earendil_#{String.replace(slug, "-", "_")}"
+    transport_id = "transport-#{site_id}#{if role == "uplink", do: "-uplink", else: ""}"
+
+    RouteChanges.route(
+      "spacecraft_route_#{craft_id}-#{role}",
+      craft_id,
+      station_id,
+      transport_id,
+      "#{name} — #{role}",
+      "TT&C #{if role == "uplink", do: "uplink", else: "downlink"}",
+      downlink,
+      uplink
+    )
+  end
+
+  defp seed_configurations(client, approver, mission_id, count) do
+    {client, catalog} = request!(client, :get, "/missions/#{mission_id}/catalog")
+    revision_id = get_in(catalog, ["database", "current_revision", "id"])
+    unless revision_id, do: fail!("configuration", "catalog revision is missing")
+
+    first_id = "spacecraft-earendil-001"
+
+    packet_path =
+      "/missions/#{mission_id}/spacecraft/#{first_id}/configuration/workspace/catalogs/#{revision_id}/packets"
+
+    {client, packet_choices} = request!(client, :get, packet_path)
+    apids = packet_choices["packets"] |> Enum.map(& &1["apid"]) |> Enum.uniq() |> Enum.sort()
+    unless length(apids) == 10, do: fail!("configuration", "expected 10 catalog packet APIDs")
+
+    {reviews, switches} =
+      1..count
+      |> Task.async_stream(
+        &seed_one_configuration(client, mission_id, &1, revision_id, apids),
+        max_concurrency: 8,
+        timeout: :infinity,
+        ordered: false
+      )
+      |> Enum.reduce({[], []}, fn
+        {:ok, {index, id, token, review?, switch?}}, {reviews, switches} ->
+          if rem(index, 50) == 0, do: IO.puts("  configured #{index}/#{count} spacecraft")
+
+          {if(review?, do: [{id, token} | reviews], else: reviews),
+           if(switch?, do: [id | switches], else: switches)}
+
+        {:exit, reason}, _acc ->
+          fail!("configuration worker", reason)
+      end)
+
+    IO.puts("  #{count} spacecraft sources, Telemetry Decom installations and saved drafts")
+    if reviews != [], do: review_configurations(client, approver, mission_id, reviews)
+    if switches != [], do: enable_switches(client, approver, mission_id, switches)
+    client
+  end
+
+  defp seed_one_configuration(client, mission_id, index, revision_id, apids) do
+    id = "spacecraft-earendil-#{index |> Integer.to_string() |> String.pad_leading(3, "0")}"
+    name = "EARENDIL-#{index |> Integer.to_string() |> String.pad_leading(3, "0")}"
+    base = "/missions/#{mission_id}/spacecraft/#{id}"
+    {client, source_id} = ensure_source(client, base, name)
+    client = ensure_decom(client, base)
+    {_client, snapshot, document} = ensure_configuration(client, base, revision_id, source_id, apids)
+
+    review? = is_nil(snapshot["active"]) or snapshot["active"]["document"] != document
+
+    switch? =
+      get_in(snapshot, ["switches", "telemetry_enabled", "value"]) != true or
+        get_in(snapshot, ["switches", "commanding_enabled", "value"]) != true
+
+    {index, id, snapshot["token"], review?, switch?}
+  end
+
+  defp ensure_source(client, base, name) do
+    {client, sources} = request!(client, :get, base <> "/source-endpoints")
+    source = Enum.find(sources, &(&1["source_ref"] == name))
+
+    {client, source} =
+      if source do
+        {client, source}
+      else
+        request!(client, :post, base <> "/source-endpoints", %{
+          source_endpoint: %{
+            source_ref: name,
+            display_name: "#{name} TT&C",
+            metadata: %{"synthetic" => true, "fixture" => "reflect-orbital-v1"}
+          }
+        })
+      end
+
+    {client, source["source_endpoint_id"] || fail!("configuration", "source id missing")}
+  end
+
+  defp ensure_decom(client, base) do
+    {client, apps} = request!(client, :get, base <> "/apps")
+    decom = Enum.find(apps["apps"], &(&1["key"] == "telemetry_decom"))
+
+    if decom && decom["state"] == "installed" do
+      client
+    else
+      {client, _installed} =
+        request!(client, :post, base <> "/apps/telemetry_decom/install", %{})
+
+      client
+    end
+  end
+
+  defp ensure_configuration(client, base, revision_id, source_id, apids) do
+    workspace = base <> "/configuration/workspace"
+    {client, snapshot} = request!(client, :get, workspace)
+
+    document =
+      snapshot["document"]
+      |> Map.put("catalog_revision_id", revision_id)
+      |> Map.put("telemetry_source_endpoint_id", source_id)
+      |> Map.put("handled_apids", apids)
+
+    snapshot =
+      if snapshot["saved_version"] && snapshot["document"] == document &&
+           snapshot["external_changes"] == false do
+        snapshot
+      else
+        {_, saved} =
+          request!(client, :put, workspace <> "/draft", %{
+            token: snapshot["token"],
+            document: document
+          })
+
+        saved
+      end
+
+    {client, snapshot, document}
+  end
+
+  defp review_configurations(client, approver, mission_id, reviews) do
+    base = "/missions/#{mission_id}"
+
+    reviews
+    |> Enum.sort_by(&elem(&1, 0))
+    |> Enum.chunk_every(@configuration_review_batch)
+    |> Enum.reduce(client, fn batch, client ->
+      {first_id, _} = hd(batch)
+
+      {client, first} =
+        request!(client, :get, base <> "/spacecraft/#{first_id}/configuration/workspace")
+
+      {client, requested} =
+        request!(client, :post, base <> "/configuration/reviews", %{
+          spacecraft: Map.new(batch),
+          policy_token: get_in(first, ["approval", "policy_token"]),
+          intent: "review"
+        })
+
+      unless requested["state"] == "approval_pending",
+        do: fail!("configuration review", requested)
+
+      {_, approved} =
+        request!(
+          approver,
+          :post,
+          base <> "/activations/#{requested["request_id"]}/approve",
+          %{reason: "Seed Earendil configuration activation"}
+        )
+
+      unless approved["outcome"] == "applied",
+        do: fail!("configuration approval", approved)
+
+      IO.puts(
+        "  bulk configuration review approved for #{requested["spacecraft_count"]} spacecraft"
+      )
+
+      client
+    end)
+  end
+
+  defp enable_switches(client, approver, mission_id, ids) do
+    ops =
+      Enum.map(ids, fn id ->
+        %{
+          kind: "spacecraft",
+          action: "update",
+          entity_id: id,
+          changes: [
+            %{path: "telemetry_enabled", value: true},
+            %{path: "commanding_enabled", value: true}
+          ]
+        }
+      end)
+
+    case RouteChanges.submit(
+           client,
+           mission_id,
+           "earendil-switches",
+           "Enable Earendil telemetry and commanding",
+           ops
+         ) do
+      :applied -> :ok
+      {:in_review, _id, _version} -> approve_change_set(client, approver, mission_id)
+    end
+
+    IO.puts("  telemetry and commanding switches enabled for #{length(ids)} spacecraft")
   end
 
   defp seed_dashboards(client, organization_id, mission_id) do
@@ -279,7 +681,7 @@ defmodule EarendilSeed do
 
       client
     else
-      IO.puts("  six Earendil dashboards await the first 10 applied spacecraft and #745 approval")
+      IO.puts("  six Earendil dashboards await the first 10 applied spacecraft")
       client
     end
   end
@@ -295,21 +697,21 @@ defmodule EarendilSeed do
     client
   end
 
-  defp stage_fleet(client, mission_id, missing, site_rows) do
+  defp stage_fleet(client, mission_id, missing, site_rows, composition_id) do
     {client, setup} =
       phase("stage sites and profile", fn ->
-        stage_setup(client, mission_id, site_rows)
+        stage_setup(client, mission_id, site_rows, composition_id)
       end)
 
     {client, staged} =
       phase("stage #{length(missing)} spacecraft", fn ->
         Enum.reduce(Enum.chunk_every(missing, @batch_size), {client, setup}, fn batch,
                                                                                 {client, _last} ->
-          stage_batch(client, mission_id, batch)
+          stage_batch(client, mission_id, batch, composition_id)
         end)
       end)
 
-    {_client, result} =
+    {client, result} =
       phase("submit fleet for review", fn ->
         request!(
           client,
@@ -323,15 +725,13 @@ defmodule EarendilSeed do
       "Earendil fleet: #{result["state"]} (#{length(missing)} spacecraft, change set #{staged["change_set_id"]})"
     )
 
-    if result["state"] == "in_review",
-      do:
-        IO.puts("  approval waits on #745: invite a second person and use that person's session")
+    client
   end
 
-  defp stage_setup(client, mission_id, site_rows) do
+  defp stage_setup(client, mission_id, site_rows, composition_id) do
     station_ops = Enum.map(site_rows, &station_op/1)
 
-    ops = station_ops ++ [profile_op()]
+    ops = station_ops ++ [profile_op(composition_id)]
     path = "/missions/#{mission_id}/config"
     {client, preview} = request!(client, :post, path <> "/preview", %{ops: ops})
     unless preview["verdict"] == "go", do: fail!("setup preview", preview)
@@ -343,7 +743,7 @@ defmodule EarendilSeed do
     })
   end
 
-  defp profile_op do
+  defp profile_op(composition_id) do
     %{
       kind: "spacecraft_profile",
       action: "create",
@@ -354,6 +754,7 @@ defmodule EarendilSeed do
         uplink_protocol: "tc",
         frame_parameters: %{frame_size: 1115, ocf_length: 0, fecf: false},
         applications: %{telemetry_decom: %{}},
+        composition_id: composition_id,
         metadata: %{"synthetic" => true, "fixture" => "reflect-orbital-v1"}
       }
     }
@@ -382,12 +783,12 @@ defmodule EarendilSeed do
     }
   end
 
-  defp stage_batch(client, mission_id, batch) do
+  defp stage_batch(client, mission_id, batch, composition_id) do
     ops = Enum.map(batch, &spacecraft_op/1)
 
     {client, preview} =
       request!(client, :post, "/missions/#{mission_id}/config/preview", %{
-        ops: [profile_op() | ops]
+        ops: [profile_op(composition_id) | ops]
       })
 
     unless preview["verdict"] == "go", do: fail!("fleet preview", preview)
