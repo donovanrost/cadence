@@ -31,14 +31,11 @@ export type ProviderChoice = Decoded<typeof choice>;
 
 /**
  * #993 (DECISIONS #115): a delivery the listening transport could use but for the provider's
- * egress addresses is listed with `egress_addresses_ready: false`. Absent before #993: ready.
+ * egress addresses is listed with `egress_addresses_ready: false`.
  */
-const delivery = d.object({
-  ...choiceShape,
-  egress_addresses_ready: d.optional(d.boolean),
-});
+const delivery = d.object({ ...choiceShape, egress_addresses_ready: d.boolean });
 export type DeliveryChoice = Decoded<typeof delivery>;
-export const egressReady = (c: DeliveryChoice) => c.egress_addresses_ready !== false;
+export const egressReady = (c: DeliveryChoice) => c.egress_addresses_ready;
 export const EGRESS_NOT_READY = "the provider hasn't given the addresses it connects from";
 
 /** #993: derive's coded refusals on delivery_profile_ref (setup.md, transport). */

@@ -11,7 +11,7 @@ import {
 const chosen = {
   providers: [{ id: "provider_north", version: 3, name: "Northlight" }],
   services: [{ id: "svc_s_band", version: 2, name: "S-band contacts" }],
-  deliveries: [{ id: "dlv_tcp", version: 5, name: "TCP to Cadence" }],
+  deliveries: [{ id: "dlv_tcp", version: 5, name: "TCP to Cadence", egress_addresses_ready: true }],
   preview: {
     configuration: [
       { label: "Host", value: "gs.northlight.example" },
@@ -29,7 +29,12 @@ describe("provider-options reader", () => {
     const r = decode(providerOptionsReader, chosen);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.value.deliveries[0]).toEqual({ id: "dlv_tcp", version: 5, name: "TCP to Cadence" });
+    expect(r.value.deliveries[0]).toEqual({
+      id: "dlv_tcp",
+      version: 5,
+      name: "TCP to Cadence",
+      egress_addresses_ready: true,
+    });
     expect(r.value.preview?.summary).toEqual([
       { label: "Endpoint", value: "gs.northlight.example:7000" },
     ]);
@@ -63,17 +68,16 @@ describe("provider-options reader", () => {
 });
 
 describe("egress addresses (#993, DECISIONS #115)", () => {
-  it("reads each delivery's egress_addresses_ready; absent (before #993) is ready", () => {
+  it("reads each delivery's egress_addresses_ready", () => {
     const r = decode(providerOptionsReader, {
       ...chosen,
       deliveries: [
         { id: "dlv_a", version: 1, name: "Ready", egress_addresses_ready: true },
         { id: "dlv_b", version: 1, name: "Not ready", egress_addresses_ready: false },
-        { id: "dlv_c", version: 1, name: "Older server" },
       ],
     });
     if (!r.ok) throw new Error(JSON.stringify(r.error));
-    expect(r.value.deliveries.map(egressReady)).toEqual([true, false, true]);
+    expect(r.value.deliveries.map(egressReady)).toEqual([true, false]);
   });
 
   it("words the three coded refusals; an unknown or absent code keeps derive's sentence", () => {
