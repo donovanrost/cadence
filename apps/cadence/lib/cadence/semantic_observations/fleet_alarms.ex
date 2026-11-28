@@ -95,12 +95,27 @@ defmodule Cadence.SemanticObservations.FleetAlarms do
   # All locks of a batch are taken in one sorted order (mission, then spacecraft) across missions,
   # so two batches cannot wait on each other. The key has its own namespace: the ground-limit
   # summary's locks (`telemetry_fleet_limit/`) do not serialize with these.
+  # One statement for every lock, taken in the order given (the keys are sorted: the lock-order
+  # discipline that keeps two writers from deadlocking). The `OFFSET 0` keeps the planner from
+  # flattening the ordered subquery, so the function runs row by row in that order.
+  defp lock_spacecraft(_repo, []), do: :ok
+
   defp lock_spacecraft(repo, keys) do
-    Enum.each(keys, fn {mission_id, spacecraft_id} ->
-      repo.query!("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [
+    names =
+      Enum.map(keys, fn {mission_id, spacecraft_id} ->
         "semantic_fleet_alarm/" <> mission_id <> "/" <> spacecraft_id
-      ])
-    end)
+      end)
+
+    repo.query!(
+      """
+      SELECT pg_advisory_xact_lock(hashtextextended(name, 0))
+      FROM (SELECT name FROM unnest($1::text[]) WITH ORDINALITY AS t(name, position)
+            ORDER BY position OFFSET 0) ordered
+      """,
+      [names]
+    )
+
+    :ok
   end
 
   @doc """

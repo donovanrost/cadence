@@ -128,19 +128,24 @@ defmodule Cadence.Alarms.Episodes do
   end
 
   @doc """
-  Clears the mission's active catalog-monitoring episodes whose policy is not among
-  `live_policy_ids`, with cause `rule_retired` (#451 T3b): a generation dropped the rule, so
-  nothing will evaluate it again and its episode would stay open for ever. Returns the spacecraft
-  of the episodes cleared (`nil` for a mission-wide one).
+  Clears the mission's active catalog-monitoring episodes whose policy is no longer live on their
+  spacecraft, with cause `rule_retired` (#451 T3b): a generation dropped the rule for that craft, so
+  nothing will evaluate it there again and its episode would stay open for ever. `live?` is
+  `fn spacecraft_id | nil, policy_id -> boolean` (`SemanticObservations.LivePolicies.live?/3`).
+  Returns the spacecraft of the episodes cleared (`nil` for a mission-wide one).
 
   The clears run under the episodes' row locks and only touch active ones, so a second run, or a
   second node, finds nothing to clear; the event id derives from the episode and `ref` (the
   generation's) all the same (DECISIONS #99). An episode that records no policy is left alone.
   """
-  @spec retire_rules(module(), String.t(), [String.t()], String.t(), DateTime.t()) ::
-          {:ok, [String.t() | nil]}
-  def retire_rules(repo, mission_id, live_policy_ids, ref, at) do
-    live = MapSet.new(live_policy_ids)
+  @spec retire_rules(
+          module(),
+          String.t(),
+          (String.t() | nil, String.t() -> boolean()),
+          String.t(),
+          DateTime.t()
+        ) :: {:ok, [String.t() | nil]}
+  def retire_rules(repo, mission_id, live?, ref, at) when is_function(live?, 2) do
     at = usec(at)
 
     retired =
@@ -153,23 +158,61 @@ defmodule Cadence.Alarms.Episodes do
       |> repo.all()
       |> Enum.filter(fn episode ->
         policy = Map.get(episode.context, "policy_id")
-        is_binary(policy) and not MapSet.member?(live, policy)
+        is_binary(policy) and not live?.(episode.spacecraft_id, policy)
       end)
 
-    Enum.each(retired, fn episode ->
-      observation = %{
-        # One per episode: a source ref is unique within the mission.
-        ref: "#{ref}:#{episode.episode_id}",
-        event_id: Canonical.content_id("alarm_event", {episode.episode_id, "rule_retired", ref}),
-        value: nil,
-        observed_at: at,
-        evaluated_at: at
-      }
-
-      clear(repo, episode, observation, :rule_retired)
-    end)
+    clear_retired(repo, retired, ref, at)
 
     {:ok, Enum.map(retired, & &1.spacecraft_id)}
+  end
+
+  # The retired episodes cleared in bulk (a statement per 5,000, however many alarms): one `cleared`
+  # event each (a deterministic id, a source ref per episode, which is unique in the mission) and
+  # the episodes updated, those nobody acknowledged flagged as cleared unacknowledged.
+  defp clear_retired(_repo, [], _ref, _at), do: :ok
+
+  defp clear_retired(repo, retired, ref, at) do
+    retired
+    |> Enum.chunk_every(5_000)
+    |> Enum.each(fn chunk ->
+      events =
+        Enum.map(chunk, fn episode ->
+          %{
+            event_id:
+              Canonical.content_id("alarm_event", {episode.episode_id, "rule_retired", ref}),
+            episode_id: episode.episode_id,
+            organization_id: episode.organization_id,
+            mission_id: episode.mission_id,
+            kind: "cleared",
+            at: at,
+            source_ref: "#{ref}:#{episode.episode_id}",
+            payload: %{
+              "cause" => "rule_retired",
+              "value" => nil,
+              "unacknowledged" => is_nil(episode.acknowledged_at)
+            }
+          }
+        end)
+
+      repo.insert_all(EpisodeEventRow, events, on_conflict: :nothing)
+
+      for {unacknowledged?, rows} <- Enum.group_by(chunk, &is_nil(&1.acknowledged_at)) do
+        ids = Enum.map(rows, & &1.episode_id)
+
+        repo.update_all(
+          from(e in EpisodeRow, where: e.episode_id in ^ids),
+          set: [
+            state: "cleared",
+            cleared_at: at,
+            cleared_by_ref: ref,
+            cleared_unacknowledged: unacknowledged?,
+            last_evaluated_at: at
+          ]
+        )
+      end
+    end)
+
+    :ok
   end
 
   @doc "Applies observations in time order per subject. Returns how many changed an episode."
