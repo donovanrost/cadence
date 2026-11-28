@@ -42,6 +42,21 @@ defmodule Cadence.Reads.MonitoredParameters do
     end
   end
 
+  @doc """
+  The parameters the active plan evaluates on at least one spacecraft (the mission's, plus what any
+  craft's own entries add): "does this point have limits at all", whatever the spacecraft.
+  """
+  @spec anywhere(binary(), binary(), keyword()) :: MapSet.t(binary())
+  def anywhere(organization_id, mission_id, opts \\ []) do
+    case summary(organization_id, mission_id, opts) do
+      {:ok, %{mission: mission, craft: craft}} ->
+        Enum.reduce(craft, mission, fn {_id, %{on: on}}, acc -> MapSet.union(acc, on) end)
+
+      :none ->
+        MapSet.new()
+    end
+  end
+
   @doc "Whether the active plan evaluates any parameter on any craft."
   @spec configured?(binary(), binary(), keyword()) :: boolean()
   def configured?(organization_id, mission_id, opts \\ []) do

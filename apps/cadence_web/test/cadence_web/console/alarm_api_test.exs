@@ -1,6 +1,7 @@
 defmodule CadenceWeb.Console.AlarmAPITest do
   use CadenceWeb.ConnCase, async: false
 
+  alias Cadence.MonitoringPlanFixtures
   alias CadenceWeb.MissionReadModelFixtures
   alias CadenceWeb.TestFixtures
 
@@ -21,32 +22,13 @@ defmodule CadenceWeb.Console.AlarmAPITest do
 
   # The runtime's latest alarm states (#451 T3c): HK.counter in a warning, HK.voltage back in normal.
   defp seed_alarm_states(c) do
-    now = DateTime.utc_now()
+    org = c.org.organization_id
+    mission = c.mission.mission_id
+    MonitoringPlanFixtures.alarm_state!(org, mission, "spacecraft-001", "HK.counter", "warning")
 
-    for {parameter, state, seconds} <- [
-          {"HK.counter", "warning", 60},
-          {"HK.voltage", "normal", 30}
-        ] do
-      {1, _} =
-        Cadence.Repo.insert_all(Cadence.SemanticObservations.LatestAlarmStateRow, [
-          %{
-            organization_id: c.org.organization_id,
-            mission_id: c.mission.mission_id,
-            spacecraft_scope_id: "spacecraft-001",
-            spacecraft_id: "spacecraft-001",
-            parameter_id: parameter,
-            policy_id: "policy-#{parameter}",
-            evaluation_id: "eval-#{parameter}",
-            transition_id: "transition-#{parameter}",
-            effective_state: state,
-            generation_time: DateTime.add(now, -seconds, :second),
-            receipt_time: DateTime.add(now, -seconds, :second),
-            state_document: Cadence.Persistence.JsonDocument.wrap_value(%{}),
-            inserted_at: now,
-            updated_at: now
-          }
-        ])
-    end
+    MonitoringPlanFixtures.alarm_state!(org, mission, "spacecraft-001", "HK.voltage", "normal",
+      seconds_ago: 30
+    )
   end
 
   describe "with live alarm states" do

@@ -6,15 +6,15 @@ defmodule Cadence.Reads.PointSearch do
   substring of id, name or description. With a `spacecraft_id`, each point
   also carries its latest value and limit state for that spacecraft: live from
   the current-value store, or (`source: :history`) the newest stored sample when
-  the live store has none since a restart. The limit state comes from the limit
-  projection either way (`no_data` when it has none for the point).
+  the live store has none since a restart. The limit state comes from the runtime's alarm states and
+  the compiled plan either way (`Reads.PointLimitState`; `no_data` when nothing monitors the point
+  on that spacecraft).
   Callers authorize first.
   """
 
   alias Cadence.Governance
-  alias Cadence.Limits.Event
   alias Cadence.Ops.PointCatalog
-  alias Cadence.Reads.{Limits, Telemetry}
+  alias Cadence.Reads.{MonitoredParameters, PointLimitState, Telemetry}
   alias Cadence.Telemetry.PointLatest
 
   @max_limit 200
@@ -25,32 +25,37 @@ defmodule Cadence.Reads.PointSearch do
     query = opts |> Map.get(:q, "") |> to_string() |> String.trim() |> String.downcase()
     limit = opts |> Map.get(:limit, 50) |> min(@max_limit)
 
+    catalog = PointCatalog.list_points(organization_id, mission_id)
+
     points =
-      (raw(organization_id, mission_id) ++ derived(organization_id, mission_id))
+      (raw(catalog) ++ derived(organization_id, mission_id))
       |> Enum.uniq_by(& &1.id)
       |> Enum.sort_by(& &1.id)
       |> Enum.filter(&matches?(&1, query))
       |> Enum.take(limit)
-      |> with_has_limits(organization_id, mission_id)
+      |> with_has_limits(organization_id, mission_id, catalog)
 
     case opts[:spacecraft_id] do
       nil -> Enum.map(points, &Map.put(&1, :latest, nil))
-      spacecraft_id -> with_latest(organization_id, mission_id, spacecraft_id, points)
+      spacecraft_id -> with_latest(organization_id, mission_id, spacecraft_id, points, catalog)
     end
   end
 
-  # ux T1: whether the point has an active limit definition at all, so 'No limits' (false) reads
-  # apart from 'Not checked yet' (true, with limit_state no_data). Point-level: a point's limits
-  # exist with or without a sample.
-  defp with_has_limits(points, organization_id, mission_id) do
-    limited = Limits.limited_point_ids(organization_id, mission_id)
-    Enum.map(points, &Map.put(&1, :has_limits, MapSet.member?(limited, &1.id)))
+  # ux T1: whether the point has limits at all (the compiled plan evaluates its parameter on some
+  # spacecraft), so 'No limits' (false) reads apart from 'Not checked yet' (true, with limit_state
+  # no_data). Point-level: a point's limits exist with or without a sample.
+  defp with_has_limits(points, organization_id, mission_id, catalog) do
+    limited = MonitoredParameters.anywhere(organization_id, mission_id)
+    parameters = Map.new(catalog, &{&1.point_id, &1.parameter_id || &1.point_id})
+
+    Enum.map(points, fn point ->
+      parameter = Map.get(parameters, point.id, point.id)
+      Map.put(point, :has_limits, MapSet.member?(limited, parameter))
+    end)
   end
 
-  defp raw(organization_id, mission_id) do
-    organization_id
-    |> PointCatalog.list_points(mission_id)
-    |> Enum.map(fn point ->
+  defp raw(catalog) do
+    Enum.map(catalog, fn point ->
       %{
         id: point.point_id,
         name: point.field_name || point.point_id,
@@ -77,7 +82,7 @@ defmodule Cadence.Reads.PointSearch do
     end)
   end
 
-  defp with_latest(organization_id, mission_id, spacecraft_id, points) do
+  defp with_latest(organization_id, mission_id, spacecraft_id, points, catalog) do
     live =
       organization_id
       |> Telemetry.latest_values_for_mission(mission_id, spacecraft_id: spacecraft_id)
@@ -85,10 +90,7 @@ defmodule Cadence.Reads.PointSearch do
 
     samples = Map.merge(stored(organization_id, mission_id, spacecraft_id, points, live), live)
 
-    limits =
-      organization_id
-      |> Limits.latest_states_for_mission(mission_id, spacecraft_id: spacecraft_id)
-      |> Enum.group_by(& &1.point_id)
+    limits = PointLimitState.load(organization_id, mission_id, spacecraft_id, catalog)
 
     Enum.map(points, fn point ->
       latest =
@@ -100,7 +102,7 @@ defmodule Cadence.Reads.PointSearch do
             %{
               value: sample.engineering_value || sample.raw_value,
               received_at: sample.receipt_time,
-              limit_state: limit_state(Map.get(limits, point.id, [])),
+              limit_state: Map.get(limits, point.id, :no_data),
               source: source
             }
         end
@@ -117,16 +119,6 @@ defmodule Cadence.Reads.PointSearch do
     case PointLatest.for_spacecraft(organization_id, mission_id, spacecraft_id, missing) do
       {:ok, samples} -> Map.new(samples, &{&1.point_id, {:history, &1}})
       {:error, _reason} -> %{}
-    end
-  end
-
-  defp limit_state([]), do: :no_data
-
-  defp limit_state(events) do
-    cond do
-      Enum.any?(events, &match?(%Event{normalized_state: :red}, &1)) -> :critical
-      Enum.any?(events, &match?(%Event{normalized_state: :yellow}, &1)) -> :caution
-      true -> :nominal
     end
   end
 

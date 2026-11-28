@@ -165,15 +165,15 @@ are the same query's first page.
     "total": 4,
     "alarms": [
       {
-        "id": "limit_event_…",
+        "id": "transition_…",
         "spacecraft_id": "spacecraft-earendil-312",
         "point": {"id": "EPS.VBAT", "name": "VBAT", "subsystem": "EPS", "unit": "V", "description": null},
         "severity": "critical",
         "active": true,
-        "condition": "red_low",
-        "value": 23.1,
-        "limit_set_name": "DEFAULT",
-        "thresholds": {"red_low": 24.0, "yellow_low": 25.0, "yellow_high": 33.0, "red_high": 34.0},
+        "condition": null,
+        "value": null,
+        "limit_set_name": null,
+        "thresholds": null,
         "first_crossed_at": "2026-11-08T02:35:02Z",
         "generation_time": "2026-11-08T02:41:14Z",
         "received_at": "2026-11-08T02:41:15Z"
@@ -183,18 +183,21 @@ are the same query's first page.
 }
 ```
 
-- `severity`: `critical | caution | nominal`, the same vocabulary as the fleet `limit_state`
-  (`red` = critical, `yellow` = caution, `green`/`blue` = nominal).
-- `condition`: the raw limit state (`red_low`, `yellow_high`, …). It tells you which side was crossed.
+- The list is the runtime's live monitoring alarms (`semantic_latest_alarm_states`, #451 T3c); it
+  read the ground limit states before. `id` is the transition that put the parameter in its
+  current state.
+- `severity`: `critical | caution | nominal`, the alarm level of the state (`watch`/`warning` are
+  caution, `distress`/`critical`/`severe` critical, `normal` nominal; `AlarmLevel`), the same
+  vocabulary as the fleet `limit_state`. `active` is true for caution and critical.
+- **What a live alarm does not carry is `null`**, whatever the page: `condition` (the raw ground
+  limit state, `red_low`, …, which says which side was crossed), `value` (a state is written when a
+  parameter changes state, not with the value that caused it), `limit_set_name`, and `thresholds`
+  (a monitoring rule is not a red/yellow pair of bands). A client shows these as absent, never as
+  zero or nominal.
 - `summary` counts **all** active alarms in the mission, ignoring the filters.
-- `thresholds`: the bands of the limit definition version that produced this state. A missing band
-  is `null`. The whole object is `null` if the definition can't be found.
-- `first_crossed_at`: when the point entered its current state. It is the oldest evaluation in the
-  current unbroken run of that state, by generation time (falling back to receipt time). The
-  server looks back up to 200 evaluations, so for a state held longer than that it is the oldest
-  one in the window. Every page is enriched (a page is at most 200 rows, which bounds those
-  reads).
-- `value`: the evaluated engineering value, as a number, string or boolean.
+- `first_crossed_at`: when the parameter entered its current state: the state's `received_at`,
+  since a state is written on a transition only. `generation_time` and `received_at` are the
+  state's own.
 - Sorting: severity (critical first), then newest received first.
 - `point.unit`: the engineering unit of the decoded packet field in the mission's **active** binding
   set, falling back to the active revision's catalog declarations (parameter → parameter type →
@@ -928,10 +931,12 @@ must be a mission spacecraft), and `limit` 1–200 (default 50).
     the telemetry history (551cb796). Its `received_at` can be days old; show it as such.
   - `null`: no stored sample for that point and spacecraft (never received, or past retention).
     If the history store can't be read, it's also `null` for that request.
-  - `limit_state` is `critical | caution | nominal | no_data`, from the limit projection on
-    either source; never `null`.
+  - `limit_state` is `critical | caution | nominal | no_data`, from the runtime's alarm states and
+    the compiled plan on either source (#451 T3c): the worst level of the point's policies on this
+    spacecraft; `nominal` when the plan monitors the point there and it never left normal;
+    `no_data` when nothing does. Never `null`.
 - `has_limits` (on each point, with or without `spacecraft_id`; ux T1): `true` when the point has
-  an active limit definition. `false` reads "No limits" ("No limits are defined for this point.");
+  the active compiled monitoring plan evaluates its parameter on some spacecraft. `false` reads "No limits" ("No limits are defined for this point.");
   `true` with `limit_state: no_data` reads "Not checked yet". Neither is nominal or counted in "Out
   of limits". `limit_state` keeps its values.
 - `description` is often `null`: packet fields don't carry one yet.
