@@ -19,10 +19,11 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
   require Logger
 
   alias Cadence.ActionRequests.ProviderRequest
+  alias Cadence.Comms.PeerAddresses
   alias Cadence.Ingress.{RawEvidence, ReceiveBackpressure}
   alias Cadence.IngressJournal.FileSystem, as: IngressJournal
   alias Cadence.Platform.SnapshotCall
-  alias Cadence.ProviderAdapters.TCPSocket.{IngressDrops, Instrumentation, Session}
+  alias Cadence.ProviderAdapters.TCPSocket.{Configuration, IngressDrops, Instrumentation, Session}
 
   alias Cadence.Runtime.{
     IngressArchiveConsumer,
@@ -46,8 +47,6 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
     recbuf: @tcp_socket_buffer
   ]
   @executor_high_watermark 8_192
-  # (ux U50) Default for quiet_connection_ms: our own connection read nothing for this long.
-  @quiet_connection_ms 30_000
   # Re-registering after the acceptor died: the first retry is quick (after a kill the old
   # listener may still be closing as we bind), later ones back off (api-ops, lead).
   @reregister_first_retry_ms 250
@@ -80,27 +79,11 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
   @impl true
   def uplink_session(provider_runtime), do: GenServer.call(provider_runtime, :uplink_session)
 
-  @doc """
-  Whether a provider configuration asks for the profile's shared listener (#87: `listener:
-  "shared"`). The runtime's own test (`normalize_configuration/1`); planning reads it too (#361).
-  """
-  @spec shared_listener_config?(map()) :: boolean()
-  def shared_listener_config?(configuration) when is_map(configuration),
-    do:
-      Map.get(configuration, :listener, Map.get(configuration, "listener")) in [:shared, "shared"]
+  @doc "Whether a provider configuration asks for the profile's shared listener (#87)."
+  defdelegate shared_listener_config?(configuration), to: Configuration
 
-  def shared_listener_config?(_configuration), do: false
-
-  @doc """
-  Whether a listen-mode binding on a path of `direction` binds its OWN socket on its host:port,
-  so a second contact on the same endpoint at the same time fails `eaddrinuse`
-  (`listener_in_use`). Only a shared-listener downlink registers with the profile's acceptor
-  instead (`start_socket_provider/3`); uplink always keeps its own listener. Planning's
-  listener-overlap flag (#361, U58 (b)) uses this rule, not a copy of it.
-  """
-  @spec own_listener?(map(), :uplink | :downlink) :: boolean()
-  def own_listener?(configuration, direction),
-    do: not (direction == :downlink and shared_listener_config?(configuration))
+  @doc "Whether a listen-mode binding on a path of `direction` binds its OWN socket (#361)."
+  defdelegate own_listener?(configuration, direction), to: Configuration
 
   @impl true
   def drop_unverified_peer(provider_runtime, peer, reason),
@@ -143,7 +126,7 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
     provider_binding_id = Keyword.fetch!(opts, :provider_binding_id)
     source_endpoint_ref = Keyword.get(opts, :source_endpoint_ref)
     direction = Keyword.fetch!(opts, :direction)
-    configuration = normalize_configuration(Keyword.fetch!(opts, :configuration))
+    configuration = Configuration.normalize(Keyword.fetch!(opts, :configuration))
 
     base_state = %{
       mission_id: mission_id,
@@ -161,6 +144,7 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
       second_connections_refused: 0,
       connected_at: nil,
       quiet_connection_ms: configuration.quiet_connection_ms,
+      allowed_peers: configuration.allowed_peers,
       direction: direction,
       mode: configuration.mode,
       host: configuration.host,
@@ -205,6 +189,13 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
     end
   end
 
+  # (#990, DECISIONS #115) A listening endpoint must name the peers it accepts; one without an
+  # allowlist never starts, so no unidentified peer can reach a contact.
+  defp validate_configuration(%{mode: :listen, allowed_peers: []}, provider_binding_id),
+    do:
+      {:stop,
+       {:tcp_provider_invalid_configuration, provider_binding_id, :expected_peer_addresses}}
+
   # (api-ops) A profile's quiet_connection_ms must be a positive integer (a numeric string is
   # coerced in normalize_configuration/1); anything else would never compare as quiet.
   defp validate_configuration(%{quiet_connection_ms: ms}, _provider_binding_id)
@@ -240,18 +231,15 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
          %{direction: :downlink} = base_state,
          provider_binding_id
        ) do
-    listen = %{
-      host: configuration.host,
-      port: configuration.port,
-      fallback_single_registration?: configuration.fallback_single_registration?
-    }
+    listen = %{host: configuration.host, port: configuration.port}
 
     registration = %{
       adapter: self(),
       realized_contact_id: base_state.realized_contact_id,
       path_id: base_state.path_id,
+      provider_binding_id: provider_binding_id,
       scid: base_state.source_endpoint_spacecraft_scid,
-      expected_peer_address: configuration.expected_peer_address,
+      allowed_peers: configuration.allowed_peers,
       frame_size: configuration.fixed_message_bytes
     }
 
@@ -549,32 +537,9 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
         {:accept_result, accept_ref, {:ok, socket, :ok}},
         %{accept_ref: accept_ref} = state
       ) do
-    case current_socket(state) do
-      {:ok, _existing_socket} ->
-        # DECISIONS #67: never refuse silently; a second peer on a listener is a finding.
-        state =
-          Session.warn_peer(
-            state,
-            :refused,
-            Session.peer_of(socket),
-            "TCP provider #{state.provider_binding_id} refused a second connection from " <>
-              "#{Session.peer_of(socket)}; #{state.session_peer} is connected"
-          )
-
-        :gen_tcp.close(socket)
-        {:noreply, schedule_accept(%{state | accept_ref: nil})}
-
-      {:error, :tcp_provider_not_connected} ->
-        # Keep one accept pending while connected, so a later peer is refused (and logged)
-        # rather than left in the listen backlog believing it's connected.
-        {:noreply,
-         state
-         |> Map.put(:socket, socket)
-         |> Session.connected()
-         |> Map.put(:accept_ref, nil)
-         |> start_socket_receiver!(socket)
-         |> schedule_accept()}
-    end
+    if peer_allowed?(state, socket),
+      do: accept_peer(socket, state),
+      else: {:noreply, refuse_unallowed_peer(socket, %{state | accept_ref: nil})}
   end
 
   def handle_info(
@@ -698,91 +663,6 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
     {:noreply, next_state}
   end
 
-  defp normalize_configuration(configuration) when is_map(configuration) do
-    mode =
-      case Map.get(configuration, :mode, Map.get(configuration, "mode", :connect)) do
-        :connect -> :connect
-        "connect" -> :connect
-        :listen -> :listen
-        "listen" -> :listen
-      end
-
-    ingress_protocol_family =
-      case Map.get(
-             configuration,
-             :ingress_protocol_family,
-             Map.get(configuration, "ingress_protocol_family")
-           ) do
-        nil ->
-          nil
-
-        protocol_family when is_atom(protocol_family) ->
-          protocol_family
-
-        protocol_family when is_binary(protocol_family) ->
-          String.to_existing_atom(protocol_family)
-      end
-
-    %{
-      mode: mode,
-      host: Map.get(configuration, :host, Map.get(configuration, "host", "127.0.0.1")),
-      port: Map.get(configuration, :port, Map.get(configuration, "port", 0)),
-      ingress_protocol_family: ingress_protocol_family,
-      fixed_message_bytes:
-        Map.get(
-          configuration,
-          :fixed_message_bytes,
-          Map.get(configuration, "fixed_message_bytes")
-        ) ||
-          Map.get(configuration, :frame_size, Map.get(configuration, "frame_size")),
-      ingress_transport_binding_id:
-        Map.get(
-          configuration,
-          :ingress_transport_binding_id,
-          Map.get(configuration, "ingress_transport_binding_id")
-        ),
-      source_ref: Map.get(configuration, :source_ref, Map.get(configuration, "source_ref")),
-      ingress_metadata:
-        Map.get(configuration, :ingress_metadata, Map.get(configuration, "ingress_metadata", %{})),
-      # (#87) A listen-mode downlink shares one listener per profile when the profile says
-      # "listener" => "shared" (opt-in while profiles are moved over); the single-registration
-      # fallback is opt-in too.
-      shared_listener?: shared_listener_config?(configuration),
-      fallback_single_registration?:
-        Map.get(
-          configuration,
-          :fallback_single_registration,
-          Map.get(configuration, "fallback_single_registration", false)
-        ) == true,
-      expected_peer_address:
-        Map.get(
-          configuration,
-          :expected_peer_address,
-          Map.get(configuration, "expected_peer_address")
-        ),
-      # (ux U50) How long our own connection goes without reads before a second connection for
-      # this contact counts as a refusal (refuse_second_connection/2).
-      quiet_connection_ms:
-        configuration
-        |> Map.get(
-          :quiet_connection_ms,
-          Map.get(configuration, "quiet_connection_ms", @quiet_connection_ms)
-        )
-        |> coerce_integer()
-        # A key present with null means the default (api-ops): never fail a contact start on it.
-        |> Kernel.||(@quiet_connection_ms)
-    }
-  end
-
-  defp coerce_integer(value) when is_binary(value) do
-    case Integer.parse(String.trim(value)) do
-      {integer, ""} -> integer
-      _not_an_integer -> value
-    end
-  end
-
-  defp coerce_integer(value), do: value
-
   defp connect_socket(host, port) when is_binary(host) and is_integer(port) do
     :gen_tcp.connect(String.to_charlist(host), port, @tcp_opts)
   end
@@ -798,6 +678,60 @@ defmodule Cadence.ProviderAdapters.TCPSocket do
     case :inet.sockname(listener) do
       {:ok, {_address, actual_port}} -> actual_port
       {:error, _reason} -> fallback_port
+    end
+  end
+
+  # An allowed peer reached our own listener: take it, or refuse it as a second connection.
+  defp accept_peer(socket, state) do
+    case current_socket(state) do
+      {:ok, _existing_socket} ->
+        # DECISIONS #67: never refuse silently; a second peer on a listener is a finding.
+        state =
+          Session.warn_peer(
+            state,
+            :refused,
+            Session.peer_of(socket),
+            "TCP provider #{state.provider_binding_id} refused a second connection from " <>
+              "#{Session.peer_of(socket)}; #{state.session_peer} is connected"
+          )
+
+        :gen_tcp.close(socket)
+        {:noreply, schedule_accept(%{state | accept_ref: nil})}
+
+      {:error, :tcp_provider_not_connected} ->
+        # Keep one accept pending while connected, so a later peer is refused (and logged)
+        # rather than left in the listen backlog believing it's connected.
+        {:noreply,
+         state
+         |> Map.put(:socket, socket)
+         |> Session.connected()
+         |> Map.put(:accept_ref, nil)
+         |> start_socket_receiver!(socket)
+         |> schedule_accept()}
+    end
+  end
+
+  # (#990, DECISIONS #115) A peer outside the allowlist is closed before any byte is read,
+  # counted as a refusal (ux U50), and the listener keeps accepting for the provider.
+  defp refuse_unallowed_peer(socket, state) do
+    peer = Session.peer_of(socket)
+
+    state =
+      Session.warn_peer(
+        state,
+        :refused,
+        peer,
+        "TCP provider #{state.provider_binding_id} refused #{peer}: not an allowed source address"
+      )
+
+    :gen_tcp.close(socket)
+    state |> count_refusal(peer, :peer_not_allowed) |> schedule_accept()
+  end
+
+  defp peer_allowed?(%{allowed_peers: ranges}, socket) do
+    case :inet.peername(socket) do
+      {:ok, {ip, _port}} -> PeerAddresses.allowed?(ranges, ip)
+      _unknown -> false
     end
   end
 

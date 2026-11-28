@@ -642,6 +642,7 @@ defmodule Cadence.GroundNetworks.ProviderEventProcessorTest do
             "supported_service_profile_refs" => ["service-downlink"],
             "state" => "ready",
             "operator_summary" => "Streaming to Cadence",
+            "egress" => %{"source_addresses" => ["127.0.0.1/32", "::1/128"]},
             "diagnostics" => %{
               "protocol" => "tcp",
               "mode" => "provider_connects",

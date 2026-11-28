@@ -33,7 +33,12 @@ defmodule Cadence.Comms.UplinkGatewayTest do
 
     assert %Transport{direction_capability: :outbound, configuration: config} = transport
 
-    assert %{"mode" => "listen", "ingress_protocol_family" => "cop1_clcw", "port" => 5200} =
+    assert %{
+             "mode" => "listen",
+             "expected_peer_addresses" => ["127.0.0.1/32", "::1/128"],
+             "ingress_protocol_family" => "cop1_clcw",
+             "port" => 5200
+           } =
              config
 
     assert config["fixed_message_bytes"] == 4
@@ -152,6 +157,7 @@ defmodule Cadence.Comms.UplinkGatewayTest do
               "delivery_kind" => "realtime_stream",
               "supported_service_profile_refs" => ["service-uplink", "service-downlink"],
               "state" => "ready",
+              "egress" => %{"source_addresses" => ["127.0.0.1/32", "::1/128"]},
               "diagnostics" => %{
                 "protocol" => "tcp",
                 "mode" => "provider_connects",

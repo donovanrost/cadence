@@ -10,7 +10,6 @@ defmodule Cadence.Contacts do
     ContactStore,
     LinkAssignment,
     LinkAssignmentStore,
-    LinkSetup,
     PathTemplate,
     PathTemplateStore,
     ProfileStore,
@@ -28,39 +27,6 @@ defmodule Cadence.Contacts do
   def persist_provider_profile(organization_id, %ProviderProfile{} = provider_profile)
       when is_binary(organization_id) do
     ProfileStore.persist_provider_profile(organization_id, provider_profile)
-  end
-
-  @spec create_shared_link(binary(), binary(), map()) ::
-          {:ok,
-           %{
-             provider: ProviderProfile.t(),
-             transport: TransportProfile.t() | nil,
-             path_templates: [PathTemplate.t()]
-           }}
-          | {:error, term()}
-  def create_shared_link(organization_id, mission_id, attrs)
-      when is_binary(organization_id) and is_binary(mission_id) and is_map(attrs) do
-    LinkSetup.create_shared_link(organization_id, mission_id, attrs)
-  end
-
-  @spec apply_link_template(binary(), binary(), PathTemplate.t(), [map()], map()) ::
-          {:ok,
-           %{
-             rows: [map()],
-             applied_count: non_neg_integer(),
-             skipped_count: non_neg_integer(),
-             failed_count: non_neg_integer()
-           }}
-  def apply_link_template(
-        organization_id,
-        mission_id,
-        %PathTemplate{} = source_template,
-        spacecraft,
-        attrs
-      )
-      when is_binary(organization_id) and is_binary(mission_id) and is_list(spacecraft) and
-             is_map(attrs) do
-    LinkSetup.apply_link_template(organization_id, mission_id, source_template, spacecraft, attrs)
   end
 
   @spec fetch_link_assignment(binary(), binary(), binary()) ::

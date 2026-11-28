@@ -170,6 +170,8 @@ defmodule CadenceSimulator.Provider.DeliveryProfiles do
         "frame_bytes" => request["framing"]["frame_bytes"],
         "endpoint_health" => "healthy"
       },
+      # (#990) The provider's half of the connection: where it connects to Cadence from.
+      "egress" => %{"source_addresses" => source_addresses()},
       "target" => request["target"],
       "framing" => request["framing"],
       "configuration_snapshot" => request,
@@ -178,6 +180,16 @@ defmodule CadenceSimulator.Provider.DeliveryProfiles do
       "updated_at" => now
     }
   end
+
+  # (#990, DECISIONS #115) The addresses the simulator connects to Cadence from, which Cadence
+  # allows on its listening endpoint. It runs next to Cadence, so loopback by default; a deployment
+  # where it connects from elsewhere sets `:delivery_source_addresses`.
+  defp source_addresses,
+    do:
+      Application.get_env(:cadence_simulator, :delivery_source_addresses, [
+        "127.0.0.1/32",
+        "::1/128"
+      ])
 
   defp existing_by_client_reference(run_id, client_reference) do
     Enum.find(Store.list(:delivery_profile), fn profile ->
@@ -266,6 +278,9 @@ defmodule CadenceSimulator.Provider.DeliveryProfiles do
          {:ok, operator_summary} <-
            optional_text(profile, "operator_summary", "Provider-managed delivery", index),
          {:ok, diagnostics} <- object(profile, "diagnostics", %{}, index),
+         # (#990) A seeded profile connects from where the simulator does, unless it says otherwise.
+         {:ok, egress} <-
+           object(profile, "egress", %{"source_addresses" => source_addresses()}, index),
          {:ok, extensions} <- object(profile, "extensions", %{}, index) do
       {:ok,
        %{
@@ -278,6 +293,7 @@ defmodule CadenceSimulator.Provider.DeliveryProfiles do
          "state" => state,
          "operator_summary" => operator_summary,
          "diagnostics" => diagnostics,
+         "egress" => egress,
          "extensions" => extensions
        }}
     end

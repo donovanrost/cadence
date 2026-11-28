@@ -386,6 +386,7 @@ defmodule Cadence.IngressBenchmark.FullFlowRunner do
                 adapter_key: :tcp_socket,
                 configuration: %{
                   mode: :listen,
+                  expected_peer_addresses: ["127.0.0.1/32", "::1/128"],
                   host: "0.0.0.0",
                   port: @listen_port,
                   ingress_protocol_family: :tm,

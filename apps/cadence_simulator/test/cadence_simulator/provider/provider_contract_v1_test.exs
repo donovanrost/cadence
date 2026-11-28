@@ -60,6 +60,7 @@ defmodule CadenceSimulator.Provider.ProviderContractV1Test do
              "data" => %{
                "id" => profile_id,
                "state" => "ready",
+               "egress" => %{"source_addresses" => ["127.0.0.1/32", "::1/128"]},
                "diagnostics" => %{
                  "protocol" => "tcp",
                  "mode" => "provider_connects",

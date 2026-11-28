@@ -14,6 +14,7 @@ defmodule Cadence.Telemetry.Storage.IdentityStateRetentionTest do
   alias Cadence.Telemetry.Storage.ObservationIdentityStates.Retention, as: Rule
   alias Cadence.Telemetry.Storage.ObservationIdentityStates.TelemetryObservationIdentityStateRow
   alias Cadence.TestSupport.ObservationIdentityFixtures
+  alias Cadence.TestSupport.RetentionLock
 
   @now ~U[2026-11-19 12:00:00Z]
   @hour 3_600
@@ -45,7 +46,15 @@ defmodule Cadence.Telemetry.Storage.IdentityStateRetentionTest do
   end
 
   defp sweep(opts \\ []),
-    do: Sweeper.sweep(Rule, Rule.initial_cursor(), Keyword.merge([now: @now, pause_ms: 0], opts))
+    do:
+      Sweeper.sweep(
+        Rule,
+        Rule.initial_cursor(),
+        Keyword.merge(
+          [now: @now, pause_ms: 0, lock_key: RetentionLock.key(Rule)],
+          opts
+        )
+      )
 
   describe "the cutoff" do
     test "is the later of the observation retention and the re-delivery window" do
@@ -127,7 +136,13 @@ defmodule Cadence.Telemetry.Storage.IdentityStateRetentionTest do
 
       assert %{rows: 2, chunks: 1, stopped: :budget} = first
 
-      rest = Sweeper.sweep(Rule, first.cursor, now: @now, pause_ms: 0, chunk_rows: 2)
+      rest =
+        Sweeper.sweep(Rule, first.cursor,
+          now: @now,
+          pause_ms: 0,
+          lock_key: RetentionLock.key(Rule),
+          chunk_rows: 2
+        )
 
       assert %{rows: 5, stopped: :done} = rest
       refute Enum.any?(ids, &present?/1)

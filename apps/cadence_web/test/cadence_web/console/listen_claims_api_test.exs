@@ -53,6 +53,7 @@ defmodule CadenceWeb.Console.ListenClaimsAPITest do
   defp listen(port),
     do: %{
       "mode" => "listen",
+      "expected_peer_addresses" => ["127.0.0.1/32", "::1/128"],
       "direction_capability" => "inbound",
       "host" => "127.0.0.1",
       "port" => Integer.to_string(port),

@@ -5,6 +5,7 @@ defmodule Cadence.Protocol.RecordArchive.Quarantine.RetentionTest do
   alias Cadence.Protocol.RecordArchive.Quarantine
   alias Cadence.Protocol.RecordArchive.Quarantine.Retention, as: Rule
   alias Cadence.Repo
+  alias Cadence.TestSupport.RetentionLock
 
   @now ~U[2026-11-26 12:00:00.000000Z]
   # Protocol archive 30 days (the setup) + the 7-day review margin: an entry received more than
@@ -88,7 +89,15 @@ defmodule Cadence.Protocol.RecordArchive.Quarantine.RetentionTest do
   end
 
   defp sweep(opts \\ []),
-    do: Sweeper.sweep(Rule, Rule.initial_cursor(), Keyword.merge([now: @now, pause_ms: 0], opts))
+    do:
+      Sweeper.sweep(
+        Rule,
+        Rule.initial_cursor(),
+        Keyword.merge(
+          [now: @now, pause_ms: 0, lock_key: RetentionLock.key(Rule)],
+          opts
+        )
+      )
 
   test "an entry goes when its record is older than the archive's retention plus the review margin",
        c do
@@ -185,7 +194,12 @@ defmodule Cadence.Protocol.RecordArchive.Quarantine.RetentionTest do
 
     # Two days on, the entry has expired: the item is gone and says why.
     later = DateTime.add(@now, 3 * 86_400, :second)
-    Sweeper.sweep(Rule, Rule.initial_cursor(), now: later, pause_ms: 0)
+
+    Sweeper.sweep(Rule, Rule.initial_cursor(),
+      now: later,
+      pause_ms: 0,
+      lock_key: RetentionLock.key(Rule)
+    )
 
     assert Attention.items(org, c.mission) == []
 
