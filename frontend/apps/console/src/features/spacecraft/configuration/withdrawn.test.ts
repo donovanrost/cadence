@@ -63,6 +63,11 @@ describe("approval_withdrawn decoder", () => {
   it("keeps a decision kind it doesn't know instead of failing the read", () => {
     expect(withdrawn({ kind: "revoked" }).decision.kind).toEqual({ unrecognized: "revoked" });
   });
+
+  it("reads an earlier approved version with no catalog revision recorded (#999)", () => {
+    const earlier = { revision_id: "mission_model_revision:r2", catalog_revision: null };
+    expect(withdrawn({}, { earlier_approved: earlier }).earlier_approved).toEqual(earlier);
+  });
 });
 
 describe("compositionName (U109)", () => {

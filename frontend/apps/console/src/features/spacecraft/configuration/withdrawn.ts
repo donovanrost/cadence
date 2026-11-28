@@ -19,13 +19,16 @@ export const approvalDecisionKinds = ["withdrawn", "rejected"] as const;
 /** What the next staging would select instead (#924 follow-up), or null when nothing approved is left. */
 const earlierApproved = d.object({
   revision_id: d.token,
-  catalog_revision: d.object({
-    id: d.token,
-    number: d.integer,
-    // free-text: the catalog revision's own label, shown as written.
-    label: d.nullable(d.string),
-    database_id: d.token,
-  }),
+  /** The catalog revision that introduced it; null when none is recorded (#999, ModelRevisions). */
+  catalog_revision: d.nullable(
+    d.object({
+      id: d.token,
+      number: d.integer,
+      // free-text: the catalog revision's own label, shown as written.
+      label: d.nullable(d.string),
+      database_id: d.token,
+    }),
+  ),
 });
 
 export const approvalWithdrawnReader = d.object({
