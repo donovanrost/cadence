@@ -93,7 +93,10 @@ const pointLink = (row: PointCondition): RouteLocationRaw => ({
 
 const ago = (iso: string) => formatCountdown(new Date(iso), now.value);
 
-/** "evaluated T+00:12:03" for a ground limit, "entered T+…" for live; the bound when unknown. */
+/**
+ * "evaluated T+00:12:03" for a ground limit, "entered T+…" for live; the bound when unknown. A
+ * point not evaluated yet (a planned rule with no state, #1113) has no time.
+ */
 function since(row: PointCondition): string {
   if (!row.evaluated) return "—";
   if (row.entered_at !== null) return ago(row.entered_at);
@@ -130,7 +133,7 @@ const filterOptions = [
         v-if="rows.length === 0"
         state="off"
         :headline="filter === 'attention' ? 'No point needs attention' : 'No points to show yet'"
-        sentence="Points appear once a limit job has evaluated them or a monitoring rule changed their state."
+        sentence="Points appear once a monitoring rule for them is applied, or a ground limit is evaluated on them."
       />
       <template v-else>
         <p v-if="meta" class="m-0 font-mono text-xs text-text-3 uppercase">
