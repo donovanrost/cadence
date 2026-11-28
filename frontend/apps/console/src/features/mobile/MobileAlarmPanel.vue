@@ -2,13 +2,7 @@
 import { computed } from "vue";
 import type { RemoteState } from "@/api";
 import { ApPanel, ApStatStrip, ApStatTile, ApTag } from "@/ui";
-import {
-  crossedCondition,
-  crossedLimit,
-  formatLimitLike,
-  formatValue,
-  type Alarm,
-} from "@/features/alarms/index.ts";
+import { lastValueReadout, type Alarm, type EpisodeDetail } from "@/features/alarms/index.ts";
 import type { FleetSpacecraft } from "@/features/fleet/index.ts";
 import {
   formatRate,
@@ -19,10 +13,15 @@ import {
   type TimeWindow,
 } from "@/features/investigate/index.ts";
 
-/** Mobile.md §1: spacecraft + severity, Now vs limit, rate, and an 80px trend of the point. */
+/**
+ * Mobile.md §1: spacecraft + severity, the episode's last value with its time, rate, and an 80px
+ * trend. An alarm row carries no value or limits (#1117); the episode does.
+ */
 const props = defineProps<{
   sc: FleetSpacecraft;
   alarm: Alarm;
+  /** The alarm's episode, when loaded: its last value and when it was evaluated. */
+  episode?: EpisodeDetail | null;
   history: RemoteState<History>;
   view: {
     window: TimeWindow;
@@ -39,8 +38,7 @@ const props = defineProps<{
 defineEmits<{ retry: [] }>();
 
 const tone = computed(() => (props.alarm.severity === "critical" ? "crit" : "caution"));
-const condition = computed(() => crossedCondition(props.alarm));
-const limit = computed(() => crossedLimit(props.alarm));
+const last = computed(() => lastValueReadout(props.episode));
 const unit = computed(() => props.alarm.point.unit ?? undefined);
 </script>
 
@@ -54,12 +52,13 @@ const unit = computed(() => props.alarm.point.unit ?? undefined);
       <p class="m-0 font-mono text-sm text-text-3">
         <span class="normal-case">{{ alarm.point.name }}</span> · SCID {{ sc.scid }}
       </p>
-      <ApStatStrip :columns="2" label="Readouts">
-        <ApStatTile label="Now" :value="formatValue(alarm.value)" :unit="unit" :state="tone" />
+      <ApStatStrip v-if="last" :columns="1" label="Readouts">
         <ApStatTile
-          :label="condition?.startsWith('red') ? 'Red limit' : 'Limit'"
-          :value="formatLimitLike(limit, alarm.value)"
+          :label="last.label"
+          :value="last.value"
+          :caption="last.caption"
           :unit="unit"
+          :state="tone"
         />
       </ApStatStrip>
       <p class="m-0 font-mono text-xs text-text-3">
