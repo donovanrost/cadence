@@ -112,9 +112,10 @@ defmodule Cadence.Runtime.Contacts do
   end
 
   @doc """
-  The mission's shared-listener adapters (#87) and their refusal state (ux U50), from each profile
+  The mission's shared-listener adapters (#87) and their refusal state (ux U50), from each endpoint
   acceptor's registrations, cluster-wide: `[%{realized_contact_id, path_id, provider_binding_id,
-  connected?, refusals, second_connections_refused, shared_with}]`. `refusals` is the adapter's
+  connected?, refusals, second_connections_refused, shared_with, listener_endpoint,
+  refusals_per_minute}]`. `refusals` is the adapter's
   refusal window (nil until a refusal opens one); `shared_with` the other contacts registered on
   the same listener. Starts nothing; an adapter or acceptor that has gone is left out.
   """
@@ -122,9 +123,9 @@ defmodule Cadence.Runtime.Contacts do
   def listener_refusals(mission_id) do
     ProcessNamespace.default()
     |> Cluster.select([
-      {{{:profile_acceptor, mission_id, :"$1"}, :"$2", :_}, [], [{{:"$1", :"$2"}}]}
+      {{{:profile_acceptor, mission_id, :_}, :"$1", :_}, [], [:"$1"]}
     ])
-    |> Enum.flat_map(fn {profile_id, acceptor} -> acceptor_refusals(profile_id, acceptor) end)
+    |> Enum.flat_map(&acceptor_refusals(ProfileAcceptor.snapshot(&1)))
   end
 
   @doc "`listener_refusals/1` for one contact (its settler reads it at LOS)."
@@ -135,8 +136,10 @@ defmodule Cadence.Runtime.Contacts do
     |> Enum.filter(&(&1.realized_contact_id == realized_contact_id))
   end
 
-  defp acceptor_refusals(profile_id, acceptor) do
-    registrations = ProfileAcceptor.registrations(acceptor)
+  defp acceptor_refusals(nil), do: []
+
+  defp acceptor_refusals(snapshot) do
+    registrations = snapshot.registrations
     contacts = registrations |> Enum.map(& &1.realized_contact_id) |> Enum.uniq()
 
     for registration <- registrations,
@@ -144,7 +147,9 @@ defmodule Cadence.Runtime.Contacts do
       Map.merge(state, %{
         realized_contact_id: registration.realized_contact_id,
         path_id: registration.path_id,
-        provider_binding_id: profile_id,
+        provider_binding_id: registration.provider_binding_id,
+        listener_endpoint: snapshot.endpoint,
+        refusals_per_minute: snapshot.refusals_per_minute,
         shared_with: List.delete(contacts, registration.realized_contact_id)
       })
     end

@@ -14,7 +14,7 @@ defmodule Cadence.SourceEndpoints do
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Listing
   alias Cadence.Missions
-  alias Cadence.Persistence.{BulkInsert, BulkLookup}
+  alias Cadence.Persistence.{BulkInsert, BulkLookup, JsonDocument}
   alias Cadence.Repo
   alias Cadence.SourceEndpoints.{SourceEndpoint, SourceEndpointRow}
   alias Cadence.Spacecraft
@@ -122,6 +122,24 @@ defmodule Cadence.SourceEndpoints do
          ) do
       nil -> {:error, :source_endpoint_not_found}
       %SourceEndpointRow{} = row -> {:ok, SourceEndpointRow.to_domain(row)}
+    end
+  end
+
+  @doc false
+  def write_relay(organization_id, mission_id, id, relay) do
+    saved = if relay, do: JsonDocument.wrap_value(relay)
+
+    query =
+      from(row in SourceEndpointRow,
+        where:
+          row.organization_id == ^organization_id and row.mission_id == ^mission_id and
+            row.source_endpoint_id == ^id,
+        select: row
+      )
+
+    case Repo.update_all(query, set: [relay: saved]) do
+      {1, [%SourceEndpointRow{} = row]} -> {:ok, SourceEndpointRow.to_domain(row)}
+      {0, []} -> {:error, :source_endpoint_not_found}
     end
   end
 

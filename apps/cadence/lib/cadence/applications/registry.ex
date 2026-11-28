@@ -6,14 +6,10 @@ defmodule Cadence.Applications.Registry do
   never converts operator-controlled input into atoms.
   """
 
-  alias Cadence.Applications.FixtureContributors
-
   alias Cadence.Applications.{
     ApplicationDefinition,
-    LifecycleContract,
     ResourceClaimDefinition,
-    ResourceContract,
-    SurfaceDefinition
+    ResourceContract
   }
 
   alias Cadence.Applications.{
@@ -25,16 +21,9 @@ defmodule Cadence.Applications.Registry do
           :unknown_application
           | :unsupported_application_version
           | :invalid_application_definition
-  @type surface_error :: :unknown_surface | :invalid_application_definition
 
   @spec all() :: [ApplicationDefinition.t()]
-  def all,
-    do:
-      [
-        TelemetryDecom.definition(),
-        OpsConsole.definition(),
-        cfdp()
-      ] ++ Enum.map(FixtureContributors.exporting(:definition, 0), & &1.definition())
+  def all, do: [TelemetryDecom.definition(), OpsConsole.definition(), cfdp()]
 
   @spec available() :: [ApplicationDefinition.t()]
   def available do
@@ -96,51 +85,6 @@ defmodule Cadence.Applications.Registry do
     end
   end
 
-  @spec fetch_default_surface(ApplicationDefinition.t(), SurfaceDefinition.scope()) ::
-          {:ok, SurfaceDefinition.t()} | {:error, surface_error()}
-  def fetch_default_surface(%ApplicationDefinition{} = definition, scope) do
-    with :ok <- ApplicationDefinition.validate(definition) do
-      case List.first(workspace_surfaces(definition, scope)) do
-        %SurfaceDefinition{} = surface -> {:ok, surface}
-        nil -> {:error, :unknown_surface}
-      end
-    end
-  end
-
-  @spec fetch_surface(ApplicationDefinition.t(), SurfaceDefinition.scope(), binary()) ::
-          {:ok, SurfaceDefinition.t()} | {:error, surface_error()}
-  def fetch_surface(%ApplicationDefinition{} = definition, scope, surface_id)
-      when is_binary(surface_id) do
-    with :ok <- ApplicationDefinition.validate(definition) do
-      surface_result(Enum.find(definition.surfaces, &matches_surface?(&1, scope, surface_id)))
-    end
-  end
-
-  def fetch_surface(%ApplicationDefinition{}, _scope, _surface_id),
-    do: {:error, :unknown_surface}
-
-  defp matches_surface?(%SurfaceDefinition{} = surface, scope, surface_id),
-    do: surface.scope == scope and surface.surface_id == surface_id
-
-  defp surface_result(%SurfaceDefinition{} = surface), do: {:ok, surface}
-  defp surface_result(nil), do: {:error, :unknown_surface}
-
-  @spec workspace_surfaces(ApplicationDefinition.t(), SurfaceDefinition.scope()) ::
-          [SurfaceDefinition.t()]
-  def workspace_surfaces(%ApplicationDefinition{} = definition, scope) do
-    if ApplicationDefinition.validate(definition) == :ok do
-      definition.surfaces
-      |> Enum.filter(fn surface ->
-        surface.scope == scope and surface.placement == :application_workspace
-      end)
-      |> Enum.sort_by(fn surface ->
-        {Map.get(surface.navigation, :order, 0), surface.surface_id}
-      end)
-    else
-      []
-    end
-  end
-
   defp definitions do
     Map.new(all(), &{&1.application_key, &1})
   end
@@ -174,7 +118,6 @@ defmodule Cadence.Applications.Registry do
           }
         ]
       },
-      lifecycle_contract: %LifecycleContract{},
       capability_contributions: [
         %{
           kind: :managed_application,

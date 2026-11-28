@@ -1902,3 +1902,21 @@ returns it with the stored endpoint. Supplying the ID on create returns `422 inv
 
 A non-empty `source_ref` identifies an endpoint within its mission and spacecraft scope. Repeating
 that reference returns the existing endpoint with its saved attributes.
+
+The source endpoint read includes `relay`, either `null` or an object
+`{origin_spacecraft_ids: [string]}`. The endpoint's own spacecraft is implicit and should
+be omitted from the list. Repeating it is harmless.
+
+Use the mission's existing configuration change-set endpoints to update the relay on an
+existing endpoint. Stage an update of kind `source_endpoint`, with the endpoint ID in
+`entity_id`, and a change at `relay.origin_spacecraft_ids` containing the origin IDs.
+An empty list or setting `relay` to `null` switches it off. The direct create endpoints
+refuse a `relay` field with `422 invalid_params` and reason `requires_change_set`.
+The change set follows the mission's approval policy and shows origin spacecraft names
+and SCIDs in review.
+
+Preview and apply report both errors at `relay.origin_spacecraft_ids`.
+
+- `relay_origin_not_in_mission` means a declared spacecraft is absent from the mission.
+- `relay_origin_without_scid` means a spacecraft in the effective set has no SCID.
+  The check includes the endpoint's own spacecraft when one is assigned.

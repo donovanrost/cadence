@@ -2,23 +2,24 @@ defmodule Cadence.Applications.ApplicationDefinition do
   @moduledoc """
   Versioned product definition for an operator-facing Cadence application.
 
-  The definition composes configuration, lifecycle, status, presentation, and
-  runtime contribution contracts without turning them into one universal
-  callback.
+  Every application is headless: the console's own screens install, configure and show the
+  status of it, and the server's domain paths run it. The definition composes configuration,
+  resources, status, settings and runtime contributions.
   """
 
-  alias Cadence.Applications.{
-    ActionDefinition,
-    LifecycleContract,
-    ResourceContract,
-    SettingsSectionDefinition,
-    SurfaceDefinition
-  }
+  alias Cadence.Applications.{ResourceContract, SettingsSectionDefinition}
 
   @type availability :: :available | :roadmap
   @type trust :: :first_party
   @type installation_policy :: :platform | :optional
-  @type scope :: ActionDefinition.scope()
+  @type scope ::
+          :organization
+          | :user
+          | :admin
+          | :mission
+          | :spacecraft
+          | :source_endpoint
+          | :transport
 
   @type t :: %__MODULE__{
           application_key: binary(),
@@ -31,10 +32,7 @@ defmodule Cadence.Applications.ApplicationDefinition do
           installable_scopes: [scope()],
           configuration_contract: map(),
           resource_contract: ResourceContract.t(),
-          lifecycle_contract: LifecycleContract.t(),
           status_query_id: binary() | nil,
-          actions: [ActionDefinition.t()],
-          surfaces: [SurfaceDefinition.t()],
           settings_sections: [SettingsSectionDefinition.t()],
           capability_contributions: [map()]
         }
@@ -61,34 +59,17 @@ defmodule Cadence.Applications.ApplicationDefinition do
     installable_scopes: [],
     configuration_contract: %{},
     resource_contract: %ResourceContract{},
-    lifecycle_contract: %LifecycleContract{},
-    actions: [],
-    surfaces: [],
     settings_sections: [],
     capability_contributions: []
   ]
 
   @scopes [:organization, :user, :admin, :mission, :spacecraft, :source_endpoint, :transport]
   @capability_kinds [:semantic_handler, :managed_application, :projection, :transport_extension]
-  # Route-level applications may expose a finite action vocabulary per
-  # surface. Keep the application-wide envelope explicit while allowing the
-  # Ops cohort to retain its exact declared identities.
-  @max_actions 128
-  @max_surfaces 64
   @max_capability_contributions 32
 
   @spec available?(t()) :: boolean()
   def available?(%__MODULE__{availability: :available}), do: true
   def available?(%__MODULE__{}), do: false
-
-  @doc """
-  Whether the application has no surfaces of its own (#669): it is installed, configured and
-  activated through the console's own screens and the server's domain paths, and the host
-  mounts nothing for it. Such an application needs no workspace surface.
-  """
-  @spec headless?(t()) :: boolean()
-  def headless?(%__MODULE__{surfaces: []}), do: true
-  def headless?(%__MODULE__{}), do: false
 
   @doc "Whether a platform definition supports this scope without an installation."
   @spec platform?(t(), scope()) :: boolean()
@@ -96,19 +77,6 @@ defmodule Cadence.Applications.ApplicationDefinition do
     do: scope in definition.installable_scopes
 
   def platform?(%__MODULE__{}, _scope), do: false
-
-  @spec fetch_action(t(), binary()) ::
-          {:ok, ActionDefinition.t()} | {:error, :undeclared_application_action}
-  def fetch_action(%__MODULE__{actions: actions}, action_id)
-      when is_list(actions) and is_binary(action_id) do
-    case Enum.find(actions, &match?(%ActionDefinition{action_id: ^action_id}, &1)) do
-      %ActionDefinition{} = action -> {:ok, action}
-      nil -> {:error, :undeclared_application_action}
-    end
-  end
-
-  def fetch_action(%__MODULE__{}, _action_id),
-    do: {:error, :undeclared_application_action}
 
   @spec validate(t()) :: :ok | {:error, :invalid_application_definition}
   def validate(%__MODULE__{} = definition) do
@@ -122,12 +90,7 @@ defmodule Cadence.Applications.ApplicationDefinition do
          true <- valid_installable_scopes?(definition.installable_scopes),
          true <- valid_configuration_contract?(definition.configuration_contract),
          :ok <- ResourceContract.validate(definition.resource_contract),
-         :ok <- LifecycleContract.validate(definition.lifecycle_contract),
          true <- optional_text?(definition.status_query_id),
-         true <- valid_actions?(definition.actions, definition.installable_scopes),
-         true <- distinct_action_contracts?(definition),
-         true <- platform_actions_only?(definition),
-         true <- valid_surfaces?(definition),
          true <- valid_settings_sections?(definition.settings_sections),
          true <- valid_capability_contributions?(definition.capability_contributions) do
       :ok
@@ -164,72 +127,6 @@ defmodule Cadence.Applications.ApplicationDefinition do
   end
 
   defp valid_configuration_contract?(_contract), do: false
-
-  defp valid_actions?(actions, installable_scopes) when is_list(actions) do
-    action_ids = Enum.map(actions, &action_id/1)
-
-    length(actions) <= @max_actions and
-      Enum.all?(actions, &(ActionDefinition.validate(&1) == :ok)) and
-      Enum.all?(actions, &(&1.scope in installable_scopes)) and
-      length(Enum.uniq(action_ids)) == length(action_ids)
-  end
-
-  defp valid_actions?(_actions, _installable_scopes), do: false
-
-  defp action_id(%ActionDefinition{action_id: action_id}), do: action_id
-  defp action_id(_action), do: nil
-
-  defp distinct_action_contracts?(%__MODULE__{} = definition) do
-    domain_action_ids = Enum.map(definition.actions, & &1.action_id)
-    Enum.all?(domain_action_ids, &(&1 not in definition.lifecycle_contract.actions))
-  end
-
-  # Only a platform application's actions are dispatched (#669 b): nothing checks an optional
-  # application's installation before running one, so an optional application declares none.
-  defp platform_actions_only?(%__MODULE__{installation_policy: :optional} = definition),
-    do: definition.actions == [] and definition.lifecycle_contract.actions == []
-
-  defp platform_actions_only?(%__MODULE__{}), do: true
-
-  defp valid_surfaces?(%__MODULE__{} = definition) when is_list(definition.surfaces) do
-    surface_identities = Enum.map(definition.surfaces, &surface_identity/1)
-    declared_action_ids = declared_action_ids(definition)
-
-    length(definition.surfaces) <= @max_surfaces and
-      Enum.all?(definition.surfaces, &(SurfaceDefinition.validate(&1) == :ok)) and
-      Enum.all?(definition.surfaces, &(&1.scope in definition.installable_scopes)) and
-      length(Enum.uniq(surface_identities)) == length(surface_identities) and
-      Enum.all?(definition.surfaces, fn surface ->
-        Enum.all?(surface.actions, &MapSet.member?(declared_action_ids, &1))
-      end) and workspace_surface_coverage?(definition)
-  end
-
-  defp valid_surfaces?(%__MODULE__{}), do: false
-
-  defp surface_identity(%SurfaceDefinition{scope: scope, surface_id: surface_id}),
-    do: {scope, surface_id}
-
-  defp surface_identity(_surface), do: nil
-
-  defp declared_action_ids(%__MODULE__{} = definition) do
-    definition.actions
-    |> Enum.map(& &1.action_id)
-    |> Kernel.++(definition.lifecycle_contract.actions)
-    |> MapSet.new()
-  end
-
-  # An application with surfaces gives every installable scope a workspace; a roadmap or
-  # headless one has none to give.
-  defp workspace_surface_coverage?(%__MODULE__{availability: :roadmap}), do: true
-
-  defp workspace_surface_coverage?(%__MODULE__{} = definition) do
-    headless?(definition) or
-      Enum.all?(definition.installable_scopes, fn scope ->
-        Enum.any?(definition.surfaces, fn surface ->
-          surface.scope == scope and surface.placement == :application_workspace
-        end)
-      end)
-  end
 
   defp valid_capability_contributions?(contributions) when is_list(contributions) do
     length(contributions) <= @max_capability_contributions and

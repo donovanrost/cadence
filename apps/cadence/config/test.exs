@@ -102,12 +102,6 @@ config :cadence, :env_credentials,
   ],
   allow_prefixes: ["CADENCE_TEST_"]
 
-# The console federation smoke's test-only application (Cadence.Applications.FixtureContributors;
-# never set in dev or prod, a guard test checks).
-config :cadence, :fixture_application_contributors, [
-  Cadence.TestSupport.SurfaceFixtureApplication
-]
-
 # Retention sweepers (#694) are exercised directly in their tests: no timers in the suite.
 config :cadence, :retention, enabled?: false
 

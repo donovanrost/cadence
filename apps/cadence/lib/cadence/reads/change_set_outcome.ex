@@ -31,7 +31,8 @@ defmodule Cadence.Reads.ChangeSetOutcome do
   # Kinds whose changes Readiness doesn't read (domain, #522): app configuration, and the derived
   # kinds the pipeline adds after the staged ops. Every registered kind is in one list or the
   # other (`ChangeSetOutcomeKindsTest`), so a new kind is classified on purpose.
-  @not_read_kinds ~w(derived_telemetry limit_definition monitoring_policy spacecraft_routes
+  # Source endpoint relay declarations change allowed origins without affecting spacecraft readiness.
+  @not_read_kinds ~w(derived_telemetry limit_definition monitoring_policy source_endpoint spacecraft_routes
                      framing_compatibility catalog_compatibility switch_compatibility
                      apid_compatibility)
 

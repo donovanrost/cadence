@@ -2,8 +2,7 @@
 
 The console (`apps/console`, with the design system in `packages/apogee-ui`) is the only UI.
 Read [apps/console/ARCHITECTURE.md](apps/console/ARCHITECTURE.md) before you change it, and the
-UI rules in the root `CLAUDE.md`. Everything else in this workspace is legacy that is being
-deleted (see [README](README.md)). Don't extend it. Delete what the console replaces.
+UI rules in the root `CLAUDE.md`.
 
 The [frontend code standard](docs/code-standard.md) covers domain types, runtime decoding, Vue
 ownership and type escapes. Don't weaken a check to fit a change.

@@ -231,6 +231,16 @@ defmodule Cadence.Reads.ConfigKindSchema do
      ] ++ configuration_fields() ++ [listener_field()]}
   end
 
+  def fields("source_endpoint") do
+    {:ok,
+     [
+       field("relay.origin_spacecraft_ids", "Relay origin spacecraft", :json,
+         help:
+           "Spacecraft whose frames can arrive on this endpoint. Its own spacecraft is included automatically."
+       )
+     ]}
+  end
+
   # #77 stage 1 (domain 5504322a8): one derived point. `point_id` is set on create only;
   # `metadata` isn't edited here (stored as is).
   def fields("derived_telemetry") do

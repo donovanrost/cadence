@@ -7,9 +7,7 @@ defmodule Cadence.Extensions.Presentation.FieldDefinition do
   JavaScript, queries, or validation callbacks.
   """
 
-  alias Cadence.Extensions.Presentation.{ReferenceDefinition, ReferencePage}
-
-  @type input_type :: :text | :textarea | :number | :url | :select | :reference
+  @type input_type :: :text | :textarea | :number | :url | :select
   @type visibility :: %{field: atom(), equals: term()} | nil
   @type option :: {binary(), binary()} | {binary(), binary(), keyword()}
 
@@ -25,8 +23,6 @@ defmodule Cadence.Extensions.Presentation.FieldDefinition do
           max: number() | nil,
           default: binary(),
           options: [option()],
-          reference: ReferenceDefinition.t() | nil,
-          reference_page: ReferencePage.t() | nil,
           visible_when: visibility()
         }
 
@@ -40,15 +36,13 @@ defmodule Cadence.Extensions.Presentation.FieldDefinition do
     :step,
     :min,
     :max,
-    :reference,
-    :reference_page,
     :visible_when,
     required: false,
     default: "",
     options: []
   ]
 
-  @input_types [:text, :textarea, :number, :url, :select, :reference]
+  @input_types [:text, :textarea, :number, :url, :select]
   @max_options 128
 
   @spec validate(t()) :: :ok | {:error, :invalid_field_definition}
@@ -66,7 +60,7 @@ defmodule Cadence.Extensions.Presentation.FieldDefinition do
          true <- is_binary(field.default),
          true <- valid_options?(field.options),
          true <- valid_visibility?(field.visible_when),
-         true <- valid_reference_contract?(field) do
+         true <- valid_options_for_type?(field) do
       :ok
     else
       _invalid -> {:error, :invalid_field_definition}
@@ -97,16 +91,8 @@ defmodule Cadence.Extensions.Presentation.FieldDefinition do
 
   defp valid_visibility?(_visibility), do: false
 
-  defp valid_reference_contract?(%__MODULE__{type: :select} = field),
-    do: field.options != [] and is_nil(field.reference) and is_nil(field.reference_page)
-
-  defp valid_reference_contract?(%__MODULE__{type: :reference} = field) do
-    field.options == [] and is_nil(field.reference_page) and
-      ReferenceDefinition.validate(field.reference) == :ok
-  end
-
-  defp valid_reference_contract?(%__MODULE__{} = field),
-    do: field.options == [] and is_nil(field.reference) and is_nil(field.reference_page)
+  defp valid_options_for_type?(%__MODULE__{type: :select} = field), do: field.options != []
+  defp valid_options_for_type?(%__MODULE__{} = field), do: field.options == []
 
   defp valid_numeric_bounds?(nil, _max), do: true
   defp valid_numeric_bounds?(_min, nil), do: true

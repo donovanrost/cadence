@@ -16,33 +16,6 @@ defmodule Cadence.Applications.OpsConsole.Actions.DataSourcesTest do
     :ok
   end
 
-  test "declares the exact durable host bindings for the data-sources surface" do
-    assert DataSourcesAction.bindings() == [
-             {"data_sources", "register-source"},
-             {"data_sources", "change-binding"},
-             {"data_sources", "disable-source"},
-             {"data_sources", "enable-source"},
-             {"data_sources", "reconcile-tsdb-backend"},
-             {"data_sources", "deprovision-tsdb-backend"},
-             {"data_sources", "provision-tsdb-backend"},
-             {"data_sources", "probe-source"},
-             {"data_sources", "rotate-source-credential"},
-             {"data_sources", "retry-deployment-run"},
-             {"data_sources", "requeue-deployment-run"},
-             {"data_source_registration", "register-source"},
-             {"data_source_settings", "change-binding"},
-             {"data_source_settings", "disable-source"},
-             {"data_source_settings", "enable-source"},
-             {"data_source_settings", "reconcile-tsdb-backend"},
-             {"data_source_settings", "deprovision-tsdb-backend"},
-             {"data_source_settings", "provision-tsdb-backend"},
-             {"data_source_settings", "probe-source"},
-             {"data_source_settings", "rotate-source-credential"},
-             {"data_source_settings", "retry-deployment-run"},
-             {"data_source_settings", "requeue-deployment-run"}
-           ]
-  end
-
   test "register-source executes the scoped domain persistence and returns JSON-safe output" do
     request =
       request("register-source", %{

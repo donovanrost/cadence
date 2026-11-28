@@ -37,12 +37,40 @@ defmodule QaRestMissions do
           do:
             client
             |> ensure_provider(organization_id, mission_id)
-            |> ensure_direct_route(approver, mission_id, mission),
+            |> ensure_direct_route(approver, mission_id, mission)
+            |> ensure_relay(approver, mission_id, mission),
           else: client
 
       IO.puts("  #{mission.slug}: mission and catalog present")
       client
     end)
+  end
+
+  defp ensure_relay(client, approver, mission_id, mission) do
+    delivery_craft = craft_id(mission, 1)
+    origins = [craft_id(mission, 2)]
+    {client, endpoints} =
+      request!(client, :get, "/missions/#{mission_id}/spacecraft/#{delivery_craft}/source-endpoints")
+
+    endpoint =
+      Enum.find(endpoints, &(get_in(&1, ["metadata", "managed_by"]) == "spacecraft")) ||
+        raise("QA relay source endpoint is missing for #{delivery_craft}")
+
+    if get_in(endpoint, ["relay", "origin_spacecraft_ids"]) != origins do
+      operation = %{
+        kind: "source_endpoint",
+        action: "update",
+        entity_id: endpoint["source_endpoint_id"],
+        changes: [%{path: "relay.origin_spacecraft_ids", value: origins}]
+      }
+
+      case RouteChanges.submit(client, mission_id, "qa-relay", "Declare QA relay origin", [operation]) do
+        :applied -> :ok
+        {:in_review, _, _} -> approve_change_set(client, approver, mission_id)
+      end
+    end
+
+    client
   end
 
   defp ensure_mission(client, organization_id, mission) do

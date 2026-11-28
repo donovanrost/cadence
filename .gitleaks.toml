@@ -181,7 +181,7 @@ secretGroup = 1
     paths = [ '''(?:^|/)dev/ingress-benchmark/compose\.full-flow-tmpfs\.yaml$''' ]
     regexes = [ '''^postgres$''' ]
 
-# These two default-rule hits are synthetic historical evidence and a browser fixture.
+# This default-rule hit is synthetic historical evidence.
 [[rules]]
 id = "generic-api-key"
 
@@ -191,10 +191,3 @@ id = "generic-api-key"
     regexTarget = "secret"
     paths = [ '''(?:^|/)docs/apogee/domain/repairs/2026-11-12-gen8-rows-before\.txt$''' ]
     regexes = [ '''^af12d1279a1bbbb1c750db60ef26d4e5054b1b04ff602ee06d5ef1beec507e4f$''' ]
-
-    [[rules.allowlists]]
-    description = "Reviewed synthetic value in frontend/tools/phoenix/federation_browser_smoke_contract.test.mjs"
-    condition = "AND"
-    regexTarget = "secret"
-    paths = [ '''(?:^|/)frontend/tools/phoenix/federation_browser_smoke_contract\.test\.mjs$''' ]
-    regexes = [ '''^01234567-89ab-cdef-0123-456789abcdef$''' ]

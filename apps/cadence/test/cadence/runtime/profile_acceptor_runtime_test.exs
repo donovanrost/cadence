@@ -45,12 +45,20 @@ defmodule Cadence.Runtime.ProfileAcceptorRuntimeTest do
 
     # The acceptor crashes: both sessions live on (their sockets are the adapters'), the adapters
     # register again, and a new peer still reaches its contact.
-    acceptor = ProfileAcceptor.whereis(ProcessNamespace.default(), ctx.mission_id, ctx.profile_id)
+    acceptor =
+      ProfileAcceptor.whereis(ProcessNamespace.default(), ctx.mission_id, ctx.profile_id, %{
+        host: "127.0.0.1",
+        port: port
+      })
+
     Process.exit(acceptor, :kill)
 
     assert_eventually(fn ->
       replaced =
-        ProfileAcceptor.whereis(ProcessNamespace.default(), ctx.mission_id, ctx.profile_id)
+        ProfileAcceptor.whereis(ProcessNamespace.default(), ctx.mission_id, ctx.profile_id, %{
+          host: "127.0.0.1",
+          port: port
+        })
 
       # Both contacts registered again: one may first hit :eaddrinuse while the killed
       # listener closes and come back on its quick (250 ms) retry.
@@ -84,7 +92,12 @@ defmodule Cadence.Runtime.ProfileAcceptorRuntimeTest do
 
     namespace = ProcessNamespace.default()
     adapter = adapter(ctx, pass)
-    acceptor = ProfileAcceptor.whereis(namespace, ctx.mission_id, ctx.profile_id)
+
+    acceptor =
+      ProfileAcceptor.whereis(namespace, ctx.mission_id, ctx.profile_id, %{
+        host: "127.0.0.1",
+        port: port
+      })
 
     # The adapter can't register again while something else holds the port.
     :ok = :sys.suspend(adapter)
@@ -104,7 +117,14 @@ defmodule Cadence.Runtime.ProfileAcceptorRuntimeTest do
     :ok = :gen_tcp.close(squatter)
 
     assert_eventually(
-      fn -> is_pid(ProfileAcceptor.whereis(namespace, ctx.mission_id, ctx.profile_id)) end,
+      fn ->
+        is_pid(
+          ProfileAcceptor.whereis(namespace, ctx.mission_id, ctx.profile_id, %{
+            host: "127.0.0.1",
+            port: port
+          })
+        )
+      end,
       400
     )
 
@@ -165,7 +185,12 @@ defmodule Cadence.Runtime.ProfileAcceptorRuntimeTest do
 
     namespace = ProcessNamespace.default()
     adapter = adapter(ctx, pass)
-    acceptor = ProfileAcceptor.whereis(namespace, ctx.mission_id, ctx.profile_id)
+
+    acceptor =
+      ProfileAcceptor.whereis(namespace, ctx.mission_id, ctx.profile_id, %{
+        host: "127.0.0.1",
+        port: port
+      })
 
     :ok = :sys.suspend(adapter)
     :ok = DynamicSupervisor.terminate_child(ProfileAcceptor.supervisor_name(namespace), acceptor)
@@ -178,7 +203,14 @@ defmodule Cadence.Runtime.ProfileAcceptorRuntimeTest do
 
     # Registered again well before the 5 s backoff would have allowed.
     assert_eventually(
-      fn -> is_pid(ProfileAcceptor.whereis(namespace, ctx.mission_id, ctx.profile_id)) end,
+      fn ->
+        is_pid(
+          ProfileAcceptor.whereis(namespace, ctx.mission_id, ctx.profile_id, %{
+            host: "127.0.0.1",
+            port: port
+          })
+        )
+      end,
       30
     )
 

@@ -21,12 +21,11 @@ defmodule Cadence.Comms.ListenClaims do
 
   import Ecto.Query
 
-  alias Cadence.Comms.{ListenerChoice, TransportRow}
+  alias Cadence.Comms.{ListenEndpoint, ListenerChoice, TransportRow}
   alias Cadence.Contacts.ProfileStore
   alias Cadence.Persistence.JsonDocument
   alias Cadence.Repo
 
-  @wildcard_hosts ["0.0.0.0", "::", "", "*"]
   @loopback_hosts ["localhost", "127.0.0.1"]
 
   @type endpoint :: %{host: binary(), port: pos_integer()}
@@ -186,10 +185,11 @@ defmodule Cadence.Comms.ListenClaims do
   defp conflict(a, b) when a.mode != b.mode, do: :listen_endpoint_mode_mismatch
   defp conflict(_a, _b), do: nil
 
+  defp shared_conflict(a, b) when a.shared? != b.shared?, do: :listen_endpoint_listener_mismatch
+
   defp shared_conflict(a, b) when a.mode == :plaintext or b.mode == :plaintext,
     do: :shared_listener_requires_mtls
 
-  defp shared_conflict(a, b) when a.shared? != b.shared?, do: :listen_endpoint_listener_mismatch
   defp shared_conflict(a, b) when a.bind != b.bind, do: :shared_listener_bind_mismatch
   defp shared_conflict(_a, _b), do: nil
 
@@ -218,10 +218,10 @@ defmodule Cadence.Comms.ListenClaims do
       else: :ok
   end
 
-  defp check_path(_mission_id, nil, _mode), do: :ok
+  defp check_path(nil), do: :ok
 
-  defp check_path(mission_id, endpoint, mode) do
-    overlaps = Enum.filter(claims(endpoint.port), &overlaps?(&1.endpoint, endpoint))
+  defp check_path(%{mission_id: mission_id, endpoint: endpoint, mode: mode} = pinned) do
+    overlaps = Enum.filter(claims(endpoint.port), &collides?(pinned, &1))
 
     with :ok <- exclusive_mission(mission_id, endpoint, overlaps) do
       if Enum.any?(overlaps, &(not &1.projected? and &1.mode != mode)),
@@ -243,7 +243,7 @@ defmodule Cadence.Comms.ListenClaims do
     |> Enum.reduce_while(:ok, fn binding, :ok ->
       config = Map.get(binding, :configuration) || %{}
 
-      case check_path(mission_id, endpoint(config), auth_mode(config)) do
+      case check_path(claim(mission_id, config, nil)) do
         :ok ->
           {:cont, :ok}
 
@@ -312,25 +312,13 @@ defmodule Cadence.Comms.ListenClaims do
         owner: owner,
         projected?: false,
         endpoint: endpoint,
-        bind: %{endpoint | host: bind_host(get(configuration, :host))},
+        bind: ListenEndpoint.bind(get(configuration, :host), endpoint.port),
         mode: auth_mode(configuration),
         shared?: ListenerChoice.shared?(configuration),
         configuration: configuration
       }
     end
   end
-
-  # InboundSocket binds an unspecified address when the host isn't a literal IP.
-  defp bind_host(nil), do: "127.0.0.1"
-
-  defp bind_host(host) when is_binary(host) do
-    case :inet.parse_address(String.to_charlist(host)) do
-      {:ok, ip} -> ip |> :inet.ntoa() |> List.to_string()
-      {:error, _reason} -> "0.0.0.0"
-    end
-  end
-
-  defp bind_host(_host), do: "0.0.0.0"
 
   defp auth_mode(configuration) do
     if get(configuration, :delivery_auth) in ["mtls", :mtls], do: :mtls, else: :plaintext
@@ -342,10 +330,7 @@ defmodule Cadence.Comms.ListenClaims do
   a wildcard. The claim check's own comparison; planning's listener overlap uses it too (#361).
   """
   @spec overlaps?(endpoint(), endpoint()) :: boolean()
-  def overlaps?(%{port: port, host: a}, %{port: port, host: b}),
-    do: a == b or a in @wildcard_hosts or b in @wildcard_hosts
-
-  def overlaps?(_claim, _endpoint), do: false
+  defdelegate overlaps?(claim, endpoint), to: ListenEndpoint
 
   defp get(map, key), do: Map.get(map, key, Map.get(map, Atom.to_string(key)))
 

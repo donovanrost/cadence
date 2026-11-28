@@ -1,14 +1,1 @@
-{
-  "packages/plugin-sdk/src/release-catalog.ts": {
-    "lines": 1806,
-    "owner": "legacy (#80): frozen, leaves with its row"
-  },
-  "packages/plugin-sdk/src/host/http-host-bridge.ts": {
-    "lines": 534,
-    "owner": "legacy (#80): frozen, leaves with its row"
-  },
-  "packages/plugin-sdk/src/bridge.ts": {
-    "lines": 418,
-    "owner": "legacy (#80): frozen, leaves with its row"
-  }
-}
+{}

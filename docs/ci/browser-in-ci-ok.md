@@ -1,6 +1,6 @@
 # Proposal: the federation browser job in `ci-ok`, after a speed-up
 
-Owner: devops. Status: **retired 2026-11-28 (#1075): the Federation browser job is gone.** Once the legacy LiveView pages were deleted it ran only the `tools/phoenix` node contract tests, which Frontend quality already runs through `test:transport`. The browser shards had joined `ci-ok` on 2026-11-19 (see the end); what follows is the history. Basis: the first fully green run, #62's PR
+Owner: devops. Status: **retired 2026-11-28 (#1075): the Federation browser job is gone.** Once the legacy LiveView pages were deleted it ran only the `tools/phoenix` node contract tests, which Frontend quality then ran through `test:transport`. Those tests, `test-web-publication` and the publication build in `browser-assets` went with the federation (#672); `browser-assets` now builds only the console for Console e2e. The browser shards had joined `ci-ok` on 2026-11-19 (see the end); what follows is the history. Basis: the first fully green run, #62's PR
 run 43378880714, where "Phoenix producer contracts and federation browser" took **11:18**.
 
 ## Where the 11:18 goes

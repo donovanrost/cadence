@@ -13,16 +13,6 @@ How the console is built (routing, decoders, remote state, live data, words, acc
 [apps/console/ARCHITECTURE.md](apps/console/ARCHITECTURE.md). Contribution rules and hand-off
 checks: [AGENTS.md](AGENTS.md).
 
-Everything else in this workspace is legacy UI that is being deleted (epic #209):
-
-- the federated remotes (`apps/*` other than `console`, and `modules/*`); `apps/host` holds only
-  the route catalog (`src/routes.json`) that `plugin-sdk` and `CadenceWeb.HostRoutes` still read;
-- `packages/ui` and `packages/design-tokens`;
-- `packages/plugin-sdk`, which the console's application surfaces (`src/features/apps`) still use
-  until their replacement lands.
-
-Don't build on them, and don't document them further.
-
 ## Toolchain
 
 - Vue 3 with TypeScript, vue-router, Tailwind v4.

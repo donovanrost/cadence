@@ -63,11 +63,7 @@ defmodule Cadence.Extensions.Registry do
       package_id: "cadence.telemetry-applications",
       version: 1,
       trust: :first_party,
-      compatibility: %{
-        cadence_application_contract: 1,
-        cadence_surface_contract: 1,
-        cadence_capability_abi: 1
-      },
+      compatibility: %{cadence_application_contract: 1, cadence_capability_abi: 1},
       contributions: [
         %ApplicationContribution{
           application_key: "telemetry_decom",
@@ -115,7 +111,7 @@ defmodule Cadence.Extensions.Registry do
       package_id: identity.package_id,
       version: identity.package_version,
       trust: :first_party,
-      compatibility: %{cadence_application_contract: 1, cadence_surface_contract: 1},
+      compatibility: %{cadence_application_contract: 1},
       contributions: [
         %ApplicationContribution{
           application_key: identity.application_key,
