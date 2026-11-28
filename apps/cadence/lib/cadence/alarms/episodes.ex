@@ -192,8 +192,26 @@ defmodule Cadence.Alarms.Episodes do
 
     cond do
       seen?(repo, observation) -> {:ok, :unchanged}
+      level == :ignore and disabled?(observation) -> disabled(repo, observation)
       level == :ignore -> {:ok, :unchanged}
       true -> transition(repo, lock_active(repo, observation), observation)
+    end
+  end
+
+  # A policy turned off for a spacecraft (an override with `disabled`, #451 T3d) will not evaluate
+  # again, so an alarm it raised would stay open for ever: it clears with cause `rule_disabled`.
+  # Any other state that raises and clears nothing (`unknown`) still changes no episode.
+  defp disabled?(observation), do: to_string(Map.get(observation, :source_state)) == "disabled"
+
+  defp disabled(repo, observation) do
+    case lock_active(repo, observation) do
+      nil ->
+        {:ok, :unchanged}
+
+      %EpisodeRow{} = episode ->
+        if DateTime.compare(observation.observed_at, episode.last_observed_at) == :lt,
+          do: {:ok, :unchanged},
+          else: clear(repo, episode, observation, :rule_disabled)
     end
   end
 

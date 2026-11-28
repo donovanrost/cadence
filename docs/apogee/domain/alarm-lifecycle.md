@@ -74,6 +74,7 @@ previous and next subject state and returns Multi steps.
 | alarm → lower non-normal severity | `deescalated`; the ack is kept |
 | the rules in force on the parameter change while the episode is open (#451) | `rule_changed`, once per (episode, rule ids, digest pair); the episode is untouched |
 | alarm → normal | `cleared`, state = cleared (auto-clear) |
+| the rule is turned off for the spacecraft (a disabled override, #451) | `cleared` with cause `rule_disabled`, when the policy's state becomes `disabled` |
 | a generation drops the rule that raised it (#451) | `cleared` with cause `rule_retired`, once per episode when the generation is applied; its latest alarm state is removed |
 | alarm → alarm, same severity | update last_value / last_evaluated_at only (no event) |
 

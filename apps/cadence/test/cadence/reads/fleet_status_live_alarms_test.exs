@@ -1,13 +1,11 @@
 defmodule Cadence.Reads.FleetStatusLiveAlarmsTest do
   @moduledoc """
-  The fleet's condition combines the LIVE catalog monitoring alarms with the ground limits, and the
-  worst wins (#871, DECISIONS #17). A live critical alarm shows on Fleet with no ground-limit job
-  ever having run, a ground limit is labelled with when it was evaluated, and the read stays a
-  fixed number of statements.
+  The fleet's condition is the LIVE catalog monitoring alarms (#871, DECISIONS #17; the ground
+  limits no longer count, #451 T3d). A live critical alarm shows on Fleet, and the read stays a fixed
+  number of statements.
   """
   use Cadence.DataCase, async: false
 
-  alias Cadence.Limits.{Event, Store}
   alias Cadence.Reads.FleetStatus
   alias Cadence.SemanticObservations.{FleetAlarms, LatestAlarmStateRow}
   alias Cadence.Spacecraft
@@ -59,32 +57,6 @@ defmodule Cadence.Reads.FleetStatusLiveAlarmsTest do
     FleetAlarms.refresh(Repo, @org, mission, [craft])
   end
 
-  defp ground(craft, point, state, minute) do
-    at = DateTime.add(@now, -minute * 60, :second)
-
-    event = %Event{
-      limit_event_id: "ev-#{craft}-#{point}",
-      mission_id: @mission,
-      spacecraft_id: craft,
-      point_id: point,
-      point_name: point,
-      source_sample_type: :telemetry_sample,
-      sample_id: "s",
-      limit_definition_id: "d",
-      limit_definition_version: 1,
-      limit_set_name: "d",
-      evaluated_value: 3.5,
-      limit_state: state,
-      normalized_state: if(state in [:red_high, :red_low], do: :red, else: :yellow),
-      violation: true,
-      generation_time: at,
-      receipt_time: at,
-      provenance: %{}
-    }
-
-    {:ok, _} = Store.persist_latest_states(Repo, [event])
-  end
-
   defp row(id), do: Enum.find(fleet().spacecraft, &(&1.id == id))
   defp fleet, do: FleetStatus.load(@org, @mission, now: @now)
 
@@ -122,49 +94,6 @@ defmodule Cadence.Reads.FleetStatusLiveAlarmsTest do
     assert %{limit_state: :caution} = row("sc-2")
     assert %{limit_state: :critical} = row("sc-3")
     assert %{limit_state: :no_data, violating_points: 0, worst_point: nil} = row("sc-4")
-  end
-
-  test "the worst of the two sources wins, the live alarm on a tie, and violating counts both" do
-    # Live critical over ground caution.
-    alarm("sc-1", "L", "critical", 1)
-    ground("sc-1", "G", :yellow_high, 10)
-    # Ground critical over live caution.
-    alarm("sc-2", "L", "warning", 1)
-    ground("sc-2", "G", :red_high, 10)
-    # A tie at critical.
-    alarm("sc-3", "L", "severe", 1)
-    ground("sc-3", "G", :red_low, 10)
-    # Ground only.
-    ground("sc-4", "G", :yellow_low, 10)
-
-    assert %{
-             limit_state: :critical,
-             violating_points: 2,
-             worst_point: %{source: :catalog_monitoring}
-           } =
-             row("sc-1")
-
-    assert %{
-             limit_state: :critical,
-             violating_points: 2,
-             worst_point: %{source: :ground_limit, point_id: "G", raw_limit_state: "red_high"}
-           } = row("sc-2")
-
-    assert %{limit_state: :critical, worst_point: %{source: :catalog_monitoring}} = row("sc-3")
-
-    assert %{limit_state: :caution, violating_points: 1, worst_point: %{source: :ground_limit}} =
-             row("sc-4")
-  end
-
-  test "a ground limit says when its evaluation ran, not when its sample arrived" do
-    ground("sc-1", "G", :red_high, 600)
-
-    assert %{source: :ground_limit, received_at: received, evaluated_at: evaluated} =
-             row("sc-1").worst_point
-
-    assert received == DateTime.add(@now, -600 * 60, :second)
-    # Written just now by the evaluation, long after its sample.
-    assert DateTime.diff(DateTime.utc_now(), evaluated) < 60
   end
 
   test "FleetAlarms: the worst active alarm, the count and the newest receipt per spacecraft" do

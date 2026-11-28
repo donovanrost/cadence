@@ -1,19 +1,15 @@
 defmodule Cadence.Reads.PointConditions do
   @moduledoc """
-  The current condition of every point of one spacecraft, from both stores (#143), paged.
+  The current condition of every point of one spacecraft (#143), paged.
 
-  Two stores say it, with different facts and ages (DECISIONS #17), so a point has up to one row
-  per source and the rows are labelled by it:
-
-  - `:ground_limit`, `telemetry_latest_limit_states`: written by limit-evaluation jobs, so its
-    state may be old; it says when the job ran (`evaluated_at`) and, from the evaluation history,
-    when the point entered the state (`entered_at`).
-  - `:catalog_monitoring`, `semantic_latest_alarm_states`: written on every state transition by the
-    runtime, so it is live and its `receipt_time` is when the parameter entered the state. A
-    parameter that never left normal has no row; neither has a monitoring rule that never changed
-    state. The inventory is the compiled plan's (`MonitoredParameters`, #451): a parameter the plan
-    evaluates on this spacecraft that has a sample but no state yet is `evaluated: false` (nominal,
-    no time), which the screen says.
+  A point's condition is the runtime's (`:catalog_monitoring`, `semantic_latest_alarm_states`;
+  #451 T3d, it also read the ground limit states before): written on every state transition, so it
+  is live and its `receipt_time` is when the parameter entered the state. A parameter that never
+  left normal has no row; neither has a monitoring rule that never changed state. The inventory is
+  the compiled plan's (`MonitoredParameters`): a parameter the plan evaluates on this spacecraft
+  that has a sample but no state yet is `evaluated: false` (nominal, no time), which the screen
+  says. Every row's `source` is `catalog_monitoring`; `evaluated_at`, `raw_limit_state` and `value`
+  are `null`, and `entered_at_is_lower_bound` is `false`.
 
   **Staleness.** A point is stale when its newest sample is older than `stale_after_s` (the one
   setting Fleet uses, `FleetStatus.stale_after_s/0`). The newest sample time is the current-value
@@ -25,13 +21,11 @@ defmodule Cadence.Reads.PointConditions do
   history store did not answer (`telemetry: :degraded`) and `:stale` when it did (never sampled).
 
   **Order and paging.** By the point's worst rank (critical, caution, stale, everything else),
-  then point id, then source, then policy, so a point's rows stay together. The cursor is that
-  key of the last row; rows that change between pages neither repeat nor skip one that stays. The
-  spacecraft's rows (its points, not the fleet) are merged in memory, because staleness is not in
-  the database; `first_crossed_at` is looked up for the page's rows only.
+  then point id, then policy, so a point's rows stay together. The cursor is that key of the last
+  row; rows that change between pages neither repeat nor skip one that stays. The spacecraft's rows
+  (its points, not the fleet) are merged in memory, because staleness is not in the database.
   """
 
-  alias Cadence.Limits.Store.{AlarmPage, SpacecraftStates}
   alias Cadence.Ops.PointCatalog
   alias Cadence.Reads.{DurableReceiptCache, FleetStatus, MonitoredParameters, PointInfo}
   alias Cadence.SemanticObservations
@@ -41,7 +35,7 @@ defmodule Cadence.Reads.PointConditions do
 
   @default_limit 100
   @max_limit 200
-  @source_order %{ground_limit: 0, catalog_monitoring: 1}
+  @source_order %{catalog_monitoring: 1}
 
   @spec load(binary(), binary(), binary(), keyword()) ::
           {:ok, map()} | {:error, :invalid_cursor | :spacecraft_not_found}
@@ -72,7 +66,7 @@ defmodule Cadence.Reads.PointConditions do
          telemetry: telemetry,
          counts: counts(rows),
          next_cursor: if(more?, do: page |> List.last() |> sort_key() |> encode_cursor()),
-         points: enrich(page, organization_id, mission_id, spacecraft_id)
+         points: enrich(page, organization_id, mission_id)
        }}
     end
   end
@@ -92,18 +86,13 @@ defmodule Cadence.Reads.PointConditions do
 
     names = Map.new(points, &{&1.point_id, Map.get(&1, :point_name) || &1.point_id})
 
-    ground = SpacecraftStates.list(organization_id, mission_id, spacecraft_id)
     live = SemanticObservations.list_for_spacecraft(organization_id, mission_id, spacecraft_id)
 
     live_rows = Enum.map(live, &live_row(&1, by_parameter, names))
 
-    evaluated =
-      ground
-      |> MapSet.new(& &1.event.point_id)
-      |> MapSet.union(MapSet.new(live_rows, & &1.point_id))
+    evaluated = MapSet.new(live_rows, & &1.point_id)
 
-    Enum.map(ground, &ground_row/1) ++
-      live_rows ++
+    live_rows ++
       not_evaluated_rows(
         organization_id,
         mission_id,
@@ -114,24 +103,6 @@ defmodule Cadence.Reads.PointConditions do
         names,
         opts
       )
-  end
-
-  defp ground_row(%{event: event, evaluated_at: evaluated_at}) do
-    %{
-      source: :ground_limit,
-      point_id: event.point_id,
-      point_name: event.point_name || event.point_id,
-      policy_id: nil,
-      condition: ground_condition(event.normalized_state),
-      raw_limit_state: event.limit_state && to_string(event.limit_state),
-      normalized_state: event.normalized_state,
-      evaluated: true,
-      evaluated_at: evaluated_at,
-      entered_at: nil,
-      entered_at_is_lower_bound: false,
-      value: event.evaluated_value,
-      state_received_at: event.receipt_time
-    }
   end
 
   defp live_row(row, by_parameter, names) do
@@ -195,10 +166,6 @@ defmodule Cadence.Reads.PointConditions do
       }
     end)
   end
-
-  defp ground_condition(:red), do: :critical
-  defp ground_condition(:yellow), do: :caution
-  defp ground_condition(_other), do: :nominal
 
   # The mapping the alarm episodes use (`Alarms.Sources`).
   defp live_condition(state) do
@@ -333,34 +300,14 @@ defmodule Cadence.Reads.PointConditions do
 
   # -- the page's extras --------------------------------------------------------------------------
 
-  # Unit, and when each ground row entered its state (the evaluation history, one statement for
-  # the page).
-  defp enrich(page, organization_id, mission_id, spacecraft_id) do
+  # The unit of each point of the page.
+  defp enrich(page, organization_id, mission_id) do
     units = if page == [], do: %{}, else: PointInfo.by_id(organization_id, mission_id)
-
-    crossed =
-      AlarmPage.crossed_at(
-        mission_id,
-        for(
-          %{source: :ground_limit, evaluated: true} = row <- page,
-          do: {spacecraft_id, row.point_id, Atom.to_string(row.normalized_state)}
-        )
-      )
 
     Enum.map(page, fn row ->
       row
       |> Map.put(:unit, units |> Map.get(row.point_id, PointInfo.unknown()) |> Map.get(:unit))
-      |> entered(crossed, spacecraft_id)
       |> Map.drop([:normalized_state, :rank])
     end)
   end
-
-  defp entered(%{source: :ground_limit, evaluated: true} = row, crossed, spacecraft_id) do
-    case Map.get(crossed, {spacecraft_id, row.point_id}) do
-      nil -> %{row | entered_at_is_lower_bound: true}
-      at -> %{row | entered_at: at}
-    end
-  end
-
-  defp entered(row, _crossed, _spacecraft_id), do: row
 end
