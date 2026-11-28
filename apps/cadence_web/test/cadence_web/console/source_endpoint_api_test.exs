@@ -4,16 +4,16 @@ defmodule CadenceWeb.Console.SourceEndpointAPITest do
   alias Cadence.Organizations
   alias Cadence.Organizations.Organization
   alias Cadence.SourceEndpoints
-  alias CadenceWeb.{ControlPlaneApiFixtures, TestFixtures}
+  alias CadenceWeb.{MissionReadModelFixtures, TestFixtures}
 
   setup %{conn: conn} do
-    fixture = ControlPlaneApiFixtures.bootstrap(conn)
+    fixture = MissionReadModelFixtures.bootstrap(conn)
     {:ok, organization} = Organizations.fetch_organization(fixture.organization_id)
     admin = TestFixtures.persist_user!()
     TestFixtures.grant_membership!(admin, organization, role: :organization_admin)
 
     spacecraft =
-      ControlPlaneApiFixtures.persist_api_spacecraft!(
+      MissionReadModelFixtures.persist_api_spacecraft!(
         fixture.organization_id,
         fixture.mission_id,
         %{
@@ -73,7 +73,7 @@ defmodule CadenceWeb.Console.SourceEndpointAPITest do
 
     assert %{"error" => %{"code" => "service_not_allowed"}} =
              build_conn()
-             |> ControlPlaneApiFixtures.authorize(context.api_token)
+             |> MissionReadModelFixtures.authorize(context.api_token)
              |> get(path)
              |> json_response(403)
 
@@ -81,7 +81,7 @@ defmodule CadenceWeb.Console.SourceEndpointAPITest do
       "/api/organizations/#{context.organization_id}/missions/#{context.mission_id}/source_endpoints"
 
     assert build_conn()
-           |> ControlPlaneApiFixtures.authorize(context.api_token)
+           |> MissionReadModelFixtures.authorize(context.api_token)
            |> get(legacy_path)
            |> Map.fetch!(:status) == 404
   end
@@ -117,7 +117,7 @@ defmodule CadenceWeb.Console.SourceEndpointAPITest do
       )
 
     mission =
-      ControlPlaneApiFixtures.persist_mission!(other.organization_id, "mission-other-source")
+      MissionReadModelFixtures.persist_mission!(other.organization_id, "mission-other-source")
 
     {:ok, theirs} =
       SourceEndpoints.create_source_endpoint(other.organization_id, mission.mission_id, %{

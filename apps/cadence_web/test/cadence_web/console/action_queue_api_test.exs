@@ -3,7 +3,7 @@ defmodule CadenceWeb.Console.ActionQueueAPITest do
 
   alias Cadence.Contacts.BookingResolutions.Row
   alias Cadence.Repo
-  alias CadenceWeb.ControlPlaneApiFixtures
+  alias CadenceWeb.MissionReadModelFixtures
   alias CadenceWeb.TestFixtures
 
   setup do
@@ -36,7 +36,7 @@ defmodule CadenceWeb.Console.ActionQueueAPITest do
   end
 
   test "a pass-resolution conflict is an attention row; the empty queue has no resolved", c do
-    ControlPlaneApiFixtures.seed_mission_read_models(c.org.organization_id, c.mission.mission_id)
+    MissionReadModelFixtures.seed_mission_read_models(c.org.organization_id, c.mission.mission_id)
 
     empty = c |> get_queue() |> json_response(200) |> Map.fetch!("data")
     assert empty["resolved"] == []
@@ -91,7 +91,7 @@ defmodule CadenceWeb.Console.ActionQueueAPITest do
   end
 
   test "a caution alarm is a P2 item naming the spacecraft and point", c do
-    ControlPlaneApiFixtures.seed_mission_read_models(c.org.organization_id, c.mission.mission_id)
+    MissionReadModelFixtures.seed_mission_read_models(c.org.organization_id, c.mission.mission_id)
 
     data = c |> get_queue() |> json_response(200) |> Map.fetch!("data")
 

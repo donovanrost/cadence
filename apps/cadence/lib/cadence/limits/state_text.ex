@@ -9,7 +9,7 @@ defmodule Cadence.Limits.StateText do
   logged, never raised: a read path must not fall over on a value written by a newer or older
   version.
 
-  The vocabularies are the evaluator's (`Cadence.Limits.Evaluator`): `limit_state` is the
+  The vocabularies are the threshold evaluation's (`SemanticRuntime.ThresholdLimits`): `limit_state` is the
   threshold crossed (`green`, `blue`, `yellow_low`, `yellow_high`, `red_low`, `red_high`),
   `normalized_state` its colour (`green`, `blue`, `yellow`, `red`).
   """

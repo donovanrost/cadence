@@ -7,10 +7,6 @@
     "lines": 694,
     "owner": "legacy (#80): frozen, leaves with its row"
   },
-  "modules/data-operations/src/features/historical-workflows/NativeHistoricalWorkflows.vue": {
-    "lines": 672,
-    "owner": "legacy (#80): frozen, leaves with its row"
-  },
   "modules/planning-and-contacts/src/features/contact-scheduling/OpsContactSchedule.vue": {
     "lines": 539,
     "owner": "legacy (#80): frozen, leaves with its row"
@@ -25,10 +21,6 @@
   },
   "modules/telemetry-decom/src/features/configuration/contracts.ts": {
     "lines": 506,
-    "owner": "legacy (#80): frozen, leaves with its row"
-  },
-  "modules/data-operations/src/features/historical-workflows/native-contract.ts": {
-    "lines": 500,
     "owner": "legacy (#80): frozen, leaves with its row"
   },
   "modules/planning-and-contacts/src/features/fleet-planning/OpsFleetPlanningRun.vue": {

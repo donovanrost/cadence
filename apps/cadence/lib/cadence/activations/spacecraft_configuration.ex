@@ -14,6 +14,38 @@ defmodule Cadence.Activations.SpacecraftConfiguration do
   alias Cadence.SpacecraftType
   alias Cadence.SpacecraftTypeStore
 
+  # A monitoring generation (ADR-020 P3 M2, #451): the set changed no craft's configuration. Every
+  # craft it didn't move keeps exactly its active entry, and every one it moved differs only in
+  # the mission model it runs (its composition's revision at the new authored head), never in its
+  # configuration, catalog or sources.
+  def admit(
+        %{
+          organization_id: org,
+          metadata:
+            %{
+              "spacecraft_configuration_version" => 2,
+              "change_set" => %{"id" => change_set_id, "lane" => "monitoring"}
+            } = metadata
+        } = attrs
+      )
+      when is_binary(org) and is_binary(change_set_id) do
+    ConfigurationLock.run(org, attrs.mission_id, fn ->
+      ids = ChangeSetSpacecraft.spacecraft_ids(org, attrs.mission_id, metadata)
+
+      with true <- ids != [] and length(ids) == ChangeSetSpacecraft.count(metadata),
+           {:ok, entries} <- FleetSnapshot.entries(metadata),
+           {:ok, mission} <- Missions.fetch_mission(org, attrs.mission_id),
+           {:ok, active} <- ConfigurationActive.load(mission),
+           true <- Map.drop(entries, ids) == Map.drop(active.entries, ids),
+           true <- Enum.all?(ids, &model_only?(entries[&1], active.entries[&1])) do
+        {:ok, :admitted}
+      else
+        {:error, reason} -> {:error, reason}
+        _ -> {:error, :change_set_activation_stale}
+      end
+    end)
+  end
+
   # A change-set generation (DECISIONS #35/#36): the change set already validated and wrote
   # the configuration in this same transaction. Admission checks the fleet it admits: every
   # spacecraft the set didn't change keeps exactly its active entry, and every changed one is
@@ -331,4 +363,15 @@ defmodule Cadence.Activations.SpacecraftConfiguration do
     |> Map.drop(@framing_fields)
     |> Map.update("document", %{}, &Map.delete(&1, "protocol"))
   end
+
+  # The mission model it runs, and the telemetry capability ids derived from that revision
+  # (TelemetryBinding's ids embed the revision); nothing of the craft's own configuration.
+  @monitoring_keys ["mission_model", "telemetry_capability_ids"]
+
+  defp model_only?(%{} = entry, %{} = active) do
+    changed = for {key, value} <- entry, Map.get(active, key) != value, do: key
+    changed -- @monitoring_keys == [] and Map.keys(active) -- Map.keys(entry) == []
+  end
+
+  defp model_only?(_entry, _active), do: false
 end

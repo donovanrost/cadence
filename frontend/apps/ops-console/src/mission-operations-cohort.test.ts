@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import commandsSource from "./OpsCommands.vue?raw";
-import dataOperationsSource from "./OpsDataOperations.vue?raw";
 import telemetrySource from "./OpsTelemetryExplore.vue?raw";
 
 describe("mission operations cohort bindings", () => {
@@ -15,11 +14,5 @@ describe("mission operations cohort bindings", () => {
     expect(telemetrySource).toContain("@cadence/dashboards-and-exploration/exploration");
     expect(telemetrySource).toContain("export default ExplorationLegacyRedirect");
     expect(telemetrySource).not.toContain("<template>");
-  });
-
-  it("delegates historical workflows to the data-operations feature owner", () => {
-    expect(dataOperationsSource).toContain("@cadence/data-operations/historical-workflows");
-    expect(dataOperationsSource).toContain("export default OpsDataOperations");
-    expect(dataOperationsSource).not.toContain("<template>");
   });
 });

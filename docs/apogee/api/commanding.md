@@ -828,10 +828,12 @@ name}` or `null`, never the stored actor document (#146, through #472's `ActorRe
 
 ## REST command queue entries: group members (owner: api-ops; four-eyes P0, 2026-11-18)
 
-The pre-console REST API under `/api/organizations/:organization_id/missions/:mission_id`
-(the `:api` and `:authenticated_api` pipelines) keeps its own error body, `{"errors": [{"reason":
-"<code>", "message": "…"}]}`, not the console envelope. Every command request is a command group's
-member (#708), so a request is queued and released only through its group.
+**Removed (#747).** The pre-console REST API under `/api/organizations/:organization_id/missions/:mission_id`
+and its `:authenticated_api` pipeline no longer exist; a service releases and decides through the
+console endpoints (`/api/v1`, with its bearer where `Console.ServiceAccess` opts the route in). What
+follows records what that API refused, in its own error body (`{"errors": [{"reason": "<code>",
+"message": "…"}]}`, not the console envelope). Every command request is a command group's member
+(#708), so a request is queued and released only through its group.
 
 | Endpoint | Refusal | Meaning | Instead |
 | --- | --- | --- | --- |

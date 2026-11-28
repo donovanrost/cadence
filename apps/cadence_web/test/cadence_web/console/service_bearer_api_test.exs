@@ -8,11 +8,11 @@ defmodule CadenceWeb.Console.ServiceBearerAPITest do
 
   alias Cadence.Auth.ServiceIdentity
   alias CadenceWeb.Console.ServiceAccess
-  alias CadenceWeb.{ControlPlaneApiFixtures, TestFixtures}
+  alias CadenceWeb.{MissionReadModelFixtures, TestFixtures}
 
   setup %{conn: conn} do
-    base = ControlPlaneApiFixtures.bootstrap(conn)
-    _other = ControlPlaneApiFixtures.persist_mission!(base.organization_id, "mission-beta")
+    base = MissionReadModelFixtures.bootstrap(conn)
+    _other = MissionReadModelFixtures.persist_mission!(base.organization_id, "mission-beta")
 
     {:ok, %{api_token: token}} =
       Cadence.Auth.issue_service_identity(

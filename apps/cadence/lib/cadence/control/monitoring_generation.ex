@@ -22,6 +22,7 @@ defmodule Cadence.Control.MonitoringGeneration do
   """
 
   alias Cadence.Applications.SpacecraftConfiguration.{Active, Assignments, Review}
+  alias Cadence.Catalog.CompositionPins
   alias Cadence.Control.{AuthoredVersions, ConfigurationGeneration}
   alias Cadence.MissionModels.{AuthoredHead, AuthoredLayer, Compositions}
   alias Cadence.Missions
@@ -34,7 +35,7 @@ defmodule Cadence.Control.MonitoringGeneration do
 
     with {:ok, mission} <- Missions.fetch_mission(org, mission_id),
          active = active(mission),
-         compositions = in_use(active),
+         {compositions, by_catalog} = in_use(active, mission),
          {:ok, layer} <-
            AuthoredLayer.next(org, mission_id, input.entries, compositions, set.change_set_id),
          {:ok, _version} <-
@@ -42,10 +43,23 @@ defmodule Cadence.Control.MonitoringGeneration do
              org,
              mission_id,
              layer.layer_id,
-             set.change_set_id,
+             set,
              input.revision
            ) do
-      generate(mission, input, active, compositions, layer.layer_id)
+      generate(mission, input, active, {compositions, by_catalog}, layer.layer_id)
+    end
+  end
+
+  @doc """
+  The compositions the mission's active fleet runs, by id: each craft's pinned composition, else
+  its catalog revision's one-layer composition. The kind's preview checks and the apply use the
+  same set.
+  """
+  @spec compositions_in_use(binary(), binary()) :: [binary()]
+  def compositions_in_use(organization_id, mission_id) do
+    case Missions.fetch_mission(organization_id, mission_id) do
+      {:ok, mission} -> mission |> active() |> in_use(mission) |> elem(0)
+      _none -> []
     end
   end
 
@@ -66,9 +80,9 @@ defmodule Cadence.Control.MonitoringGeneration do
   # No active fleet: the version is recorded and the next fleet generation runs at it.
   defp generate(_mission, _input, nil, _compositions, _head), do: {:ok, nil}
 
-  defp generate(mission, input, active, compositions, head) do
+  defp generate(mission, input, active, {compositions, by_catalog}, head) do
     with {:ok, heads} <- heads(mission, compositions, head),
-         {:ok, items} <- recompile(mission, active.entries, heads),
+         {:ok, items} <- recompile(mission, active.entries, heads, by_catalog),
          {:ok, binding_set} <- ConfigurationGeneration.next_binding_set(mission, active, items) do
       changed = Map.new(items, &{&1.id, &1.entry})
       ConfigurationGeneration.activate(input, active, binding_set, changed)
@@ -82,16 +96,43 @@ defmodule Cadence.Control.MonitoringGeneration do
     end
   end
 
-  defp in_use(nil), do: []
+  defp in_use(nil, _mission), do: {[], %{}}
 
-  defp in_use(active) do
-    active.entries
-    |> Map.values()
-    |> Enum.map(& &1["composition_id"])
-    |> Enum.filter(&is_binary/1)
-    |> Enum.uniq()
-    |> Enum.sort()
+  # The composition each craft runs: its entry's (a pinned composition), else its catalog
+  # revision's one-layer composition, looked up once per distinct catalog, never per craft.
+  defp in_use(active, mission) do
+    unpinned =
+      for {_id, %{"catalog_revision_id" => catalog} = entry} <- active.entries,
+          not is_binary(entry["composition_id"]),
+          is_binary(catalog),
+          uniq: true,
+          do: catalog
+
+    by_catalog =
+      for catalog <- unpinned,
+          {:ok, composition} <- [
+            CompositionPins.for_catalog_revision(
+              mission.organization_id,
+              mission.mission_id,
+              catalog
+            )
+          ],
+          into: %{},
+          do: {catalog, composition}
+
+    compositions =
+      active.entries
+      |> Map.values()
+      |> Enum.map(&composition_of(&1, by_catalog))
+      |> Enum.filter(&is_binary/1)
+      |> Enum.uniq()
+      |> Enum.sort()
+
+    {compositions, by_catalog}
   end
+
+  defp composition_of(%{"composition_id" => id}, _by_catalog) when is_binary(id), do: id
+  defp composition_of(entry, by_catalog), do: Map.get(by_catalog, entry["catalog_revision_id"])
 
   # `%{composition_id => head revision id}`, one compile per composition.
   defp heads(mission, compositions, head) do
@@ -115,22 +156,40 @@ defmodule Cadence.Control.MonitoringGeneration do
     end
   end
 
+  # What the craft runs now: its active entry's document (a profile-framed craft's is derived by
+  # the configuration generation), so the recompiled contribution is the running one's.
+  defp active_document(%{"document" => %{} = document}, _row), do: document
+  defp active_document(_entry, row), do: row.document
+
+  # The craft's active entry with only what the head revision changes: the mission model it runs
+  # and the telemetry capability ids derived from it. Everything else (configuration, framing,
+  # catalog, sources) stays exactly as it runs, which admission holds it to.
+  defp onto_active(item, entry) do
+    moved = Map.take(item.entry, ["mission_model", "telemetry_capability_ids"])
+    %{item | entry: Map.merge(entry, moved)}
+  end
+
   # Each craft on a composition in use, recompiled against its head revision from its existing
   # assignment: inputs once per {catalog, revision} (Review.cached_inputs), sources in one read.
-  defp recompile(mission, entries, heads) do
+  defp recompile(mission, entries, heads, by_catalog) do
     org = mission.organization_id
     mission_id = mission.mission_id
 
     on_heads =
-      for {id, entry} <- entries, is_map_key(heads, entry["composition_id"]), into: %{} do
-        {id, entry}
-      end
+      for {id, entry} <- entries,
+          composition = composition_of(entry, by_catalog),
+          is_map_key(heads, composition),
+          into: %{},
+          do: {id, {entry, composition}}
 
     rows =
       org
       |> Assignments.fetch_many(
         mission_id,
-        on_heads |> Map.values() |> Enum.map(& &1["configuration_revision_id"]) |> Enum.uniq()
+        on_heads
+        |> Map.values()
+        |> Enum.map(fn {entry, _composition} -> entry["configuration_revision_id"] end)
+        |> Enum.uniq()
       )
 
     sources =
@@ -140,15 +199,16 @@ defmodule Cadence.Control.MonitoringGeneration do
 
     on_heads
     |> Enum.sort_by(&elem(&1, 0))
-    |> Enum.reduce_while({:ok, [], %{}}, fn {id, entry}, {:ok, items, cache} ->
+    |> Enum.reduce_while({:ok, [], %{}}, fn {id, {entry, composition}}, {:ok, items, cache} ->
       with %{} = row <-
              Map.get(rows, entry["configuration_revision_id"]) ||
                {:error, :spacecraft_configuration_not_found},
-           revision = Map.fetch!(heads, entry["composition_id"]),
+           revision = Map.fetch!(heads, composition),
            {:ok, inputs, cache} <-
              Review.cached_inputs(cache, mission, entry["catalog_revision_id"], revision),
-           {:ok, item} <- Review.compile(mission, id, row, inputs, Map.get(sources, id, [])) do
-        {:cont, {:ok, [item | items], cache}}
+           running = %{row | document: active_document(entry, row)},
+           {:ok, item} <- Review.compile(mission, id, running, inputs, Map.get(sources, id, [])) do
+        {:cont, {:ok, [onto_active(item, entry) | items], cache}}
       else
         {:error, reason} -> {:halt, {:error, {reason, id}}}
       end
