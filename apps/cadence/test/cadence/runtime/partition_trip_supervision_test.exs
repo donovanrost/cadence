@@ -332,6 +332,75 @@ defmodule Cadence.Runtime.PartitionTripSupervisionTest do
     refute Process.alive?(ctx.pool)
   end
 
+  test "a request DOWN before the owner DOWN leaves the coordinator running", ctx do
+    partition = key("request-down-first")
+    partition_id = PartitionKey.identifier(partition)
+    reason = {:replay_id_conflict, :managed_action_request, "trip-test-initialized"}
+    shutdown = {:shutdown, {:partition_initialization_failed, reason}}
+    coordinator = GenServer.whereis(ctx.coordinator)
+    test_pid = self()
+    gate = make_ref()
+    TrippingRuntimeWriter.configure(@mission, trip: [:initialized], notify: test_pid)
+
+    # Hold recovery until the coordinator has installed both monitors.
+    :ok =
+      :telemetry.attach(
+        gate,
+        [:cadence, :runtime, :partition, :recovery, :start],
+        fn
+          _event, _measurements, %{mission_id: @mission, partition_id: ^partition_id}, _config ->
+            assert_receive {:finish_recovery, ^gate}, 2_000
+
+          _event, _measurements, _metadata, _config ->
+            :ok
+        end,
+        nil
+      )
+
+    on_exit(fn -> :telemetry.detach(gate) end)
+
+    # Take the owner DOWN out of the mailbox, leaving the request DOWN for the callback.
+    deliver_request_down_first = fn
+      :waiting_for_owner, {:noreply, %{owner_monitors: monitors}}, _server ->
+        case Enum.find(monitors, fn {_pid, {_ref, key, _started}} -> key == partition end) do
+          {owner, {ref, _, _}} ->
+            send(owner, {:finish_recovery, gate})
+
+            receive do
+              {:DOWN, ^ref, :process, ^owner, ^shutdown} = down ->
+                send(test_pid, {:owner_down_held, down})
+                :waiting_for_backoff
+            after
+              2_000 -> :done
+            end
+
+          nil ->
+            :waiting_for_owner
+        end
+
+      :waiting_for_backoff, {:noreply, %{partition_backoff: %{^partition => entry}}}, _server ->
+        send(test_pid, {:backoff_recorded, entry.reason})
+        :done
+
+      step, _event, _server ->
+        step
+    end
+
+    :ok = :sys.install(coordinator, {deliver_request_down_first, :waiting_for_owner})
+
+    capture_log(fn ->
+      assert {:error, {:partition_unavailable, ^shutdown}} =
+               Runtime.partition_snapshot(@namespace, @mission, partition)
+
+      assert_receive {:owner_down_held, down}, 2_000
+      send(coordinator, down)
+      assert_receive {:backoff_recorded, ^reason}, 2_000
+    end)
+
+    assert GenServer.whereis(ctx.coordinator) == coordinator
+    assert_untouched(ctx)
+  end
+
   defp assert_untouched(ctx) do
     assert GenServer.whereis(pool_name()) == ctx.pool
     assert Process.alive?(ctx.pool)
