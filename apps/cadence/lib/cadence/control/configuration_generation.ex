@@ -26,10 +26,12 @@ defmodule Cadence.Control.ConfigurationGeneration do
 
   alias Cadence.Activations
   alias Cadence.ApplicationDispatch.BindingSet
+  alias Cadence.Applications.TelemetryDecom
 
   alias Cadence.Applications.SpacecraftConfiguration.{
     Active,
     ApplicationInputs,
+    Assignments,
     CatalogAuthority,
     Drafts,
     Review
@@ -58,7 +60,6 @@ defmodule Cadence.Control.ConfigurationGeneration do
   alias Cadence.SpacecraftStore
   alias Cadence.SpacecraftStore.Overrides
   alias Cadence.SpacecraftType.Effective
-  alias Cadence.SpacecraftTypeStore
 
   @framing_keys ~w(frame_size secondary_header_length ocf_length fecf)
 
@@ -277,9 +278,11 @@ defmodule Cadence.Control.ConfigurationGeneration do
     overrides = Overrides.list(org, mission.mission_id, ids)
     {:ok, spacecraft} = SpacecraftStore.fetch_spacecrafts_in_batches(org, mission.mission_id, ids)
 
+    profiles = CatalogAuthority.profiles(org, mission.mission_id, Map.values(spacecraft))
+
     effective =
       for {id, sc} <- spacecraft,
-          {:ok, profile} <- [pinned_profile(org, mission.mission_id, sc)],
+          profile = profiles[{sc.spacecraft_type_id, sc.spacecraft_type_version}],
           values = Effective.resolve(profile, Map.get(overrides, id, %{})),
           is_binary(values["catalog_revision_id"]),
           into: %{},
@@ -470,53 +473,114 @@ defmodule Cadence.Control.ConfigurationGeneration do
     )
   end
 
-  # One compile input per distinct catalog, passed to every spacecraft on it (Review.
-  # cached_inputs/3): step 4 (11-15) read and decoded it once per spacecraft, 499 times.
-  defp derive_configurations(mission, entries, derivations, %{applier: applier} = input) do
-    {selected, pins} = Map.get(input, :selected, {%{}, %{}})
+  defp derive_configurations(_mission, _entries, derivations, _input)
+       when map_size(derivations) == 0,
+       do: {:ok, []}
 
-    derivations
-    |> Enum.reduce_while({:ok, [], [], %{}}, fn {id, changes}, {:ok, items, rows, cache} ->
-      with running when is_binary(running) <-
-             entries[id]["configuration_revision_id"] ||
-               {:error, :spacecraft_configuration_required},
-           {:ok, row} <-
-             Drafts.derive(
-               mission.organization_id,
-               mission.mission_id,
-               running,
-               changes,
-               applier["id"]
+  defp derive_configurations(mission, entries, derivations, input) do
+    ids = Map.keys(derivations)
+    org = mission.organization_id
+    mid = mission.mission_id
+    latest = Drafts.latest_many(org, mid, ids)
+
+    stale_refs =
+      for id <- ids,
+          ref = entries[id]["configuration_revision_id"],
+          is_binary(ref),
+          not match?(%{configuration_revision_id: ^ref}, latest[id]),
+          do: ref
+
+    historical = Assignments.fetch_many(org, mid, stale_refs)
+
+    sources =
+      org
+      |> SourceEndpoints.list_source_endpoints_for_spacecrafts(mid, ids)
+      |> Map.new(fn {id, endpoints} -> {id, Enum.map(endpoints, & &1.source_endpoint_id)} end)
+
+    with {:ok, items, rows, cache} <-
+           compile_derivations(
+             mission,
+             derivations,
+             entries,
+             {latest, historical, sources},
+             input
+           ),
+         :ok <- TelemetryDecom.project_configurations(mission, rows),
+         :ok <- ApplicationInputs.resync_packet_inputs(mission, rows, inputs_by_catalog(cache)) do
+      bases = ApplicationInputs.bases(mission, ids)
+
+      Assignments.append(
+        Enum.map(rows, &%{&1 | application_basis: Map.fetch!(bases, &1.spacecraft_id)})
+      )
+
+      {:ok, items}
+    end
+  end
+
+  defp compile_derivations(mission, derivations, entries, {latest, historical, sources}, input) do
+    Enum.reduce_while(derivations, {:ok, [], [], %{}}, fn {id, changes},
+                                                          {:ok, items, rows, cache} ->
+      running = entries[id]["configuration_revision_id"]
+
+      with {:ok, current} <- derivation_base(id, running, latest[id], historical[running]),
+           document = Map.merge(current.document, changes),
+           {:ok, inputs, evidence, cache} <- derivation_inputs(mission, document, input, cache),
+           row =
+             Assignments.new(
+               mission,
+               id,
+               current.version + 1,
+               document,
+               input.applier["id"],
+               evidence
              ),
-           revision = selected_revision(selected, pins, row.catalog_revision_id),
-           {:ok, inputs, cache} <-
-             Review.cached_inputs(cache, mission, row.catalog_revision_id, revision),
-           {:ok, item} <- Review.compile(mission, id, row, inputs) do
+           {:ok, item} <- Review.compile(mission, id, row, inputs, Map.get(sources, id, [])) do
         {:cont, {:ok, [item | items], [row | rows], cache}}
       else
         {:error, reason} -> {:halt, {:error, {reason, id}}}
       end
     end)
-    |> case do
-      {:ok, items, rows, cache} -> projected(mission, items, rows, cache)
-      {:error, reason} -> {:error, reason}
-    end
   end
 
-  # The revision a catalog's composition selected (nil: the catalog has no composition, so its own).
-  defp selected_revision(selected, pins, catalog) do
-    case Map.get(pins, catalog) do
-      nil -> nil
-      composition -> ConfigurationSelections.revision_of(Map.get(selected, composition))
-    end
+  # A generation selects exactly one effective revision per catalog.
+  defp inputs_by_catalog(cache) do
+    for {{catalog, _revision}, %{telemetry: _} = inputs} <- cache,
+        into: %{},
+        do: {catalog, inputs}
   end
 
-  # derive/5 projected each spacecraft's stored decom config; its packet inputs follow (as a Save
-  # does), and then the revisions are stamped with the bases that moved (11-15 drift fixes).
-  defp projected(mission, items, rows, cache) do
-    with :ok <- ApplicationInputs.resync_packet_inputs(mission, rows, cache),
-         :ok <- Drafts.restamp_bases(mission, rows) do
-      {:ok, items}
+  defp derivation_base(_craft, nil, _latest, _historical),
+    do: {:error, :spacecraft_configuration_required}
+
+  defp derivation_base(
+         craft,
+         id,
+         %{spacecraft_id: craft, configuration_revision_id: id} = row,
+         _
+       ),
+       do: {:ok, row}
+
+  defp derivation_base(craft, _id, %{spacecraft_id: craft}, %{spacecraft_id: craft}),
+    do: {:error, :spacecraft_configuration_pending}
+
+  defp derivation_base(_craft, _id, _latest, _historical),
+    do: {:error, :spacecraft_configuration_not_found}
+
+  defp derivation_inputs(mission, document, input, cache) do
+    catalog = document["catalog_revision_id"]
+    {selected, pins} = input.selected
+    composition = pins[catalog]
+    revision = ConfigurationSelections.revision_of(selected[composition])
+
+    with {:ok, inputs, cache} <- Review.cached_inputs(cache, mission, catalog, revision) do
+      evidence = %{
+        composition_id: composition,
+        effective_revision_id: inputs.model["revision_id"],
+        change_set_id: input.set.change_set_id,
+        change_set_revision: input.revision
+      }
+
+      {:ok, inputs, evidence, cache}
     end
   end
 
@@ -646,59 +710,40 @@ defmodule Cadence.Control.ConfigurationGeneration do
     overrides = Overrides.list(org, mission_id, ids)
     {:ok, spacecraft} = SpacecraftStore.fetch_spacecrafts_in_batches(org, mission_id, ids)
 
+    profiles = CatalogAuthority.profiles(org, mission_id, Map.values(spacecraft))
+
+    restore =
+      for {id, sc} <- spacecraft,
+          not Map.has_key?(profiles, {sc.spacecraft_type_id, sc.spacecraft_type_version}),
+          %{"framing_authority" => "profile", "configuration_revision_id" => ref} <- [base[id]],
+          is_binary(ref),
+          do: ref
+
+    assignments = Assignments.fetch_many(org, mission_id, restore)
+
     for {id, sc} <- spacecraft,
         entry = Map.get(base, id),
         is_map(entry),
-        next = next_entry(org, mission_id, sc, entry, Map.get(overrides, id, %{})),
-        is_map(next) and next != Map.get(active_entries, id),
-        into: %{} do
-      {id, next}
+        profile <- [profiles[{sc.spacecraft_type_id, sc.spacecraft_type_version}]],
+        next = next_entry(profile, entry, Map.get(overrides, id, %{}), assignments),
+        next != Map.get(active_entries, id),
+        into: %{},
+        do: {id, next}
+  end
+
+  defp next_entry(nil, %{"framing_authority" => "profile"} = entry, _overrides, assignments) do
+    entry = Map.drop(entry, ["framing", "framing_authority"])
+
+    case assignments[entry["configuration_revision_id"]] do
+      nil -> entry
+      row -> put_in(entry, ["document", "protocol"], row.document["protocol"])
     end
   end
 
-  defp next_entry(org, mission_id, spacecraft, entry, overrides) do
-    case pinned_profile(org, mission_id, spacecraft) do
-      {:ok, profile} -> profile_framed(entry, Effective.resolve(profile, overrides))
-      {:error, _no_profile} -> unprofiled(org, mission_id, entry)
-    end
-  end
+  defp next_entry(nil, entry, _overrides, _assignments), do: entry
 
-  # Unpinning a profile-framed spacecraft (or a rollback undoing its pin) hands framing back:
-  # the profile marks are dropped so the runtime uses transport framing again, and the protocol
-  # returns to the spacecraft's own configuration when it has one. Entries that were never
-  # profile-framed are left alone.
-  defp unprofiled(org, mission_id, %{"framing_authority" => "profile"} = entry) do
-    entry
-    |> Map.drop(["framing", "framing_authority"])
-    |> restore_protocol(org, mission_id)
-  end
-
-  defp unprofiled(_org, _mission_id, entry), do: entry
-
-  defp restore_protocol(%{"configuration_revision_id" => id} = entry, org, mission_id)
-       when is_binary(id) do
-    # Exactly as the configuration has it, including an explicit nil protocol.
-    case Drafts.fetch(org, mission_id, id) do
-      {:ok, %{document: %{} = document}} ->
-        put_in(entry, ["document", "protocol"], Map.get(document, "protocol"))
-
-      _configuration_missing ->
-        entry
-    end
-  end
-
-  defp restore_protocol(entry, _org, _mission_id), do: entry
-
-  defp pinned_profile(_org, _mission_id, %{spacecraft_type_id: nil}), do: {:error, :no_profile}
-
-  defp pinned_profile(org, mission_id, spacecraft) do
-    SpacecraftTypeStore.fetch_spacecraft_type_version(
-      org,
-      mission_id,
-      spacecraft.spacecraft_type_id,
-      spacecraft.spacecraft_type_version
-    )
-  end
+  defp next_entry(profile, entry, overrides, _assignments),
+    do: profile_framed(entry, Effective.resolve(profile, overrides))
 
   defp profile_framed(entry, effective) do
     frame = effective["frame_parameters"] || %{}
