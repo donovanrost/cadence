@@ -273,30 +273,34 @@ defmodule Cadence.Protocol.TMFrameIngress do
     sdu_octets
     |> Enum.with_index()
     |> Enum.reduce_while({:ok, [], []}, fn {sdu, ordinal}, {:ok, direct, relayed} ->
-      position = {ordinal, absolute_base_offset}
-
-      case route(scid_routes, sdu) do
-        {:relayed, craft} ->
-          relay = %{via_scid: scid_routes.own_scid}
-
-          case reduce_packet_record(raw_evidence, sdu, position, relayed,
-                 spacecraft_id: craft,
-                 relay: relay
-               ) do
-            {:cont, {:ok, relayed}} -> {:cont, {:ok, direct, relayed}}
-            {:halt, error} -> {:halt, error}
-          end
-
-        _direct ->
-          case reduce_packet_record(raw_evidence, sdu, position, direct) do
-            {:cont, {:ok, direct}} -> {:cont, {:ok, direct, relayed}}
-            {:halt, error} -> {:halt, error}
-          end
-      end
+      add_packet_record(
+        raw_evidence,
+        sdu,
+        {ordinal, absolute_base_offset},
+        scid_routes,
+        {direct, relayed}
+      )
     end)
     |> case do
       {:ok, direct, relayed} -> {:ok, Enum.reverse(direct), Enum.reverse(relayed)}
       {:error, reason} -> {:error, reason}
+    end
+  end
+
+  # One reassembled packet, into the endpoint's own craft's records or (a relay's origin craft's)
+  # the relayed ones, which carry that craft and a relayed origin.
+  defp add_packet_record(raw_evidence, sdu, position, scid_routes, {direct, relayed}) do
+    case route(scid_routes, sdu) do
+      {:relayed, craft} ->
+        routing = [spacecraft_id: craft, relay: %{via_scid: scid_routes.own_scid}]
+
+        with {:cont, {:ok, relayed}} <-
+               reduce_packet_record(raw_evidence, sdu, position, relayed, routing),
+             do: {:cont, {:ok, direct, relayed}}
+
+      _direct ->
+        with {:cont, {:ok, direct}} <- reduce_packet_record(raw_evidence, sdu, position, direct),
+             do: {:cont, {:ok, direct, relayed}}
     end
   end
 

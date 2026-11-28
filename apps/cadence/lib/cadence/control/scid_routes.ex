@@ -28,14 +28,20 @@ defmodule Cadence.Control.ScidRoutes do
            ) do
       own = Map.get(crafts, endpoint.spacecraft_id)
 
-      origins =
-        for id <- origin_ids, %Spacecraft{} = craft <- [Map.get(crafts, id)] do
-          {id, craft.scid, if(Spacecraft.archived?(craft), do: :archived, else: :active)}
-        end
-
-      ScidRoutes.new(source_endpoint_id, endpoint.spacecraft_id, own && own.scid, origins)
+      ScidRoutes.new(
+        source_endpoint_id,
+        endpoint.spacecraft_id,
+        own && own.scid,
+        origins(origin_ids, crafts)
+      )
     else
       _unreadable -> ScidRoutes.none()
+    end
+  end
+
+  defp origins(ids, crafts) do
+    for id <- ids, %Spacecraft{} = craft <- [Map.get(crafts, id)] do
+      {id, craft.scid, if(Spacecraft.archived?(craft), do: :archived, else: :active)}
     end
   end
 
