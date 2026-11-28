@@ -53,6 +53,8 @@ const word = (a: App) =>
     <template #action>
       <div class="flex flex-col items-end gap-2">
         <ApTag :state="app.state === 'installed' ? 'nominal' : 'off'" :label="word(app)" />
+        <!-- L19: the server's own status for this app here (for example, what it still needs). -->
+        <span v-if="app.status?.label" class="text-sm text-text-3">{{ app.status.label }}</span>
         <AppActions
           v-if="!app.platform && canInstall"
           :mission-id="missionId"
