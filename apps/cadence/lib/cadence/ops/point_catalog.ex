@@ -20,7 +20,7 @@ defmodule Cadence.Ops.PointCatalog do
   alias Cadence.ApplicationDispatch.BindingSet
   alias Cadence.ApplicationDispatch.CapabilityInstance
   alias Cadence.Governance
-  alias Cadence.Reads.DerivedPoints
+  alias Cadence.Reads.{DerivedPoints, RevisionsInUse}
   alias Cadence.Telemetry.PacketDefinition
 
   @type point_info :: %{
@@ -39,10 +39,18 @@ defmodule Cadence.Ops.PointCatalog do
           optional(:space_system_id) => binary() | nil
         }
 
-  @doc "The active activation's packet points (sorted by id), then its derived points."
-  @spec list_points(binary(), binary()) :: [point_info()]
-  def list_points(organization_id, mission_id)
-      when is_binary(organization_id) and is_binary(mission_id) do
+  @doc """
+  The active activation's packet points (sorted by id), then its derived points.
+
+  Each craft runs the head revision of its composition, so a mission can run several revisions
+  (`RevisionsInUse`). With `spacecraft_id:` the derived points are that craft's revision's; without
+  it they are every revision in use's, a point once (its id is the output parameter's semantic id,
+  the same across revisions that keep it). The statements do not depend on the number of
+  spacecraft or points.
+  """
+  @spec list_points(binary(), binary(), keyword()) :: [point_info()]
+  def list_points(organization_id, mission_id, opts \\ [])
+      when is_binary(organization_id) and is_binary(mission_id) and is_list(opts) do
     case Activations.fetch_active_activation(organization_id, mission_id) do
       {:ok, %BindingSetActivation{} = activation} ->
         packets = packet_points(organization_id, activation)
@@ -50,7 +58,10 @@ defmodule Cadence.Ops.PointCatalog do
 
         derived =
           organization_id
-          |> DerivedPoints.list(mission_id, revision_id(activation))
+          |> derived_revisions(mission_id, activation, opts)
+          |> Enum.flat_map(&DerivedPoints.list(organization_id, mission_id, &1))
+          |> Enum.uniq_by(& &1.point_id)
+          |> Enum.sort_by(&{&1.qualified_name, &1.point_id})
           |> Enum.reject(&MapSet.member?(packet_ids, &1.point_id))
 
         packets ++ derived
@@ -69,6 +80,19 @@ defmodule Cadence.Ops.PointCatalog do
          ) do
       {:ok, %BindingSet{} = binding_set} -> points(binding_set)
       {:error, _reason} -> []
+    end
+  end
+
+  defp derived_revisions(organization_id, mission_id, activation, opts) do
+    case Keyword.get(opts, :spacecraft_id) do
+      craft when is_binary(craft) ->
+        [RevisionsInUse.of_spacecraft(organization_id, mission_id, craft)]
+
+      nil ->
+        case organization_id |> RevisionsInUse.all(mission_id) |> Map.keys() do
+          [] -> [revision_id(activation)]
+          revisions -> revisions
+        end
     end
   end
 

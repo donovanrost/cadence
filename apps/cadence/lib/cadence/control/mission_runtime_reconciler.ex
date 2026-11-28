@@ -18,6 +18,7 @@ defmodule Cadence.Control.MissionRuntimeReconciler do
   alias Cadence.Control.MissionRuntimeStatus
   alias Cadence.Control.ProcessNamespace
   alias Cadence.Governance
+  alias Cadence.MissionModels
   alias Cadence.Runtime.GenerationApplied
   alias Cadence.Runtime.MissionRuntimeSpec
   alias Cadence.Runtime.Missions, as: RuntimeMissions
@@ -347,15 +348,12 @@ defmodule Cadence.Control.MissionRuntimeReconciler do
   defp do_retire_dropped_rules(%BindingSetActivation{organization_id: nil}, _spec, _at), do: :ok
 
   defp do_retire_dropped_rules(activation, runtime_spec, applied_at) do
-    case runtime_spec.runtime_plans do
-      %{monitoring: %{status: :ready}} = plans ->
-        live =
-          plans |> PlanDecoder.decode() |> Map.fetch!(:monitoring) |> Enum.map(& &1.policy_id)
-
+    case live_groups(activation, runtime_spec, applied_at) do
+      {:ok, groups} ->
         case SemanticObservations.retire_rules(
                activation.organization_id,
                activation.mission_id,
-               Enum.uniq(live),
+               groups,
                activation.activation_id,
                applied_at,
                activation.generation
@@ -369,9 +367,53 @@ defmodule Cadence.Control.MissionRuntimeReconciler do
             )
         end
 
-      _no_ready_monitoring_plan ->
+      :unknown ->
         :ok
     end
+  end
+
+  # What the generation keeps, per group of spacecraft: each revision in use (a craft runs the head
+  # of its composition, `MissionModels.revisions_at/3`) with its own compiled monitoring plan; a
+  # mission with no per-craft assignment keeps the activation's plan on every craft. Any plan that
+  # is not ready, or not there, is a doubt, and a doubt retires nothing.
+  @doc false
+  def live_groups(activation, runtime_spec, applied_at) do
+    case MissionModels.revisions_at(activation.organization_id, activation.mission_id, applied_at) do
+      assignments when map_size(assignments) > 0 ->
+        assignments
+        |> Enum.map(fn {revision_id, spacecraft} ->
+          revision_policies(activation, revision_id, spacecraft)
+        end)
+        |> collect_groups()
+
+      _no_assignments ->
+        collect_groups([plan_group(runtime_spec.runtime_plans, :all)])
+    end
+  end
+
+  defp revision_policies(activation, revision_id, spacecraft) do
+    case MissionModels.fetch_plan(
+           activation.organization_id,
+           activation.mission_id,
+           revision_id,
+           :monitoring
+         ) do
+      {:ok, plan} -> plan_group(%{monitoring: plan}, spacecraft)
+      {:error, _not_found} -> :unknown
+    end
+  end
+
+  defp plan_group(%{monitoring: %{status: :ready}} = plans, spacecraft) do
+    policies =
+      plans |> PlanDecoder.decode() |> Map.fetch!(:monitoring) |> Enum.map(& &1.policy_id)
+
+    %{policies: Enum.uniq(policies), spacecraft: spacecraft}
+  end
+
+  defp plan_group(_no_ready_monitoring_plan, _spacecraft), do: :unknown
+
+  defp collect_groups(groups) do
+    if Enum.any?(groups, &(&1 == :unknown)), do: :unknown, else: {:ok, groups}
   end
 
   defp record_receipt(%{durable: identity}, activation, applied_at) do

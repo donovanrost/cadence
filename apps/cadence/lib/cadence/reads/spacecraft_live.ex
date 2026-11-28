@@ -74,7 +74,7 @@ defmodule Cadence.Reads.SpacecraftLive do
         org,
         mission,
         spacecraft_id,
-        PointCatalog.list_points(org, mission),
+        PointCatalog.list_points(org, mission, spacecraft_id: spacecraft_id),
         point_ids
       )
 

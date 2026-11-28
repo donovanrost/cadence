@@ -25,7 +25,10 @@ defmodule Cadence.Reads.PointSearch do
     query = opts |> Map.get(:q, "") |> to_string() |> String.trim() |> String.downcase()
     limit = opts |> Map.get(:limit, 50) |> min(@max_limit)
 
-    catalog = PointCatalog.list_points(organization_id, mission_id)
+    catalog =
+      PointCatalog.list_points(organization_id, mission_id,
+        spacecraft_id: Map.get(opts, :spacecraft_id)
+      )
 
     points =
       catalog

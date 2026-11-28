@@ -48,16 +48,21 @@ defmodule Cadence.Alarms.RuleRetiredTest do
     )
   end
 
+  # `live`: the policy ids a one-model mission keeps on every spacecraft, or the groups of a
+  # mission that runs several revisions.
   defp retire(live, generation \\ 2, mission \\ @mission),
     do:
       SemanticObservations.retire_rules(
         @org,
         mission,
-        live,
+        groups(live),
         "activation-#{generation}",
         @applied,
         generation
       )
+
+  defp groups([%{} | _] = groups), do: groups
+  defp groups(policies), do: [%{policies: policies, spacecraft: :all}]
 
   defp episodes(mission \\ @mission) do
     Repo.all(from(e in EpisodeRow, where: e.mission_id == ^mission, order_by: e.episode_id))
