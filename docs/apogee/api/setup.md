@@ -1351,15 +1351,14 @@ bindings can be written. A platform-shared one needs a platform admin in admin m
 
 ### `GET /missions/:mission_id/apps` (A1)
 
-`{apps: [{key, name, description, platform, installed, state: "installed" | "disabled" |
-"not_installed", version, available_version, update_available, consequence_if_missing}],
-spacecraft_count, permissions: ["apps.install"]}`. These are the
-applications installable on a mission, platform ones first, then by name.
+`{apps: [{key, name, description, installed, state: "installed" | "disabled" | "not_installed",
+version, available_version, update_available, consequence_if_missing}], spacecraft_count,
+permissions: ["apps.install"]}`. These are the applications installable on a mission, by name.
 
 - No application installs on the whole mission today (Telemetry Decom works per spacecraft, CFDP
   is on the roadmap), so `apps` is `[]` and the console shows an empty state.
-- `platform: true` apps are always on and can't be changed. No compiled application is a platform
-  one since the Ops Console was retired (#1176).
+- Every app is installed, disabled and uninstalled with the verbs below; none is always on (the
+  platform installation policy went with the Ops Console, #1176).
 - `version` is the installed version, an integer (application versions are integers), or `null`
   when the app isn't installed.
 - `available_version` is the version this deployment ships (an integer), set on every row.
@@ -1382,8 +1381,7 @@ audited lifecycle events.
 - Errors: `404 app_not_found`, `403 forbidden`, `422` with the domain's code (for example
   `application_dependency_missing`). Refetch on `invalidate` with `configuration`.
 - Rows also carry (§11 L9) `status: {state: "active" | "not_installed" | "disabled" |
-  "activation_pending" | "failed", label, version}`. `active`: a platform app, or installed and its
-  status loads; `activation_pending`: an approval-pending activation request for its binding set
+  "activation_pending" | "failed", label, version}`. `active`: installed and its status loads; `activation_pending`: an approval-pending activation request for its binding set
   (telemetry decom only today); `failed`: installed but its status can't be loaded. `label` is the
   app's own status words ("Monitoring") or `null`. While `activation_pending`, status adds
   `activation_request: {requested_by: {name} | null, requested_at}` (the open request; ux #77).

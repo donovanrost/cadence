@@ -51,6 +51,8 @@ defmodule CadenceWeb.Console.SpacecraftAppAPITest do
     for app <- data["apps"] do
       assert %{"state" => _, "status" => _} = app
       refute Map.has_key?(app, "surfaces")
+      # #1176: no platform installation policy, so no `platform` flag.
+      refute Map.has_key?(app, "platform")
     end
 
     assert c |> get_conn(c.missing) |> json_response(404) |> get_in(["error", "code"]) ==

@@ -11,7 +11,6 @@ function app(status: unknown): App {
         key: "telemetry_decom",
         name: "Telemetry decom",
         description: "Decodes packets into parameters.",
-        platform: true,
         installed: true,
         state: "installed",
         version: 1,
@@ -47,13 +46,13 @@ describe("an app row (L19)", () => {
 
   it("adds nothing when the lifecycle tag already says it", () => {
     const w = render(app({ state: "active", label: "Active", version: "1" }));
-    expect(w.text()).toContain("Platform · always on");
+    expect(w.text()).toContain("Installed");
     expect(w.text()).not.toContain("Waiting");
     expect(w.text()).not.toContain("Status not known");
   });
 
   it("an app row is its name and its verbs, with no link (#672)", () => {
-    const row = { ...app({ state: "active", label: null, version: "1" }), platform: false };
+    const row = app({ state: "active", label: null, version: "1" });
     const w = mount(AppRow, {
       props: {
         missionId: missionId("mission_1"),

@@ -15,7 +15,7 @@ defmodule Cadence.Reads.MissionAppsTest do
       refute MissionApps.update_available?(:installed, 3, 2)
     end
 
-    test "an app that is not installed, or a platform app without an installation, has none" do
+    test "an app that is not installed, or without an installed version, has none" do
       refute MissionApps.update_available?(:not_installed, nil, 2)
       refute MissionApps.update_available?(:not_installed, 1, 2)
       refute MissionApps.update_available?(:installed, nil, 2)

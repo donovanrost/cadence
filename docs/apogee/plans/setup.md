@@ -21,7 +21,7 @@ reusing the underlying `L/reads/*` and stores. "Missing" means no backend data e
 | Ground stations | `setup/stations[/:id\|new]` | **live**: edit and add through change sets; U25 suggested codes with Confirm (stages a code change) | G1 + kind schema |
 | Comms & routing | `setup/comms[/transports[/:id]]` | **live**: transports editable; routing rules as groups (pass-2 #10) with a group's rules below (`?group=`), read-only (#3) | T1, T2, groups, transport detail |
 | Data sources | `setup/data-sources` | **live** | D1 |
-| Apps | `setup/apps` | **live**; platform apps always on; install/disable/uninstall direct (change seam kept) | A1 |
+| Apps | `setup/apps` | **live**; install/disable/uninstall direct (change seam kept) | A1 |
 | S5 People & access | `org/people` | **live** (members, invitations, invite, service identities) | O1, O2, O3; O4 with api-ops |
 | Org missions | `org/missions` | **live**: session rows + fleet size and worst state (pass-2 #11) | session, org missions |
 | Contact planning (#27) | `setup/contact-planning[/policy]` | requirements built; policy/templates wait for CP2/CP3 | CP1-3 |

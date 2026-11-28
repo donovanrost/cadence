@@ -8,16 +8,6 @@ defmodule Cadence.Applications.RegistryTest do
     ResourceContract
   }
 
-  test "installation policy is explicit, scoped, and defaults to optional" do
-    assert {:ok, optional} = Registry.fetch_available("telemetry_decom")
-    assert optional.installation_policy == :optional
-    refute Registry.platform?("telemetry_decom", :spacecraft)
-    refute Registry.platform?("unknown", :mission)
-
-    assert {:error, :invalid_application_definition} =
-             ApplicationDefinition.validate(%{optional | installation_policy: :automatic})
-  end
-
   test "resolves the latest registered application at the spacecraft" do
     assert {:ok, %ApplicationDefinition{} = definition} =
              Registry.fetch("telemetry_decom")

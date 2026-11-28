@@ -14,8 +14,6 @@ const app = object({
   key: token,
   name: string,
   description: nullable(string),
-  /** Always on; can't be installed, disabled or removed. */
-  platform: decoders.optional(boolean),
   installed: boolean,
   state: oneOf(["installed", "disabled", "not_installed"]),
   /** Installed version (an integer today), shown as text; null when not installed. */
