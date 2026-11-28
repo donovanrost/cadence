@@ -2,7 +2,6 @@
 import { computed, nextTick, ref, shallowRef, watch } from "vue";
 import { onBeforeRouteLeave, useRoute, useRouter, type RouteLocationRaw } from "vue-router";
 import { describeApiError } from "@/api/index.ts";
-import { useTargetEndpoints } from "./useTargetEndpoints.ts";
 import { TakeoverHeader, useMissionScope } from "@/shell/index.ts";
 import { ApButton, ApCallout, ApEmptyState, ApPanel, ApRemote, ApStationBar } from "@/ui";
 import { TelemetryDegraded, useFleet } from "@/features/fleet/index.ts";
@@ -85,7 +84,6 @@ const log = ref("");
 const title = ref(typeof route.query.title === "string" ? route.query.title : "");
 /** Uplink endpoints per target (DECISIONS #41) and the operator's explicit overrides. */
 const overrides = ref<Record<string, string>>({});
-const endpoints = useTargetEndpoints(missionId, () => targets.value.map((sc) => sc.id));
 function setOverride(spacecraftId: string, endpointId: string | null) {
   const { [spacecraftId]: _drop, ...rest } = overrides.value;
   overrides.value = endpointId === null ? rest : { ...rest, [spacecraftId]: endpointId };
@@ -353,7 +351,6 @@ const close = computed((): RouteLocationRaw =>
         <DeliveryPanel
           :targets="targets"
           :contacts="contacts"
-          :endpoints="endpoints"
           :overrides="overrides"
           :expires-at="release.expiresAt"
           @override="setOverride"

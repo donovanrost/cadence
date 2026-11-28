@@ -107,9 +107,11 @@ Live fleet state for Now, so the matrix and tiles don't refetch `GET /fleet`.
 Live Uplink & verify for one group. Join authorization is the same as `mission:<id>`, plus the
 group must exist (`{"reason": "command_group_not_found"}` otherwise).
 
-- Event `group`: `{"seq", "group": <GET /command-groups/:id payload>}`. Sent once after join
-  (`seq: 1`), then after any commanding change in the mission (at most once a second), **only when
-  the view changed**. Replace your copy wholesale; `seq` increases by one per push.
+- Event `group`: `{"seq", "group": <GET /command-groups/:id payload without targets and events>}`
+  (#795: `targets_page` and `events_page` stay). Sent once after join (`seq: 1`), then after any
+  commanding change in the mission (at most once a second), **only when the view changed**.
+  Replace your copy of everything else; when `targets_page.revision` or `events_page.total`
+  moved, read the target and event pages you show again. `seq` increases by one per push.
 - After a reconnect, rejoin; the first push is the full view again.
 
 ## Spacecraft live values (M8)

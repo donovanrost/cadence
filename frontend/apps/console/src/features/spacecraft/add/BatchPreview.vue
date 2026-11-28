@@ -34,10 +34,15 @@ const columns: readonly ApColumn[] = [
       caption="Spacecraft to create"
       :row-state="(r) => (r.problems.length > 0 ? 'caution' : null)"
     >
-      <template #cell-name="{ row }"
-        ><span class="font-semibold">{{ row.name || "—" }}</span></template
-      >
-      <template #cell-scid="{ row }">{{ row.scid ?? "—" }}</template>
+      <!-- A row from the file, not a craft yet: a blank name reads Unnamed, never a dash (rule 5). -->
+      <template #cell-name="{ row }">
+        <span v-if="row.name.trim()" class="font-semibold">{{ row.name }}</span>
+        <span v-else class="text-caution-text">Unnamed</span>
+      </template>
+      <template #cell-scid="{ row }">
+        <span v-if="row.scid !== null">{{ row.scid }}</span>
+        <span v-else class="text-caution-text">not set</span>
+      </template>
       <template #cell-norad="{ row }">
         <span v-if="row.norad !== null">{{ row.norad }}</span>
         <span v-else class="text-caution-text">not set</span>

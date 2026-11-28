@@ -34,10 +34,20 @@ const group = computed(() => go.group.value);
 const reviewValue = computed(() =>
   go.review.state.value.status === "ready" ? go.review.state.value.value : null,
 );
+const holdsValue = computed(() =>
+  go.holds.state.value.status === "ready" ? go.holds.state.value.value : null,
+);
 const words = computed(() => (group.value ? yourGoWords(group.value, nameOf, now.value) : null));
 const blocked = computed(() =>
   group.value
-    ? phoneGoBlocked(group.value, reviewValue.value, session.user.id, access.value.approve, nameOf)
+    ? phoneGoBlocked(
+        group.value,
+        reviewValue.value,
+        holdsValue.value,
+        session.user.id,
+        access.value.approve,
+        nameOf,
+      )
     : null,
 );
 const goSheet = ref<InstanceType<typeof ApSheet> | null>(null);

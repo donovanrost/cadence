@@ -344,9 +344,10 @@ Body: the draft plus `preflight_digest` (from the preflight the operator saw) an
 - **Paged targets and events (#795).** Show also carries `targets_page: {total, revision,
   next_cursor}` and `events_page: {total, next_cursor}`: how many there are, and `revision` changes
   whenever anything a page of targets shows does: a target's stage, `blocked`, or a member's facts (a live client refetches its pages then, or when
-  `events_page.total` moves). Each target also carries its `index`. Today show still lists every
-  target and event (`next_cursor: null`); the console moves to the paged reads below, after which
-  show carries only the first 100 targets and the latest 50 events, and the group push omits both.
+  `events_page.total` moves). Each target also carries its `index`. Show (and the create answer)
+  carries the first 100 targets and the latest 50 events (oldest first), with `next_cursor` set
+  when there are more; read the rest through the paged reads below. The group push omits both
+  lists (realtime.md).
   - `GET /command-groups/:id/targets?limit=&cursor=&stage=&q=`: a page of `targets[]` in target
     order, `{data: {targets}, meta: {total, next_cursor}}`. `limit` 1..500 (default 100). `stage`
     is a comma list of member stages (the target's own); `q` (≤ 100 chars) a case-insensitive
@@ -540,13 +541,13 @@ Also new, at release time:
 any state, including finished groups. Returns the group. Errors: `422 note_required`,
 `404 command_group_not_found`.
 
-### `POST /command-endpoints` · `GET /command-endpoints?spacecraft_ids=a,b` (Compose's endpoint picker)
+### `POST /command-endpoints` (Compose's endpoint picker)
 
 `POST` takes `{"spacecraft_ids": ["a", "b", …]}` (#795): a fleet's ids don't fit in a URL. Each id
 counts once. More ids than the size guard's `max_targets` is `422 command_group_too_large`
 (`details.max_targets`, `details.targets`), never a silent cut; a non-list or a non-text id is
-`422 invalid_params`. Ask for the page of rows on screen, not every target at once. The `GET` with
-a comma list answers the same, with the same 422, until the console moves off it (then it goes).
+`422 invalid_params`. Ask for the page of rows on screen, not every target at once. (#795 B removed
+the `GET` with a comma list.)
 
 Per spacecraft: `{spacecraft_id, resolved_source_endpoint_id, failure, routes[],
 endpoints: [{id, name, scid, managed}]}`. `resolved_source_endpoint_id` is what preflight will use

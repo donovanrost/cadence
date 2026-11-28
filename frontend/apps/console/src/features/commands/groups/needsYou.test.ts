@@ -24,13 +24,6 @@ const target = (id: string, stage: string, extra: Record<string, unknown> = {}) 
   members: [member(stage)],
   ...extra,
 });
-const failed = (id: string, reason: string) => ({
-  id: `ev-${id}`,
-  kind: "member_failed",
-  actor: { actor_kind: "system" },
-  at: "2026-11-12T00:06:00Z",
-  payload: { spacecraft_id: id, position: 0, reason, later_members_stopped: 0 },
-});
 const series = (samples: { t: string; value_json: string | null }[]): VerifierSeries => ({
   telemetry: undefined,
   points: undefined,
@@ -62,29 +55,39 @@ describe("N Needs you cards", () => {
       state: "queued",
       targets: [
         target("a", "verify_failed", {
-          members: [member("verify_failed"), member("canceled", 1, "earlier_command_failed")],
+          members: [
+            { ...member("verify_failed"), failure_reason: "verify_failed" },
+            member("canceled", 1, "earlier_command_failed"),
+          ],
         }),
       ],
-      events: [failed("a", "verify_failed")],
     });
-    const [c] = needsYouCards(g, series([{ t: "2026-11-12T00:05:40Z", value_json: "5" }]));
+    const [c] = needsYouCards(
+      g,
+      g.targets,
+      series([{ t: "2026-11-12T00:05:40Z", value_json: "5" }]),
+    );
     expect([c?.tag, c?.explanation, c?.resend]).toEqual([
       "Verify failed",
       "SET_MODE was sent, but batt_setpoint last read 5 °C at 00:05Z; it was commanded to 8 °C. 1 later uplink to it was stopped.",
       true,
     ]);
-    // Live (qa #65): timed out with no samples and an untyped, unnamed point.
+    // Live (qa #65): timed out with no samples and an untyped, unnamed point. #795: the member's
+    // own failure_reason says it timed out (its member_failed event may be pages back).
     const bare = series([]);
     const live = { ...bare, point: { id: "p", name: "p", unit: null, type: null } };
     const timedOut = groupOf({
       state: "queued",
-      targets: [target("a", "verify_failed")],
-      events: [failed("a", "verify_timed_out")],
+      targets: [
+        target("a", "verify_failed", {
+          members: [{ ...member("verify_failed"), failure_reason: "verify_timed_out" }],
+        }),
+      ],
     });
-    expect(needsYouCards(timedOut, live)[0]?.explanation).toBe(
+    expect(needsYouCards(timedOut, timedOut.targets, live)[0]?.explanation).toBe(
       "SET_MODE was sent, but no reading of the verifier point arrived before verification timed out.",
     );
-    expect(needsYouCards(timedOut, null)[0]?.explanation).toBe(
+    expect(needsYouCards(timedOut, timedOut.targets, null)[0]?.explanation).toBe(
       "SET_MODE was sent, but verification timed out.",
     );
     expect([pointName(live), notPlottable(live)]).toEqual([
@@ -105,12 +108,14 @@ describe("N Needs you cards", () => {
         target("d", "verified"),
       ],
     });
-    expect(needsYouCards(g, null).map((c) => [c.target.spacecraft_id, c.tag, c.resend])).toEqual([
+    expect(
+      needsYouCards(g, g.targets, null).map((c) => [c.target.spacecraft_id, c.tag, c.resend]),
+    ).toEqual([
       ["a", "Outcome unclear", true],
       ["b", "Release failed", true],
       ["c", "Lane held", false],
     ]);
-    expect(needsYouCards(g, null)[0]?.explanation).toBe(
+    expect(needsYouCards(g, g.targets, null)[0]?.explanation).toBe(
       "No ACK for SET_MODE: Cadence can't tell whether it arrived. Check the spacecraft before re-sending.",
     );
   });
