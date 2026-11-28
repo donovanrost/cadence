@@ -59,6 +59,7 @@ defmodule Cadence.Runtime.PartitionOwner do
 
   alias Cadence.Runtime.PartitionOwner.{
     CurrentValueSeed,
+    DerivedSamples,
     DispatchCache,
     EffectIds,
     MonitoringSeed,
@@ -707,10 +708,12 @@ defmodule Cadence.Runtime.PartitionOwner do
 
       case evaluate_semantic_updates(state, updates, plan) do
         {:ok, %Result{} = result, semantic_state} ->
+          origins = DerivedSamples.origins(annotated_outputs)
+
           derived_samples =
             result.parameter_updates
             |> Enum.filter(&(&1.producer_kind == :algorithm))
-            |> Enum.map(&derived_sample(&1, activation))
+            |> Enum.map(&DerivedSamples.build(&1, activation, origins))
 
           {:ok, annotated_outputs ++ derived_samples, result,
            %{state | semantic_state: semantic_state}}
@@ -819,44 +822,6 @@ defmodule Cadence.Runtime.PartitionOwner do
 
   defp sample_update(_output), do: []
 
-  defp derived_sample(%Update{} = update, activation) do
-    algorithm_plan = Map.get(activation.runtime_plans, :algorithm)
-
-    %Sample{
-      sample_id: update.update_id,
-      mission_id: metadata_value(update, :mission_id),
-      spacecraft_id: metadata_value(update, :spacecraft_id),
-      point_id: update.parameter_id,
-      point_name: update.qualified_name,
-      semantic_id: update.parameter_id,
-      qualified_name: update.qualified_name,
-      producer_kind: :algorithm,
-      producer_id: update.producer_id,
-      mission_model_revision_id: activation.mission_model_revision_id,
-      runtime_plan_id: algorithm_plan && algorithm_plan.plan_id,
-      packet_definition_id: "mission_model_algorithm:" <> update.producer_id,
-      packet_definition_version: 1,
-      packet_id: metadata_value(update, :packet_id) || update.update_id,
-      evidence_id: metadata_value(update, :evidence_id) || update.update_id,
-      raw_value: nil,
-      engineering_value: update.value,
-      quality_state: update.quality,
-      generation_time: update.generation_time,
-      receipt_time: update.receipt_time,
-      # A derived value shares its trigger's time, so it shares its trigger's identity ref too.
-      generation_time_source: time_source(metadata_value(update, :generation_time_source)),
-      frame_ref: Sample.decode_frame_ref(metadata_value(update, :trigger_frame_ref)),
-      provenance: %{
-        source_update_ids: update.source_update_ids,
-        trigger_sample_id: metadata_value(update, :trigger_sample_id),
-        mission_model_revision_id: activation.mission_model_revision_id,
-        runtime_plan_id: algorithm_plan && algorithm_plan.plan_id,
-        producer_kind: :algorithm,
-        producer_id: update.producer_id
-      }
-    }
-  end
-
   defp metadata_value(update, key),
     do: Map.get(update.metadata, key, Map.get(update.metadata, Atom.to_string(key)))
 
@@ -963,7 +928,7 @@ defmodule Cadence.Runtime.PartitionOwner do
          derived_samples <-
            result.parameter_updates
            |> Enum.filter(&(&1.producer_kind == :algorithm))
-           |> Enum.map(&derived_sample(&1, state.active_activation)),
+           |> Enum.map(&DerivedSamples.build(&1, state.active_activation)),
          :ok <- maybe_persist_semantic_timer(state, entry, result, derived_samples) do
       next_entry =
         entry
@@ -1906,10 +1871,6 @@ defmodule Cadence.Runtime.PartitionOwner do
   defp raw_evidence_time(%RawEvidence{} = raw_evidence) do
     raw_evidence.source_time || raw_evidence.receipt_time
   end
-
-  defp time_source(source) when source in [:receipt, "receipt"], do: :receipt
-  defp time_source(source) when source in [:onboard, "onboard"], do: :onboard
-  defp time_source(_source), do: nil
 
   defp value(map, key, default \\ nil),
     do: Map.get(map, key, Map.get(map, Atom.to_string(key), default))

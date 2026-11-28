@@ -10,8 +10,13 @@ defmodule CadenceWeb.Console.TelemetrySampleAPITest do
   alias Cadence.Dashboards.ResolutionContext
   alias Cadence.Dashboards.Sources.Telemetry
   alias Cadence.DataSources.{DataBinding, DataSource}
+  alias Cadence.Ingress.RawEvidence
+  alias Cadence.IngressArchive.Postgres.RawEvidenceRow
   alias Cadence.Management.DataSources
+  alias Cadence.Protocol.PacketRecord
+  alias Cadence.Protocol.RecordArchive.Postgres.PacketRecordRow
   alias Cadence.Reads.ConsoleSample
+  alias Cadence.Repo
   alias Cadence.Telemetry.{HistoryStore, PhysicalSampleQuery}
   alias Cadence.TestSupport.PhysicalSampleFixtures
   alias CadenceWeb.TestFixtures
@@ -78,6 +83,37 @@ defmodule CadenceWeb.Console.TelemetrySampleAPITest do
     }
   end
 
+  # The packet the sample came from, in the protocol archive (the test archive is Postgres).
+  defp archive_packet!(c, origin) do
+    evidence =
+      RawEvidence.new(%{
+        evidence_id: c.sample.evidence_id,
+        mission_id: c.mission,
+        protocol_family: :tm,
+        raw: <<1, 2>>,
+        receipt_time: c.sample.receipt_time
+      })
+
+    Repo.insert!(RawEvidenceRow.changeset(evidence))
+
+    Repo.insert!(
+      PacketRecordRow.changeset(%PacketRecord{
+        packet_id: c.sample.packet_id,
+        evidence_id: c.sample.evidence_id,
+        mission_id: c.mission,
+        protocol_family: :tm,
+        packet_kind: :space_packet,
+        apid: 42,
+        sequence_flags: 3,
+        sequence_count: 1,
+        secondary_header?: false,
+        packet_data: <<1, 2>>,
+        receipt_time: c.sample.receipt_time,
+        provenance: %{origin: origin}
+      })
+    )
+  end
+
   defp selection(c, receipt_time),
     do: %{
       sample_id: "sample-physical",
@@ -117,6 +153,56 @@ defmodule CadenceWeb.Console.TelemetrySampleAPITest do
 
     assert %{state: "ready", text: "12.34"} = sample.engineering_value
     assert_received {:physical_read, %{receipt_time: ^receipt}}
+  end
+
+  test "a sample whose packet the archive no longer holds has a null origin and says why", c do
+    assert %{status: "ready", sample: sample} =
+             ConsoleSample.load(
+               c.scope,
+               c.mission,
+               selection(c, c.sample.receipt_time),
+               runtime(c)
+             )
+
+    assert sample.origin == nil
+    assert sample.origin_reason == "packet_not_archived"
+  end
+
+  test "a sample's origin is read back from its archived packet (#1078 E1a)", c do
+    archive_packet!(c, %{
+      v: 1,
+      kind: :direct,
+      source_endpoint_id: "endpoint-physical",
+      scid: 11,
+      vcid: 2,
+      map_id: nil,
+      apid: 42,
+      relay: nil
+    })
+
+    assert %{status: "ready", sample: sample} =
+             ConsoleSample.load(
+               c.scope,
+               c.mission,
+               selection(c, c.sample.receipt_time),
+               runtime(c)
+             )
+
+    assert sample.origin_reason == nil
+
+    assert sample.origin == %{
+             "v" => 1,
+             "kind" => "direct",
+             "source_endpoint_id" => "endpoint-physical",
+             "scid" => 11,
+             "vcid" => 2,
+             "map_id" => nil,
+             "apid" => 42,
+             "relay" => nil
+           }
+
+    # It reaches the wire as JSON values.
+    assert {:ok, _json} = Jason.encode(%{data: %{status: "ready", sample: sample}})
   end
 
   test "without a receipt time, at bounds the search to ±60 s of generation time", c do

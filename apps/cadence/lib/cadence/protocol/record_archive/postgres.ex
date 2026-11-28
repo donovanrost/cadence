@@ -16,7 +16,7 @@ defmodule Cadence.Protocol.RecordArchive.Postgres do
     TransferFrameRecordRow
   }
 
-  alias Cadence.Protocol.{PacketRecord, TransferFrameRecord}
+  alias Cadence.Protocol.{Origin, PacketRecord, TransferFrameRecord}
   alias Cadence.Replay.Scope
   alias Cadence.Repo
 
@@ -111,6 +111,21 @@ defmodule Cadence.Protocol.RecordArchive.Postgres do
 
       replay_scope_result(records, scope)
     end
+  end
+
+  @impl true
+  def fetch_packet_origins(mission_id, packet_ids, backend_opts)
+      when is_binary(mission_id) and is_list(packet_ids) and is_list(backend_opts) do
+    origins =
+      PacketRecordRow
+      |> where([packet], packet.mission_id == ^mission_id and packet.packet_id in ^packet_ids)
+      |> select([packet], {packet.packet_id, packet.provenance})
+      |> repo(backend_opts).all()
+      |> Map.new(fn {packet_id, provenance} ->
+        {packet_id, Origin.from_provenance(provenance)}
+      end)
+
+    {:ok, origins}
   end
 
   @impl true

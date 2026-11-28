@@ -5,7 +5,7 @@ defmodule Cadence.Protocol.SpacePacketDecoder do
 
   alias Cadence.Ingress.RawEvidence
   alias Cadence.IngressJournal.Identity
-  alias Cadence.Protocol.PacketRecord
+  alias Cadence.Protocol.{Origin, PacketRecord}
   alias CCSDS.SpacePacket
   alias CCSDS.SpacePacket.Codec
 
@@ -33,7 +33,10 @@ defmodule Cadence.Protocol.SpacePacketDecoder do
          opts
        ) do
     provenance =
-      base_provenance(raw_evidence) |> Map.merge(Keyword.get(opts, :provenance, %{}))
+      raw_evidence
+      |> base_provenance()
+      |> Map.merge(Keyword.get(opts, :provenance, %{}))
+      |> with_origin(raw_evidence, packet.apid)
 
     {:ok,
      %PacketRecord{
@@ -56,6 +59,12 @@ defmodule Cadence.Protocol.SpacePacketDecoder do
        receipt_time: Keyword.get(opts, :receipt_time, raw_evidence.receipt_time),
        provenance: provenance
      }}
+  end
+
+  # The packet's origin (#1078 E1a): provenance only, so no id depends on it.
+  defp with_origin(provenance, raw_evidence, apid) do
+    tm = Map.get(provenance, :tm) || %{}
+    Map.put(provenance, :origin, Origin.direct(raw_evidence, tm, apid))
   end
 
   defp base_provenance(%RawEvidence{} = raw_evidence) do

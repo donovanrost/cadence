@@ -15,7 +15,7 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
   alias Cadence.Ids
   alias Cadence.Ingress.RawEvidence
   alias Cadence.Platform.DurableFile
-  alias Cadence.Protocol.{PacketRecord, TransferFrameRecord}
+  alias Cadence.Protocol.{Origin, PacketRecord, TransferFrameRecord}
 
   alias Cadence.Protocol.RecordArchive.FileSystem.{Index, SegmentRow, Writer}
   alias Cadence.Replay.Scope
@@ -96,6 +96,39 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem do
   def fetch_packet_records(mission_id, %Scope{} = scope, backend_opts)
       when is_binary(mission_id) and is_list(backend_opts) do
     fetch_records(mission_id, scope, @packet_record_kind, backend_opts)
+  end
+
+  # One identity lookup finds the segments holding the packets; each segment is read once.
+  @impl true
+  def fetch_packet_origins(mission_id, packet_ids, backend_opts)
+      when is_binary(mission_id) and is_list(packet_ids) and is_list(backend_opts) do
+    wanted = MapSet.new(packet_ids)
+
+    with :ok <- flush(mission_id, backend_opts) do
+      mission_id
+      |> Index.segments_of_packets(packet_ids, backend_opts)
+      |> Enum.reduce_while({:ok, %{}}, fn segment, {:ok, origins} ->
+        case load_segment_object(segment.object_key, backend_opts) do
+          {:ok, entries} -> {:cont, {:ok, add_origins(origins, entries, mission_id, wanted)}}
+          {:error, reason} -> {:halt, {:error, reason}}
+        end
+      end)
+    end
+  end
+
+  # Segments arrive oldest first, so a packet archived twice (a replay) resolves to the original.
+  defp add_origins(origins, entries, mission_id, wanted) do
+    Enum.reduce(entries, origins, fn entry, acc ->
+      id = Map.get(entry, "record_id")
+
+      if Map.get(entry, "record_kind") == @packet_record_kind and
+           Map.get(entry, "mission_id") == mission_id and MapSet.member?(wanted, id) and
+           not Map.has_key?(acc, id) do
+        Map.put(acc, id, Origin.from_provenance(Map.get(entry, "provenance")))
+      else
+        acc
+      end
+    end)
   end
 
   @impl true

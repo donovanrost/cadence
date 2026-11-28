@@ -85,6 +85,10 @@ defmodule Cadence.Protocol.RecordArchive do
   @callback fetch_transfer_frame_records(binary(), Scope.t(), backend_opts()) ::
               {:ok, [TransferFrameRecord.t()]} | {:error, term()}
 
+  @doc false
+  @callback fetch_packet_origins(binary(), [binary()], backend_opts()) ::
+              {:ok, %{binary() => map() | nil}} | {:error, term()}
+
   @callback flush(binary() | nil, backend_opts()) :: :ok | {:error, term()}
   @callback reset(backend_opts()) :: :ok
   @callback stats(binary(), backend_opts()) :: stats()
@@ -299,6 +303,26 @@ defmodule Cadence.Protocol.RecordArchive do
   def fetch_packet_records(%{} = policy, mission_id, %Scope{} = scope)
       when is_binary(mission_id),
       do: call_backend(policy, :fetch_packet_records, [mission_id, scope])
+
+  @doc """
+  The origin (`Cadence.Protocol.Origin`) of each archived packet named in `packet_ids`, in one
+  lookup: `%{packet_id => origin | nil}`. A packet that is not in the archive (retention dropped it,
+  or it never was) has no key; one archived before origins were recorded maps to `nil`. Scoped to
+  the mission.
+  """
+  @spec fetch_packet_origins(binary(), [binary()]) ::
+          {:ok, %{binary() => map() | nil}} | {:error, term()}
+  def fetch_packet_origins(_mission_id, []), do: {:ok, %{}}
+
+  def fetch_packet_origins(mission_id, packet_ids)
+      when is_binary(mission_id) and is_list(packet_ids),
+      do: fetch_packet_origins(configured_policy(), mission_id, packet_ids)
+
+  @spec fetch_packet_origins(policy(), binary(), [binary()]) ::
+          {:ok, %{binary() => map() | nil}} | {:error, term()}
+  def fetch_packet_origins(%{} = policy, mission_id, packet_ids)
+      when is_binary(mission_id) and is_list(packet_ids),
+      do: call_backend(policy, :fetch_packet_origins, [mission_id, Enum.uniq(packet_ids)])
 
   @spec fetch_transfer_frame_records(binary(), Scope.t()) ::
           {:ok, [TransferFrameRecord.t()]} | {:error, term()}

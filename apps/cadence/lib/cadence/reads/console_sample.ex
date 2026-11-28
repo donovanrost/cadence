@@ -16,7 +16,7 @@ defmodule Cadence.Reads.ConsoleSample do
 
   alias Cadence.Auth.Scope
   alias Cadence.Reads.Dashboards.{Exploration, ExplorationSampleSnapshot}
-  alias Cadence.Reads.{DataSourceDirectory, OperationalState, PointInfo}
+  alias Cadence.Reads.{DataSourceDirectory, OperationalState, PointInfo, SampleOrigin}
   alias Cadence.Repo
 
   @type selection :: %{
@@ -84,11 +84,22 @@ defmodule Cadence.Reads.ConsoleSample do
       |> Map.put(:engineering_unit, PointInfo.fetch(org, mission, sample.point_id).unit)
       |> Map.update!(:source, &source_names(&1, org, mission, resolved))
       |> Map.update!(:record, &record_names(&1, org, mission))
+      |> Map.merge(origin(mission, sample))
 
     %{status: "ready", sample: sample}
   end
 
   defp named(%{status: status}, _org, _mission, _result), do: %{status: status, sample: nil}
+
+  # Where its packet came from (#1078 E1a), from the archived packet: `origin`, or `origin_reason`
+  # saying why there is none. One lookup for the one sample.
+  defp origin(mission, sample) do
+    SampleOrigin.for_sample(mission, %{
+      sample_id: sample.sample_id,
+      packet_id: sample.record.packet_id,
+      packet_definition_id: sample.record.packet_definition_id
+    })
+  end
 
   defp source_names(source, org, mission, resolved) do
     Map.merge(source, %{

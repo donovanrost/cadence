@@ -119,6 +119,25 @@ defmodule Cadence.Protocol.RecordArchive.FileSystem.Index do
     |> repo(opts).all()
   end
 
+  @doc """
+  The segments holding any of `packet_ids`, oldest first, in one query on the identity rows (the
+  mission's segments only).
+  """
+  @spec segments_of_packets(binary(), [binary()], keyword()) :: [SegmentRow.t()]
+  def segments_of_packets(_mission_id, [], _opts), do: []
+
+  def segments_of_packets(mission_id, packet_ids, opts) do
+    backend = FileSystem.archive_backend(opts)
+
+    SegmentRow
+    |> join(:inner, [s], i in IdentityRow, on: i.segment_id == s.id)
+    |> where([s, i], s.archive_backend == ^backend and s.mission_id == ^mission_id)
+    |> where([s, i], i.record_kind == @packet_kind and i.record_id in ^packet_ids)
+    |> distinct([s], s.id)
+    |> order_by([s], asc: s.id)
+    |> repo(opts).all()
+  end
+
   @doc "Transfer frames archived per realized contact, from the segments' own counts."
   @spec received_frames(binary(), [binary()], keyword()) :: %{binary() => non_neg_integer()}
   def received_frames(_mission_id, [], _opts), do: %{}
