@@ -235,7 +235,6 @@
     }
   ],
   "javascript": [
-
     "frontend/apps/host/phoenix-build-config.test.mjs",
     "frontend/apps/host/src/administration/features/organization-create/producer-consumer-probe.mjs",
     "frontend/apps/host/src/administration/features/organization-detail/producer-consumer-probe.mjs",
@@ -263,7 +262,6 @@
     "frontend/modules/commanding/src/features/command-history/producer-contract-check.mjs",
     "frontend/modules/commanding/src/features/mission-commands/producer-contract-check.mjs",
     "frontend/modules/commanding/src/features/spacecraft-commanding/producer-consumer-probe.mjs",
-
     "frontend/modules/dashboards-and-exploration/src/features/activity/producer-render-check.mjs",
     "frontend/modules/dashboards-and-exploration/src/features/creation/destination-producer-check.mjs",
     "frontend/modules/dashboards-and-exploration/src/features/creation/producer-render-check.mjs",
