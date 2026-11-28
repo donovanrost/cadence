@@ -4,6 +4,7 @@ import { computed, ref } from "vue";
 import { useSession } from "@/shell/index.ts";
 import { ApKeyValue, ApPageHeader, ApPanel, ApTable, type ApColumn } from "@/ui";
 import InvitationsPanel from "./InvitationsPanel.vue";
+import NoticesPanel from "./NoticesPanel.vue";
 import PasswordPanel from "./PasswordPanel.vue";
 import SessionsPanel from "./SessionsPanel.vue";
 
@@ -37,6 +38,7 @@ const columns: readonly ApColumn[] = [
   <div class="flex max-w-[1100px] flex-col gap-4">
     <ApPageHeader label="Cadence · account" title="Your account" size="reading" />
     <InvitationsPanel />
+    <NoticesPanel />
     <ApPanel index="A1" title="Profile">
       <ApKeyValue :items="profile" :columns="2" />
     </ApPanel>

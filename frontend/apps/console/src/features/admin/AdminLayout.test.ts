@@ -16,6 +16,7 @@ const session: Session = {
   admin_mode: false,
   admin_mode_expires_at: null,
   pending_invitations_count: null,
+  unread_notices_count: 0,
 };
 afterEach(() => seedAdminMode(session));
 

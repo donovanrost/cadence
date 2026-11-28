@@ -2,7 +2,6 @@ defmodule CadenceWeb.FederationAuthorityCompositionTest do
   use ExUnit.Case, async: true
 
   alias Cadence.Applications.{CatalogRegistry, ReleaseContribution, ReleaseRegistry}
-  alias Cadence.Applications.OrganizationAdmin
   alias Cadence.Reads.ApplicationSurfaces.ProviderRegistry, as: SurfaceProviderRegistry
 
   @provider_ledger [
@@ -12,12 +11,10 @@ defmodule CadenceWeb.FederationAuthorityCompositionTest do
     Cadence.Applications.TelemetryDecom,
     Cadence.Applications.DerivedTelemetry,
     Cadence.Applications.Limits,
-    Cadence.Applications.OpsConsole,
-    OrganizationAdmin
+    Cadence.Applications.OpsConsole
   ]
 
   @canonical_keys ~w(
-    organization_admin
     mission_catalog
     spacecraft
     telemetry_decom
@@ -62,8 +59,6 @@ defmodule CadenceWeb.FederationAuthorityCompositionTest do
                exposed_module: "./DerivedTelemetry"
              }
            ] = Enum.filter(releases, &(&1.application_key == "derived_telemetry"))
-
-    assert length(OrganizationAdmin.surfaces()) == 1
   end
 
   test "composes the exact core and optional web query contribution ledger" do
@@ -83,11 +78,8 @@ defmodule CadenceWeb.FederationAuthorityCompositionTest do
              "telemetry_decom" => 2,
              "derived_telemetry" => 1,
              "limits" => 2,
-             "ops_console" => 17,
-             "organization_admin" => 1
+             "ops_console" => 17
            }
-
-    assert Enum.count(contributions, &(&1.application_key == "organization_admin")) == 1
   end
 
   defp contribution_identity(contribution) do

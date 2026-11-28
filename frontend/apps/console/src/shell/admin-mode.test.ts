@@ -18,6 +18,7 @@ const session = (on: boolean, expires: string | null): Session => ({
   admin_mode: on,
   admin_mode_expires_at: expires,
   pending_invitations_count: null,
+  unread_notices_count: 0,
 });
 const reply = (status: number, body: unknown) =>
   vi.stubGlobal("fetch", () =>

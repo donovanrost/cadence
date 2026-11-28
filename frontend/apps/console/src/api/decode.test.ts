@@ -98,6 +98,7 @@ describe("session contract", () => {
     ],
     csrf_token: "token",
     socket: { path: "/socket" },
+    unread_notices_count: 1,
   };
 
   it("accepts the documented shape", () => {

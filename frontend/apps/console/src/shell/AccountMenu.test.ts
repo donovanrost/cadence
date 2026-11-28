@@ -6,6 +6,7 @@ import { setCsrfToken } from "@/api/http.ts";
 import type { Session } from "@/api/session.ts";
 import AccountMenu from "./AccountMenu.vue";
 import { provideSession } from "./session.ts";
+import { seedUnreadNotices } from "./unread-notices.ts";
 
 const session: Session = {
   user: { id: "u", email: "ana@example.com", display_name: "Ana Reyes" },
@@ -18,6 +19,7 @@ const session: Session = {
   admin_mode: false,
   admin_mode_expires_at: null,
   pending_invitations_count: null,
+  unread_notices_count: 0,
 };
 const Host = defineComponent(() => {
   provideSession(session);
@@ -116,6 +118,30 @@ describe("account menu sign-out", () => {
     await dismiss?.trigger("click");
     expect(failure()).toBeUndefined();
     expect(document.activeElement).toBe(w.get("button[aria-haspopup]").element);
+    w.unmount();
+  });
+});
+
+describe("account menu unread notices (#709)", () => {
+  afterEach(() => seedUnreadNotices(session));
+
+  it("names the count on the trigger and opens Account's notices from one item", async () => {
+    seedUnreadNotices({ ...session, unread_notices_count: 2 });
+    const w = await opened();
+    expect(w.get("button[aria-haspopup]").attributes("aria-label")).toBe(
+      "AR, account menu for Ana Reyes, 2 unread notices",
+    );
+    const item = w.findAll('[role="menuitem"]').find((i) => i.text() === "2 unread notices");
+    expect(item?.attributes("href")).toBe("/account#notices");
+    w.unmount();
+  });
+
+  it("shows neither when nothing is unread", async () => {
+    const w = await opened();
+    expect(w.get("button[aria-haspopup]").attributes("aria-label")).toBe(
+      "AR, account menu for Ana Reyes",
+    );
+    expect(w.text()).not.toContain("unread");
     w.unmount();
   });
 });

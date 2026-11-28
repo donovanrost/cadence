@@ -35,6 +35,8 @@ export const sessionReader = object({
   platform_admin_eligible: boolean,
   /** api cfdf79f7: pending invitations for my email (L21; the org switcher footer). */
   pending_invitations_count: optional(nullable(integer)),
+  /** #709: my unread notices, the same rows GET /account/notices lists (the account menu). */
+  unread_notices_count: integer,
   capabilities: array(token),
   organizations: array(organization),
   csrf_token: token,
