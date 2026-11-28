@@ -2,12 +2,11 @@ defmodule Cadence.Auth.OrganizationActionsPersonOnlyTest do
   @moduledoc """
   #282: organization-level actions are a person's by default. Every action that goes through
   Policy's organization capability check refuses a service identity, even one holding
-  organization_admin or platform_admin, with `authenticated_user_required`, unless the action is
-  on the fixed service allow-list. A person admin and a platform admin pass as before.
+  organization_admin or platform_admin, with `authenticated_user_required`. A person admin and a
+  platform admin pass as before.
 
-  The allow-list's exact contents are pinned here, so adding to it is a visible diff a security
-  review sees. Since #384 retired the bearer routes behind its two entries, it is empty: every
-  organization-level action refuses a service.
+  Since #384 retired the bearer routes that were the only exceptions, every organization-level
+  action refuses a service, and the allow-list that used to carry them is gone.
   """
   use ExUnit.Case, async: true
 
@@ -30,12 +29,6 @@ defmodule Cadence.Auth.OrganizationActionsPersonOnlyTest do
     :manage_automation_grants,
     :manage_service_identities
   ]
-
-  @service_allowed []
-
-  test "the service allow-list is empty (#384): every organization-level action is a person's" do
-    assert Enum.sort(Policy.service_allowed_organization_actions()) == @service_allowed
-  end
 
   for action <- @organization_actions do
     describe "#{action}" do
