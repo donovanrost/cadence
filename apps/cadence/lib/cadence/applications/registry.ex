@@ -17,7 +17,6 @@ defmodule Cadence.Applications.Registry do
     SurfaceDefinition
   }
 
-
   alias Cadence.Applications.{
     OpsConsole,
     TelemetryDecom

@@ -333,12 +333,9 @@ void test("the browser URL contract uses an actual isolated HTTP endpoint", asyn
       missionId: "mission/one",
       spacecraftId: "sc-1",
     });
-    assert.notEqual(
-      new URL(firstUrls.spacecraftUrl).origin,
-      new URL(secondUrls.spacecraftUrl).origin,
-    );
+    assert.notEqual(new URL(firstUrls.opsUrl).origin, new URL(secondUrls.opsUrl).origin);
     assert.equal(
-      new URL(firstUrls.spacecraftUrl).pathname,
+      new URL(firstUrls.opsUrl).pathname,
       "/missions/mission%2Fone/applications/ops_console/workspace/federated",
     );
     assert.match(firstUrls.telemetryUrl, new RegExp(`:${first.port}/`));

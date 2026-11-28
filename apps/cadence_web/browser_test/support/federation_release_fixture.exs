@@ -268,7 +268,7 @@ defmodule CadenceWeb.Assets.FederationReleaseFixture do
   end
 
   # A release build is a function of the committed frontend tree and node, so a clean tree reuses
-  # an earlier run's checked build (four remotes take about a minute; ApplicationReleaseRegistryTest
+  # an earlier run's checked build (both remotes take about a minute; ApplicationReleaseRegistryTest
   # timed out under load). A dirty frontend tree always rebuilds.
   defp build_release!(node, package_name, publication_directory, output_directory) do
     assert File.dir?(publication_directory),

@@ -4991,17 +4991,16 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
     { signal },
   );
 
-
   const opsSurface = {
     client,
     diagnostics,
     signal,
     url: opsUrl,
     expectedOrigin: origin,
-  applicationKey: /** @type {const} */ ("ops_console"),
-  surfaceId: "workspace",
-  expectedScope: "mission",
-  readyExpression: `(() => {
+    applicationKey: /** @type {const} */ ("ops_console"),
+    surfaceId: "workspace",
+    expectedScope: "mission",
+    readyExpression: `(() => {
     const links = [...document.querySelectorAll('#ops-workspace-landing a')];
     if (links.length === 0 || !links.every((link) => link instanceof HTMLAnchorElement)) return false;
     const prefix = ${JSON.stringify(`/missions/${encodeURIComponent(missionId)}/ops/`)};

@@ -29,7 +29,8 @@ defmodule Cadence.Applications.ActionContractLedgerTest do
       action_id: "save_packet_bindings"
     }
 
-    assert :ok = ActionContractLedger.admit(valid, Cadence.Applications.TelemetryDecom.ActionProvider)
+    assert :ok =
+             ActionContractLedger.admit(valid, Cadence.Applications.TelemetryDecom.ActionProvider)
 
     for request <- [
           %{valid | application_key: "ops_console"},
@@ -40,7 +41,10 @@ defmodule Cadence.Applications.ActionContractLedgerTest do
           %{valid | surface_id: nil, surface_version: nil}
         ] do
       assert {:error, :unsupported_application_action} =
-               ActionContractLedger.admit(request, Cadence.Applications.TelemetryDecom.ActionProvider)
+               ActionContractLedger.admit(
+                 request,
+                 Cadence.Applications.TelemetryDecom.ActionProvider
+               )
     end
   end
 end

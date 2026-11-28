@@ -70,7 +70,7 @@ void test("requires an exact host and allowed-remote publication root inventory"
   try {
     const result = await validateProductionPublication(root);
     assert.equal(result.host.fileCount, 1);
-    assert.equal(result.remotes.length, 4);
+    assert.equal(result.remotes.length, 3);
 
     await writeFile(
       join(root, "host", "host.js"),

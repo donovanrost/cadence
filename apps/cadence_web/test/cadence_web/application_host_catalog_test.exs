@@ -244,5 +244,4 @@ defmodule CadenceWeb.ApplicationHostCatalogTest do
 
     {scope, %{host_context: host_context, mission: mission, spacecraft: nil}}
   end
-
 end
