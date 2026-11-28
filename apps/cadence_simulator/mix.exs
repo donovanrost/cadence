@@ -16,7 +16,7 @@ defmodule CadenceSimulator.MixProject do
 
   def application do
     [
-      extra_applications: [:crypto, :logger],
+      extra_applications: [:crypto, :logger, :ssl],
       mod: {CadenceSimulator.Application, []}
     ]
   end

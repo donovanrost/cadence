@@ -461,10 +461,10 @@ Minimum read shape:
 
 `egress` is the provider's half of the connection (#990, DECISIONS #115), apart from `target`
 (where Cadence listens). Its
-`source_addresses` is required when the delivery's target mode is `provider_connects`: a
-non-empty list of the IP addresses or CIDR ranges the provider connects from. An entry that
+`source_addresses` is required for plaintext `provider_connects` delivery. It lists the
+IP addresses or CIDR ranges the provider connects from. An entry that
 allows every address (`0.0.0.0/0`, `::/0`, `::ffff:0:0/96` or any spelling of them) is refused.
-A delivery without a usable list can't become a Cadence listen transport (named refusals
+A plaintext delivery without a usable list can't become a Cadence listen transport (named refusals
 `provider_egress_addresses_missing`, `provider_egress_addresses_too_broad`,
 `provider_egress_addresses_invalid`). Cadence refuses any peer outside the list before reading a
 frame. The simulator reports loopback (`127.0.0.1/32`, `::1/128`) unless configured with
@@ -498,6 +498,14 @@ Provisioning a TCP destination is a setup operation, not a reservation field:
   }
 }
 ```
+
+For mTLS, add `"delivery_auth": "mtls"` to the provisioning request and supply the
+enrolled reference at `egress.delivery_credential_ref`. The simulator advertises the capability
+when its delivery credential backend is configured and refuses a reference unavailable in the
+request's provider run. The booked profile pins the reference independently of the target address.
+The simulator verifies the server against the trust chain for that credential and the target's
+DNS name or IP address. A refused TLS handshake sets delivery status to `failed` with reason
+`delivery_tls_handshake_failed`.
 
 Cadence normally shows `operator_summary` and readiness. Host, port, protocol,
 framing, endpoint health, provider identifiers, and encryption metadata are
