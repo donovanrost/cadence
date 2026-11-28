@@ -21,43 +21,12 @@ defmodule Cadence.Applications.TelemetryDecom.ActionProvider do
 
   @direct_writes ["save_configuration", "disable", "save_packet_bindings"]
 
-  @surface_action_bindings [
-    {"manage", 1, "save_configuration"},
-    {"manage", 1, "request_activation"},
-    {"manage", 1, "disable"},
-    {"packet_bindings", 1, "save_packet_bindings"}
-  ]
-
   @impl true
   def application_key, do: "telemetry_decom"
 
-  @doc "Returns the frozen provider-owned surface/action binding ledger."
-  @spec surface_action_bindings() :: [{binary(), pos_integer(), binary()}]
-  def surface_action_bindings, do: @surface_action_bindings
-
-  @doc "Validates that every binding row is unique and well formed."
-  @spec validate_bindings(list()) :: :ok | {:error, atom()}
-  def validate_bindings(bindings) when is_list(bindings) do
-    valid? =
-      Enum.all?(bindings, fn
-        {surface_id, surface_version, action_id} ->
-          is_binary(surface_id) and surface_id != "" and
-            is_integer(surface_version) and surface_version > 0 and
-            is_binary(action_id) and action_id != ""
-
-        _other ->
-          false
-      end)
-
-    cond do
-      not valid? -> {:error, :invalid_action_bindings}
-      length(bindings) != length(Enum.uniq(bindings)) -> {:error, :duplicate_action_bindings}
-      true -> :ok
-    end
-  end
-
-  def validate_bindings(_bindings), do: {:error, :invalid_action_bindings}
-
+  # Telemetry Decom is headless (#669): no surface binds its actions, so the contract ledger
+  # admits none of them here. Spacecraft configuration writes through TelemetryDecom and
+  # PacketBindings directly.
   @impl true
   def execute(%Scope{} = scope, %HostContext{} = host_context, %ActionRequest{} = request) do
     with :ok <- ensure_surface_binding(request) do

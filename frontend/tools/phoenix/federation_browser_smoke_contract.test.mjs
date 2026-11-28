@@ -326,19 +326,17 @@ void test("the browser URL contract uses an actual isolated HTTP endpoint", asyn
     const firstUrls = browserUrls({
       port: first.port,
       missionId: "mission/one",
-      spacecraftId: "sc-1",
     });
     const secondUrls = browserUrls({
       port: second.port,
       missionId: "mission/one",
-      spacecraftId: "sc-1",
     });
     assert.notEqual(new URL(firstUrls.opsUrl).origin, new URL(secondUrls.opsUrl).origin);
     assert.equal(
       new URL(firstUrls.opsUrl).pathname,
       "/missions/mission%2Fone/applications/ops_console/workspace/federated",
     );
-    assert.match(firstUrls.telemetryUrl, new RegExp(`:${first.port}/`));
+    assert.match(firstUrls.loginUrl, new RegExp(`:${first.port}/`));
   } finally {
     await Promise.all([
       new Promise((resolveClose) => first.server.close(resolveClose)),
@@ -3221,10 +3219,10 @@ void test("the shared host body is read on the first load and reused by later 30
   assert.ok(opsStart >= 0 && opsEnd > opsStart);
   assert.match(source.slice(opsStart, opsEnd), /readPublishedHostBody: true/);
 
-  const telemetryStart = source.indexOf("const telemetry = await assertRemoteSurface");
-  const telemetryEnd = source.indexOf("});", telemetryStart);
-  assert.ok(telemetryStart > opsEnd && telemetryEnd > telemetryStart);
-  assert.doesNotMatch(source.slice(telemetryStart, telemetryEnd), /readPublishedHostBody/);
+  const promotedStart = source.indexOf("const promotedOps = await assertRemoteSurface");
+  const promotedEnd = source.indexOf("});", promotedStart);
+  assert.ok(promotedStart > opsEnd && promotedEnd > promotedStart);
+  assert.doesNotMatch(source.slice(promotedStart, promotedEnd), /readPublishedHostBody/);
   assert.match(source, /\[200, 304\]\.includes\(hostRecord\.response\.status\)/);
 });
 
@@ -3656,22 +3654,12 @@ void test("sign-in URL validation allows only query/hash variation and runs befo
       [
         "--ops-url",
         `${origin}/missions/mission-1/applications/ops_console/workspace/federated`,
-        "--telemetry-url",
-        `${origin}/missions/mission-1/telemetry/federated`,
         "--login-url",
         `${origin}/console/sign-in-extra`,
         "--login-email",
         "operator@example.test",
         "--mission-id",
         "mission-1",
-        "--spacecraft-id",
-        "spacecraft-1",
-        "--catalog-revision-id",
-        "catalog-1",
-        "--source-endpoint-id",
-        "source-1",
-        "--expected-apid",
-        "42",
       ],
       { secret: { password: "secret" } },
     ),

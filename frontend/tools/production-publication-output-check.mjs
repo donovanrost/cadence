@@ -60,6 +60,9 @@ const authoritativeHostJavascriptDigests = new Set([
   // Deleted the data operations host pages and module (#702): the checker's tokenizer finds the
   // same 2 federation-loader templates and nothing new; two identical build:publication runs.
   "8bdaa24a47856e1ad621bd133408d37f018aef52dfadf054105441b674da8c60",
+  // Deleted the telemetry-decom remote and the spacecraft application-surface route (#669b): the
+  // tokenizer finds the same 2 federation-loader templates; two identical build:publication runs.
+  "d519e5a2d1cc846e984f04176aa58374a554b7c3c8418e2c3e7f470c299c3bc1",
 ]);
 
 /** @param {string} message @returns {never} */

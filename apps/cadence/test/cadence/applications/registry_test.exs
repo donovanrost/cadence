@@ -8,11 +8,8 @@ defmodule Cadence.Applications.RegistryTest do
     LifecycleContract,
     Registry,
     ResourceClaimDefinition,
-    ResourceContract,
-    SurfaceDefinition
+    ResourceContract
   }
-
-  alias Cadence.Extensions.Presentation.ReferenceDefinition
 
   test "installation policy is explicit, scoped, and defaults to optional" do
     assert {:ok, optional} = Registry.fetch_available("telemetry_decom")
@@ -28,7 +25,7 @@ defmodule Cadence.Applications.RegistryTest do
              ApplicationDefinition.validate(%{optional | installation_policy: :automatic})
   end
 
-  test "resolves the latest registered application and its default spacecraft surface" do
+  test "resolves the latest registered application, headless at the spacecraft (#669)" do
     assert {:ok, %ApplicationDefinition{} = definition} =
              Registry.fetch("telemetry_decom")
 
@@ -62,18 +59,10 @@ defmodule Cadence.Applications.RegistryTest do
              ]
            } = definition.resource_contract
 
-    assert {:ok, %SurfaceDefinition{} = surface} =
-             Registry.fetch_default_surface(definition, :spacecraft)
-
-    assert surface.surface_id == "packet_bindings"
-    assert surface.renderer == {:trusted, "cadence.telemetry_decom.packet_bindings"}
-    assert "save_packet_bindings" in surface.actions
-    assert surface.references == %{}
-
-    assert Enum.map(Registry.workspace_surfaces(definition, :spacecraft), & &1.surface_id) == [
-             "packet_bindings",
-             "manage"
-           ]
+    assert ApplicationDefinition.headless?(definition)
+    assert {:error, :unknown_surface} = Registry.fetch_default_surface(definition, :spacecraft)
+    assert {:error, :unknown_surface} = Registry.fetch_surface(definition, :spacecraft, "manage")
+    assert Registry.workspace_surfaces(definition, :spacecraft) == []
   end
 
   test "distinguishes unknown applications, unsupported versions, and unavailable definitions" do
@@ -115,37 +104,5 @@ defmodule Cadence.Applications.RegistryTest do
              "ops_console",
              "telemetry_decom"
            ]
-  end
-
-  test "resolves ordered workspace surfaces by stable id" do
-    assert {:ok, definition} = Registry.fetch_available("telemetry_decom")
-
-    assert {:ok, %SurfaceDefinition{} = manage} =
-             Registry.fetch_surface(definition, :spacecraft, "manage")
-
-    assert manage.references == %{
-             "catalog_revision_id" => %ReferenceDefinition{
-               provider_id: "cadence.catalog.telemetry_revisions",
-               version: 1
-             }
-           }
-
-    # Ordered by navigation order (20, 30), not by declaration order.
-    assert Enum.map(Registry.workspace_surfaces(definition, :spacecraft), & &1.surface_id) == [
-             "packet_bindings",
-             "manage"
-           ]
-
-    assert {:ok, %SurfaceDefinition{} = bindings} =
-             Registry.fetch_surface(definition, :spacecraft, "packet_bindings")
-
-    assert bindings.navigation.label == "Packet bindings"
-    assert bindings.actions == ["save_packet_bindings"]
-
-    assert {:error, :unknown_surface} =
-             Registry.fetch_surface(definition, :spacecraft, "not-declared")
-
-    assert {:error, :unknown_surface} =
-             Registry.fetch_surface(definition, :mission, "manage")
   end
 end

@@ -37,6 +37,8 @@ defmodule CadenceWeb.Console.SpacecraftAppAPITest do
     assert data["permissions"] == ["apps.install"]
     keys = Enum.map(data["apps"], & &1["key"])
     assert "telemetry_decom" in keys
+    # Headless (#669): the console lists it with its verbs and no pages to open.
+    assert Enum.find(data["apps"], &(&1["key"] == "telemetry_decom"))["surfaces"] == []
 
     for app <- data["apps"], surface <- app["surfaces"] do
       assert surface["scope"] == "spacecraft"

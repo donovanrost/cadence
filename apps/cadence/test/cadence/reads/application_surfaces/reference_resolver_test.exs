@@ -12,7 +12,7 @@ defmodule Cadence.Reads.ApplicationSurfaces.ReferenceResolverTest do
 
   alias Cadence.Reads.ApplicationSurfaces.ReferenceResolver
 
-  test "rejects an unregistered provider identity" do
+  test "refuses a reference field: no provider is registered (#669)" do
     assert {:error, :unknown_reference_provider} =
              resolve_reference(%ReferenceDefinition{
                provider_id: "mission.application.query",
@@ -20,26 +20,8 @@ defmodule Cadence.Reads.ApplicationSurfaces.ReferenceResolverTest do
              })
   end
 
-  test "rejects an unsupported provider version" do
-    assert {:error, :unsupported_reference_provider_version} =
-             resolve_reference(%ReferenceDefinition{
-               provider_id: "cadence.catalog.telemetry_revisions",
-               version: 2
-             })
-  end
-
   test "rejects a reference input without a typed provider contract" do
     assert {:error, :invalid_reference_field} = resolve_reference(nil)
-  end
-
-  test "rejects a search result limit above the host bound" do
-    assert {:error, :invalid_reference_search_limit} =
-             resolve_reference(%ReferenceDefinition{
-               provider_id: "cadence.catalog.telemetry_revisions",
-               version: 1,
-               mode: :search,
-               result_limit: 51
-             })
   end
 
   defp resolve_reference(reference) do

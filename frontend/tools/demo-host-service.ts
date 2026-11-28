@@ -105,6 +105,9 @@ interface PacketBindingsData {
 }
 
 const bridgeBaseUrl = "/api/cadence/application-host/v1";
+// The demo catalog's remote. Nothing serves it since the Telemetry Decom remote was deleted
+// (#669); the host's tests read this catalog in process.
+const demoRemoteOrigin = "http://127.0.0.1:4174";
 
 const fullAccessContext: HostContext = {
   scope: "spacecraft",
@@ -383,8 +386,8 @@ function catalogApplications(
   const production = mode === "production";
   const telemetryReleaseId = release === "previous" ? "2026.08.22.1" : "2026.08.22.2";
   const telemetryManifest = production
-    ? `${developmentOrigin("telemetry-decom")}/releases/${release}/mf-manifest.json`
-    : `${developmentOrigin("telemetry-decom")}/mf-manifest.json`;
+    ? `${demoRemoteOrigin}/releases/${release}/mf-manifest.json`
+    : `${demoRemoteOrigin}/mf-manifest.json`;
   const exposedModule = scenario === "throw" ? "./Failure" : "./Application";
 
   return [

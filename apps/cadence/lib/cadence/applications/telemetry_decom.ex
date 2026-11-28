@@ -14,6 +14,9 @@ defmodule Cadence.Applications.TelemetryDecom do
   Internally each spacecraft config is resolved to
   a managed runtime source endpoint so the dispatcher can disambiguate
   overlapping APIDs across heterogeneous spacecraft.
+
+  The application is headless (#669): it declares no surfaces, and the console's spacecraft
+  configuration and activation screens drive it through `Cadence.Applications.SpacecraftConfiguration`.
   """
 
   alias Cadence.Platform.ScopedReadUpdates
@@ -34,9 +37,7 @@ defmodule Cadence.Applications.TelemetryDecom do
     LifecycleContract,
     PacketBindings,
     ResourceClaimDefinition,
-    ResourceContract,
-    SurfaceDefinition,
-    SurfaceQueryContribution
+    ResourceContract
   }
 
   alias Cadence.Applications.SpacecraftConfiguration.TelemetryDecomProjection
@@ -46,7 +47,6 @@ defmodule Cadence.Applications.TelemetryDecom do
   alias Cadence.Catalog
   alias Cadence.Catalog.Revision
   alias Cadence.Catalog.TelemetryBinding
-  alias Cadence.Extensions.Presentation.ReferenceDefinition
   alias Cadence.Governance
   alias Cadence.Management.Activations.ActivationRequest
   alias Cadence.MissionModels
@@ -64,10 +64,6 @@ defmodule Cadence.Applications.TelemetryDecom do
 
   @spec application_key() :: binary()
   def application_key, do: @application_key
-
-  @spec surface_query_contributions() :: [SurfaceQueryContribution.t()]
-  defdelegate surface_query_contributions(),
-    to: Cadence.Applications.TelemetryDecomCatalogContribution
 
   @doc "Returns the authoritative Phoenix-owned application definition."
   @spec definition() :: ApplicationDefinition.t()
@@ -122,44 +118,6 @@ defmodule Cadence.Applications.TelemetryDecom do
       ],
       capability_contributions: [
         %{kind: :semantic_handler, family_key: :definition_bound_telemetry}
-      ],
-      surfaces: [
-        %SurfaceDefinition{
-          surface_id: "manage",
-          version: 1,
-          purpose: :configuration,
-          scope: :spacecraft,
-          placement: :application_workspace,
-          navigation: %{label: "Manage", order: 30},
-          data_contract: %{
-            query_id: "cadence.telemetry_decom.manage",
-            version: 1
-          },
-          references: %{
-            "catalog_revision_id" => %ReferenceDefinition{
-              provider_id: "cadence.catalog.telemetry_revisions",
-              version: 1
-            }
-          },
-          actions: ["save_configuration", "request_activation", "disable"],
-          refresh: :after_action,
-          renderer: {:trusted, "cadence.telemetry_decom.manage"}
-        },
-        %SurfaceDefinition{
-          surface_id: "packet_bindings",
-          version: 1,
-          purpose: :configuration,
-          scope: :spacecraft,
-          placement: :application_workspace,
-          navigation: %{label: "Packet bindings", order: 20},
-          data_contract: %{
-            query_id: "cadence.packet_bindings.manage",
-            version: 1
-          },
-          actions: ["save_packet_bindings"],
-          refresh: :after_action,
-          renderer: {:trusted, "cadence.telemetry_decom.packet_bindings"}
-        }
       ]
     }
   end

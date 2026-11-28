@@ -87,6 +87,15 @@ defmodule Cadence.Applications.ApplicationDefinition do
   def available?(%__MODULE__{availability: :available}), do: true
   def available?(%__MODULE__{}), do: false
 
+  @doc """
+  Whether the application has no surfaces of its own (#669): it is installed, configured and
+  activated through the console's own screens and the server's domain paths, and the host
+  mounts nothing for it. Such an application needs no workspace surface.
+  """
+  @spec headless?(t()) :: boolean()
+  def headless?(%__MODULE__{surfaces: []}), do: true
+  def headless?(%__MODULE__{}), do: false
+
   @doc "Whether a platform definition supports this scope without an installation."
   @spec platform?(t(), scope()) :: boolean()
   def platform?(%__MODULE__{installation_policy: :platform} = definition, scope),
@@ -228,14 +237,17 @@ defmodule Cadence.Applications.ApplicationDefinition do
     |> MapSet.new()
   end
 
+  # An application with surfaces gives every installable scope a workspace; a roadmap or
+  # headless one has none to give.
   defp workspace_surface_coverage?(%__MODULE__{availability: :roadmap}), do: true
 
   defp workspace_surface_coverage?(%__MODULE__{} = definition) do
-    Enum.all?(definition.installable_scopes, fn scope ->
-      Enum.any?(definition.surfaces, fn surface ->
-        surface.scope == scope and surface.placement == :application_workspace
+    headless?(definition) or
+      Enum.all?(definition.installable_scopes, fn scope ->
+        Enum.any?(definition.surfaces, fn surface ->
+          surface.scope == scope and surface.placement == :application_workspace
+        end)
       end)
-    end)
   end
 
   defp valid_capability_contributions?(contributions) when is_list(contributions) do

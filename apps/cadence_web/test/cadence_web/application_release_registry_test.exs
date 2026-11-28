@@ -62,19 +62,11 @@ defmodule CadenceWeb.ApplicationReleaseRegistryTest do
              ApplicationReleaseRegistry.fetch("telemetry_decom", 1, "packet_bindings", 1, %{})
   end
 
-  test "advertises the checked-in telemetry packet bindings release coordinate" do
-    assert {:ok, release} =
+  test "advertises no release for headless Telemetry Decom (#669); every static release is an asset" do
+    assert {:error, :unknown_application_release} =
              ApplicationReleaseRegistry.fetch("telemetry_decom", 1, "packet_bindings", 1,
                now: @now
              )
-
-    assert release == %{
-             federation: :module_federation,
-             release_id: "telemetry-decom-v1",
-             remote_name: "cadence_telemetry_decom",
-             manifest_path: "/assets/application-host/telemetry-decom/mf-manifest.json",
-             exposed_module: "./Application"
-           }
 
     assert Enum.all?(ApplicationReleaseRegistry.all(now: @now), fn {_key, release} ->
              String.starts_with?(release.manifest_path, "/assets/") and
@@ -102,7 +94,8 @@ defmodule CadenceWeb.ApplicationReleaseRegistryTest do
              ApplicationReleaseRegistry.snapshot(now: @now)
   end
 
-  # The fixture builds and validates both production remotes before packaging both generations.
+  # The fixture builds and validates the ops-console production remote before packaging both
+  # generations.
   # It needs the federation publication output (pnpm run build:publication), so CI runs it in a
   # job that builds that output (`--only frontend_publication`) and excludes it elsewhere.
   @tag timeout: 120_000
@@ -134,7 +127,9 @@ defmodule CadenceWeb.ApplicationReleaseRegistryTest do
 
     accepted = ApplicationReleaseRegistry.snapshot(now: fixture.now)
     assert {:ok, %{source: :database, entries: entries}} = accepted
-    assert length(entries) == 2
+    # ops_console only: #709 removed organization_admin (its only surface was the notifications
+    # bell), #671 mission_catalog and spacecraft, #917 comms, #669 telemetry_decom's surfaces.
+    assert length(entries) == 1
 
     accepted_control =
       Repo.query!("""

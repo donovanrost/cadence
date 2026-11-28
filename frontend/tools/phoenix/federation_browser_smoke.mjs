@@ -1032,14 +1032,8 @@ export function httpBaseFromWebSocket(endpoint) {
   return `${url.protocol === "wss:" ? "https" : "http"}://${url.host}`;
 }
 
-/** @param {{port:number,missionId:string,spacecraftId:string,host?:string,scheme?:string}} options */
-export function browserUrls({
-  port,
-  missionId,
-  spacecraftId,
-  host = "127.0.0.1",
-  scheme = "http",
-}) {
+/** @param {{port:number,missionId:string,host?:string,scheme?:string}} options */
+export function browserUrls({ port, missionId, host = "127.0.0.1", scheme = "http" }) {
   assert.ok(
     Number.isInteger(port) && port > 0 && port < 65_536,
     "browser endpoint port must be valid",
@@ -1050,7 +1044,6 @@ export function browserUrls({
     baseUrl,
     loginUrl: `${baseUrl}/sign-in`,
     opsUrl: `${baseUrl}/missions/${encodeURIComponent(missionId)}/applications/ops_console/workspace/federated`,
-    telemetryUrl: `${baseUrl}/missions/${encodeURIComponent(missionId)}/spacecraft/${encodeURIComponent(spacecraftId)}/applications/telemetry_decom/packet_bindings/federated`,
   };
 }
 
@@ -4673,7 +4666,6 @@ async function assertRemoteSurface({
   reportProgress(`${applicationKey} manifest assets asserted`);
 
   const staticRemotePrefix = {
-    telemetry_decom: "/assets/application-host/telemetry-decom/",
     ops_console: "/assets/application-host/ops-console/",
   }[applicationKey];
   assert.ok(staticRemotePrefix, `${applicationKey} has no static fallback prefix contract`);
@@ -4911,15 +4903,9 @@ export async function applyReleaseTransition(lifecycleUrl, transition, expectedR
 export async function runScenario(client, diagnostics, args, { secret, signal } = {}) {
   assertNoPasswordArgument(args);
   const opsUrl = requiredArg(args, "--ops-url");
-  const telemetryUrl = requiredArg(args, "--telemetry-url");
   const loginUrl = requiredArg(args, "--login-url");
   const email = requiredArg(args, "--login-email");
   const missionId = requiredArg(args, "--mission-id");
-  const spacecraftId = requiredArg(args, "--spacecraft-id");
-  const catalogRevisionId = requiredArg(args, "--catalog-revision-id");
-  const sourceEndpointId = requiredArg(args, "--source-endpoint-id");
-  const expectedApid = Number(requiredArg(args, "--expected-apid"));
-  assert.equal(Number.isInteger(expectedApid), true, "--expected-apid must be an integer");
   assert.ok(secret?.password, "structured login secret is required");
 
   const origin = assertHttpUrl(opsUrl, undefined, "Ops Console workspace URL").origin;
@@ -4928,17 +4914,14 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
     `/missions/${encodeURIComponent(missionId)}/applications/ops_console/workspace/federated`,
     "Ops Console workspace must use the authenticated federated route",
   );
-  assertHttpUrl(telemetryUrl, origin, "Telemetry surface URL");
   assertSignInUrl(loginUrl, origin);
   const lifecycleUrl = requiredArg(args, "--federation-lifecycle-url");
   assertHttpUrl(lifecycleUrl, undefined, "federation lifecycle URL");
   const releases = {
     nMinus1: {
-      telemetry_decom: requiredArg(args, "--n-minus-1-telemetry-release-id"),
       ops_console: requiredArg(args, "--n-minus-1-ops-console-release-id"),
     },
     n: {
-      telemetry_decom: requiredArg(args, "--n-telemetry-release-id"),
       ops_console: requiredArg(args, "--n-ops-console-release-id"),
     },
   };
@@ -5037,495 +5020,50 @@ export async function runScenario(client, diagnostics, args, { secret, signal } 
   });
   reportProgress("manifest failure containment and immutable-release retry observed");
 
-  const telemetryQueryPath = `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/spacecraft/${encodeURIComponent(spacecraftId)}/query`;
-  const csrfScriptId = await armNextActionCsrfRejection(client, signal);
-  const telemetry = await assertRemoteSurface({
-    client,
-    diagnostics,
-    signal,
-    url: telemetryUrl,
-    expectedOrigin: origin,
-    catalogPath: `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/spacecraft/${encodeURIComponent(spacecraftId)}/catalog`,
-    applicationKey: "telemetry_decom",
-    surfaceId: "packet_bindings",
-    expectedScope: "spacecraft",
-    readyExpression:
-      "Boolean(document.querySelector('[data-remote-state=\"ready\"]') && document.querySelector('#telemetry-decom-application') && document.querySelector('#telemetry-packet-bindings-page') && document.querySelector('#packet-source-endpoint') && document.querySelector('#save-packet-bindings') && !document.querySelector('#remote-error') && !document.querySelector('#telemetry-decom-error'))",
-    queryPath: telemetryQueryPath,
-    queryId: "cadence.packet_bindings.manage",
-    queryVersion: 1,
-    expectedReleaseId: releases.nMinus1.telemetry_decom,
+  reportProgress("promoting signed federation generation N");
+  await applyReleaseTransition(`${lifecycleUrl}/`, "promote", releases.n);
+  const promotedOps = await assertRemoteSurface({
+    ...opsSurface,
+    expectedReleaseId: releases.n.ops_console,
   });
+  assertNoReleaseArtifactRequests(
+    diagnostics.completed(() => true, { generation: promotedOps.generation }),
+    [{ applicationKey: "ops_console", releaseId: releases.nMinus1.ops_console }],
+    "generation N reload",
+  );
+  reportProgress("generation N catalog, manifest, and runtime identities observed");
 
-  reportProgress("proving immutable manifest ETag revalidation");
-  await assertConditionalEtagRevalidation(
-    client,
-    diagnostics,
-    telemetry.manifestRecord,
-    telemetry.manifestUrl,
+  reportProgress("rolling back signed federation generation N-1");
+  await applyReleaseTransition(`${lifecycleUrl}/`, "rollback", releases.nMinus1);
+  const rolledBackOps = await assertRemoteSurface({
+    ...opsSurface,
+    expectedReleaseId: releases.nMinus1.ops_console,
+  });
+  assertNoReleaseArtifactRequests(
+    diagnostics.completed(() => true, { generation: rolledBackOps.generation }),
+    [{ applicationKey: "ops_console", releaseId: releases.n.ops_console }],
+    "generation N-1 rollback",
+  );
+  assertImmutableReleaseCacheReuse(
+    diagnostics.completed(() => true, { generation: rolledBackOps.generation }),
+    [{ applicationKey: "ops_console", releaseId: releases.nMinus1.ops_console }],
+    "generation N-1 rollback",
+  );
+  reportProgress("generation N-1 rollback identities and cache reuse observed");
+
+  reportProgress("draining late browser events");
+  await diagnostics.drainLateEvents(250, signal);
+  reportProgress("late browser events drained");
+  diagnostics.assertClean("federation browser gate");
+  const result = {
     origin,
-    { signal, generation: telemetry.generation, label: "Telemetry N-1 manifest" },
-  );
-  reportProgress("immutable manifest ETag revalidation observed");
-
-  assert.equal(diagnosticField(telemetry.query, "host", "application_key"), "telemetry_decom");
-  const packetSurface = diagnosticObject(
-    diagnosticField(telemetry.query, "trusted_surface"),
-    "packet surface",
-  );
-  const packetDocument = diagnosticObject(packetSurface.data ?? packetSurface, "packet document");
-  assert.equal(packetDocument.contract_version, 1);
-  assert.equal(
-    diagnosticField(packetDocument, "configuration", "catalog_revision_id"),
-    catalogRevisionId,
-  );
-  assert.match(
-    diagnosticString(packetDocument.review_token, "packet review token"),
-    /^[a-f0-9]{64}$/,
-  );
-  const packet = diagnosticRows(
-    diagnosticField(packetDocument, "packets", "items"),
-    "packets",
-  ).find((item) => item.apid === expectedApid);
-  assert.ok(packet, `telemetry query did not return APID ${expectedApid}`);
-  const packetId = diagnosticString(packet.id, "packet ID");
-  assert.deepEqual(diagnosticField(packetDocument, "selection", "ids"), [packetId]);
-  assert.ok(
-    diagnosticRows(diagnosticField(packetDocument, "endpoints", "items"), "endpoints").some(
-      (endpoint) => endpoint.id === sourceEndpointId,
-    ),
-  );
-  assert.equal(
-    await evaluate(
-      client,
-      `(() => {
-      const select = document.querySelector('#packet-source-endpoint');
-      if (!select || select.disabled) return false;
-      select.value = ${JSON.stringify(sourceEndpointId)};
-      select.dispatchEvent(new Event('change', {bubbles: true}));
-      return select.value === ${JSON.stringify(sourceEndpointId)};
-    })()`,
-      "Telemetry source endpoint selection",
-      { signal },
-    ),
-    true,
-  );
-  await waitForExpression(
-    client,
-    "document.querySelector('#save-packet-bindings')?.disabled === false",
-    "reviewed packet selection ready to save",
-    { signal },
-  );
-
-  const telemetryState = await evaluate(
-    client,
-    `(() => {
-      const group = document.querySelector('[data-packet-id="${packetId}"]');
-      const checkbox = group?.querySelector('input[type="checkbox"]');
-      return {group: Boolean(group), checked: checkbox?.checked === true};
-    })()`,
-    "Telemetry packet group",
-    { signal },
-  );
-  assert.deepEqual(telemetryState, { group: true, checked: true });
-
-  const actionPath = `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/spacecraft/${encodeURIComponent(spacecraftId)}/actions`;
-  const csrfFailureCleanup = diagnostics.allowExpectedFailure((record) =>
-    pathMatches(record, "POST", actionPath, origin),
-  );
-  let csrfFailureConfirmed = false;
-  try {
-    const csrfActionStartedAtMs = Date.now();
-    reportProgress("submitting Telemetry action with a rejected CSRF token");
-    const csrfClicked = await evaluate(
-      client,
-      "(() => { const button = document.querySelector('#save-packet-bindings'); if (!button || button.disabled) return false; button.click(); return true; })()",
-      "Telemetry CSRF rejection submit",
-      { signal },
-    );
-    assert.equal(csrfClicked, true);
-
-    const csrfRecord = await waitForResponse(
-      diagnostics,
-      (record) =>
-        pathMatches(record, "POST", actionPath, origin) &&
-        record.startedAtMs >= csrfActionStartedAtMs,
-      "Telemetry CSRF rejection action",
-      { generation: telemetry.generation, signal },
-    );
-    assert.equal(csrfRecord.response?.status, 403, "CSRF rejection did not stop the action");
-    await removeNewDocumentScript(client, csrfScriptId, signal);
-
-    const csrfActionRecords = diagnostics.completed(
-      (record) => pathMatches(record, "POST", actionPath, origin),
-      { generation: telemetry.generation },
-    );
-    assert.equal(csrfActionRecords.length, 1, "CSRF rejection replayed the mutation");
-
-    const telemetryCatalogPath = `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/spacecraft/${encodeURIComponent(spacecraftId)}/catalog`;
-    const recoveryCatalogRecord = await waitForResponse(
-      diagnostics,
-      (record) =>
-        pathMatches(record, "GET", telemetryCatalogPath, origin) &&
-        record.startedAtMs >= csrfActionStartedAtMs,
-      "bounded host rebootstrap catalog",
-      { generation: telemetry.generation, signal },
-    );
-    assert.equal(recoveryCatalogRecord.response?.status, 200);
-    const recoveryCatalog = readBrowserCatalog(
-      await responseJson(client, recoveryCatalogRecord, "bounded host rebootstrap catalog", {
-        signal,
-      }),
-    );
-    const recoveryApplication = assertCatalog(
-      recoveryCatalog,
-      "telemetry_decom",
-      "packet_bindings",
-      "spacecraft",
-      origin,
-      releases.nMinus1.telemetry_decom,
-    );
-    assert.equal(
-      recoveryApplication.release.releaseId,
-      telemetry.application.release.releaseId,
-      "CSRF rebootstrap changed the approved release identity",
-    );
-    const recoveryCatalogRecords = diagnostics.completed(
-      (record) =>
-        pathMatches(record, "GET", telemetryCatalogPath, origin) &&
-        record.startedAtMs >= csrfActionStartedAtMs,
-      { generation: telemetry.generation },
-    );
-    assert.equal(
-      recoveryCatalogRecords.length,
-      1,
-      "CSRF rejection triggered more than one rebootstrap",
-    );
-    telemetry.catalog = recoveryCatalog;
-    telemetry.application = recoveryApplication;
-    await waitForExpression(
-      client,
-      "Boolean(document.querySelector('#phoenix-host-action-stopped') && document.querySelector('#phoenix-host-action-stopped').textContent.includes('No automatic retry was attempted.') && document.querySelector('#telemetry-decom-application') && document.querySelector('#telemetry-packet-bindings-page'))",
-      "sanitized stopped-action result and recovered host",
-      { signal },
-    );
-    const stoppedAction = await evaluateRecord(
-      client,
-      `(() => ({text: document.querySelector('#phoenix-host-action-stopped')?.textContent?.trim(), release: document.querySelector('[data-remote-state="ready"]')?.getAttribute('data-mounted-release') ?? null}))()`,
-      "sanitized stopped-action state",
-      { signal },
-    );
-    assert.match(
-      diagnosticString(stoppedAction.text, "stopped action text"),
-      /No automatic retry was attempted\./,
-    );
-    assert.match(
-      diagnosticString(stoppedAction.text, "stopped action text"),
-      /Reference ID: [0-9a-f-]{36}/,
-    );
-    assert.doesNotMatch(
-      diagnosticString(stoppedAction.text, "stopped action text"),
-      /invalid-csrf|SECRET|token was invalid/i,
-    );
-    assert.equal(stoppedAction.release, releases.nMinus1.telemetry_decom);
-    await diagnostics.drainLateEvents(300, signal);
-    assert.equal(
-      diagnostics.completed((record) => pathMatches(record, "POST", actionPath, origin), {
-        generation: telemetry.generation,
-      }).length,
-      1,
-      "CSRF rejection produced a duplicate action after rebootstrap",
-    );
-    reportProgress("CSRF rejection produced one stopped action and one bounded rebootstrap");
-    diagnostics.confirmExpectedFailure(csrfFailureCleanup, {
-      requestId: csrfRecord.requestId,
-      method: "POST",
-      url: csrfRecord.url,
-      generation: telemetry.generation,
-      status: 403,
-    });
-    csrfFailureConfirmed = true;
-    reportProgress("CSRF rejection authority confirmed and finalized");
-
-    const queryRecordsBeforeAction = diagnostics.completed(
-      (record) => pathMatches(record, "POST", telemetryQueryPath, origin),
-      { generation: telemetry.generation },
-    );
-    const beforeRequestIds = new Set(queryRecordsBeforeAction.map((record) => record.requestId));
-    const beforeCount = queryRecordsBeforeAction.length;
-    const actionStartedAtMs = Date.now();
-
-    await waitForExpression(
-      client,
-      "Boolean(document.querySelector('#packet-bindings-pending') && document.querySelector('#recover-packet-save')?.disabled === false && document.querySelector('#save-packet-bindings')?.disabled === true)",
-      "unconfirmed save retained for explicit recovery",
-      { signal },
-    );
-    reportProgress("explicitly recovering the same Telemetry packet-bindings save");
-    const clicked = await evaluate(
-      client,
-      "(() => { const button = document.querySelector('#recover-packet-save'); if (!button || button.disabled) return false; button.click(); return true; })()",
-      "Telemetry packet-bindings submit",
-      { signal },
-    );
-    assert.equal(clicked, true);
-
-    reportProgress("waiting for Telemetry packet-bindings action response");
-    const actionRecord = await waitForResponse(
-      diagnostics,
-      (record) =>
-        pathMatches(record, "POST", actionPath, origin) && record.startedAtMs >= actionStartedAtMs,
-      "Telemetry packet-bindings action",
-      { generation: telemetry.generation, signal },
-    );
-    reportProgress("Telemetry packet-bindings action response observed");
-    const telemetryScope = telemetry.catalog.session.context;
-    assertHttpRequestContract(actionRecord, {
-      origin,
-      method: "POST",
-      pathname: actionPath,
-      label: "Telemetry packet-bindings action",
-      headers: {
-        "content-type": "application/json",
-        "x-cadence-poc-session": telemetry.catalog.session.sessionId,
-        "x-csrf-token": telemetry.catalog.session.csrfToken,
-      },
-      requireIdempotencyKey: true,
-      body: {
-        applicationKey: "telemetry_decom",
-        applicationVersion: 1,
-        surfaceId: "packet_bindings",
-        surfaceVersion: 1,
-        actionId: "save_packet_bindings",
-        params: {
-          catalog_revision_id: catalogRevisionId,
-          expected_review: diagnosticString(packetDocument.review_token, "packet review token"),
-          expected_configuration_version: diagnosticField(
-            packetDocument,
-            "configuration",
-            "version",
-          ),
-          input_id: "telemetry-fields",
-          input_version: 1,
-          selected_packet_ids: [packetId],
-          source_endpoint_ref: sourceEndpointId,
-        },
-        scope: {
-          organizationId: telemetryScope.organizationId,
-          missionId: telemetryScope.missionId,
-          spacecraftId: telemetryScope.spacecraftId,
-        },
-      },
-    });
-    assert.equal(
-      requestHeader(actionRecord, "idempotency-key"),
-      requestHeader(csrfRecord, "idempotency-key"),
-      "explicit recovery changed the save identity",
-    );
-    assert.deepEqual(
-      diagnosticField(parseRequestBody(actionRecord, "recovered save"), "params"),
-      diagnosticField(parseRequestBody(csrfRecord, "stopped save"), "params"),
-      "recovery changed the reviewed intent",
-    );
-    const receipt = await responseJson(client, actionRecord, "Telemetry packet-bindings action", {
-      signal,
-    });
-    assert.match(
-      diagnosticString(diagnosticField(receipt, "receiptId"), "action receipt ID"),
-      /^application-host-receipt-/,
-    );
-    assert.equal(diagnosticField(receipt, "result", "applicationKey"), "telemetry_decom");
-    assert.deepEqual(diagnosticField(receipt, "result", "selectedPacketIds"), [packetId]);
-
-    reportProgress("waiting for Telemetry canonical query refresh");
-    const refreshedQueryRecord = await waitForResponse(
-      diagnostics,
-      (record) =>
-        pathMatches(record, "POST", telemetryQueryPath, origin) &&
-        !beforeRequestIds.has(record.requestId) &&
-        record.startedAtMs >= actionStartedAtMs,
-      "Telemetry canonical query refresh",
-      { generation: telemetry.generation, signal },
-    );
-    reportProgress("Telemetry canonical query refresh observed");
-    assert.equal(
-      requirePostActionRefresh(
-        diagnostics.completed(() => true, { generation: telemetry.generation }),
-        {
-          beforeRequestIds,
-          beforeCount,
-          actionStartedAtMs,
-          pathname: telemetryQueryPath,
-          origin,
-          label: "Telemetry packet-bindings action",
-        },
-      ).requestId,
-      refreshedQueryRecord.requestId,
-    );
-    assertHttpRequestContract(refreshedQueryRecord, {
-      origin,
-      method: "POST",
-      pathname: telemetryQueryPath,
-      label: "Telemetry refreshed query",
-      headers: {
-        "content-type": "application/json",
-        "x-cadence-poc-session": telemetry.catalog.session.sessionId,
-        "x-csrf-token": telemetry.catalog.session.csrfToken,
-      },
-      body: queryBody(telemetry.application, "cadence.packet_bindings.manage", 1, {
-        organizationId: telemetryScope.organizationId,
-        missionId: telemetryScope.missionId,
-        spacecraftId: telemetryScope.spacecraftId,
-      }),
-    });
-    const refreshedQuery = await responseJson(
-      client,
-      refreshedQueryRecord,
-      "Telemetry refreshed query",
-      { signal },
-    );
-    const refreshedDocument =
-      diagnosticField(refreshedQuery, "trusted_surface", "data") ??
-      diagnosticField(refreshedQuery, "trusted_surface");
-    assert.deepEqual(diagnosticField(refreshedDocument, "selection", "ids"), [packetId]);
-    assert.equal(
-      diagnosticField(refreshedDocument, "selection", "endpoint", "id"),
-      sourceEndpointId,
-    );
-    assert.equal(
-      diagnosticField(refreshedDocument, "configuration", "version"),
-      diagnosticField(receipt, "result", "configurationVersion"),
-    );
-    assert.notEqual(
-      diagnosticField(refreshedDocument, "review_token"),
-      diagnosticString(packetDocument.review_token, "packet review token"),
-    );
-
-    await waitForExpression(
-      client,
-      "Boolean(document.querySelector('#packet-save-receipt') && !document.querySelector('#packet-bindings-pending'))",
-      "Telemetry canonical refresh notice",
-      { signal },
-    );
-    reportProgress("Telemetry canonical refresh notice observed");
-    assert.equal(
-      await evaluate(
-        client,
-        `document.querySelector('[data-packet-id="${packetId}"] input[type="checkbox"]')?.checked === true`,
-        "Telemetry retained selection",
-        { signal },
-      ),
-      true,
-    );
-
-    reportProgress("promoting signed federation generation N");
-    await applyReleaseTransition(`${lifecycleUrl}/`, "promote", releases.n);
-    const promotedOps = await assertRemoteSurface({
-      ...opsSurface,
-      expectedReleaseId: releases.n.ops_console,
-    });
-    const promotedTelemetry = await assertRemoteSurface({
-      client,
-      diagnostics,
-      signal,
-      url: telemetryUrl,
-      expectedOrigin: origin,
-      catalogPath: `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/spacecraft/${encodeURIComponent(spacecraftId)}/catalog`,
-      applicationKey: "telemetry_decom",
-      surfaceId: "packet_bindings",
-      expectedScope: "spacecraft",
-      readyExpression:
-        "Boolean(document.querySelector('[data-remote-state=\"ready\"]') && document.querySelector('#telemetry-decom-application') && document.querySelector('#telemetry-packet-bindings-page') && document.querySelector('#packet-source-endpoint') && document.querySelector('#save-packet-bindings') && !document.querySelector('#remote-error') && !document.querySelector('#telemetry-decom-error'))",
-      queryPath: telemetryQueryPath,
-      queryId: "cadence.packet_bindings.manage",
-      queryVersion: 1,
-      expectedReleaseId: releases.n.telemetry_decom,
-    });
-    assertNoReleaseArtifactRequests(
-      [
-        ...diagnostics.completed(() => true, { generation: promotedOps.generation }),
-        ...diagnostics.completed(() => true, { generation: promotedTelemetry.generation }),
-      ],
-      [
-        { applicationKey: "telemetry_decom", releaseId: releases.nMinus1.telemetry_decom },
-        { applicationKey: "ops_console", releaseId: releases.nMinus1.ops_console },
-      ],
-      "generation N reload",
-    );
-    reportProgress("generation N catalog, manifest, and runtime identities observed");
-
-    reportProgress("rolling back signed federation generation N-1");
-    await applyReleaseTransition(`${lifecycleUrl}/`, "rollback", releases.nMinus1);
-    const rolledBackOps = await assertRemoteSurface({
-      ...opsSurface,
-      expectedReleaseId: releases.nMinus1.ops_console,
-    });
-    const rolledBackTelemetry = await assertRemoteSurface({
-      client,
-      diagnostics,
-      signal,
-      url: telemetryUrl,
-      expectedOrigin: origin,
-      catalogPath: `/api/cadence/application-host/v1/missions/${encodeURIComponent(missionId)}/spacecraft/${encodeURIComponent(spacecraftId)}/catalog`,
-      applicationKey: "telemetry_decom",
-      surfaceId: "packet_bindings",
-      expectedScope: "spacecraft",
-      readyExpression:
-        "Boolean(document.querySelector('[data-remote-state=\"ready\"]') && document.querySelector('#telemetry-decom-application') && document.querySelector('#telemetry-packet-bindings-page') && document.querySelector('#packet-source-endpoint') && document.querySelector('#save-packet-bindings') && !document.querySelector('#remote-error') && !document.querySelector('#telemetry-decom-error'))",
-      queryPath: telemetryQueryPath,
-      queryId: "cadence.packet_bindings.manage",
-      queryVersion: 1,
-      expectedReleaseId: releases.nMinus1.telemetry_decom,
-    });
-    assertNoReleaseArtifactRequests(
-      [
-        ...diagnostics.completed(() => true, { generation: rolledBackOps.generation }),
-        ...diagnostics.completed(() => true, { generation: rolledBackTelemetry.generation }),
-      ],
-      [
-        { applicationKey: "telemetry_decom", releaseId: releases.n.telemetry_decom },
-        { applicationKey: "ops_console", releaseId: releases.n.ops_console },
-      ],
-      "generation N-1 rollback",
-    );
-    assertImmutableReleaseCacheReuse(
-      [
-        ...diagnostics.completed(() => true, { generation: rolledBackOps.generation }),
-        ...diagnostics.completed(() => true, { generation: rolledBackTelemetry.generation }),
-      ],
-      [
-        { applicationKey: "telemetry_decom", releaseId: releases.nMinus1.telemetry_decom },
-        { applicationKey: "ops_console", releaseId: releases.nMinus1.ops_console },
-      ],
-      "generation N-1 rollback",
-    );
-    reportProgress("generation N-1 rollback identities and cache reuse observed");
-
-    reportProgress("draining late browser events");
-    await diagnostics.drainLateEvents(250, signal);
-    reportProgress("late browser events drained");
-    diagnostics.assertClean("federation browser gate");
-    const result = {
-      origin,
-      remotes: [
-        ops.application.release.releaseId,
-        telemetry.application.release.releaseId,
-        promotedOps.application.release.releaseId,
-        promotedTelemetry.application.release.releaseId,
-        rolledBackOps.application.release.releaseId,
-        rolledBackTelemetry.application.release.releaseId,
-      ],
-      queryResponses: diagnostics.completed(
-        (record) => pathMatches(record, "POST", telemetryQueryPath, origin),
-        { generation: telemetry.generation },
-      ).length,
-      actionReceipt: diagnosticField(receipt, "receiptId"),
-      retainedPacketId: packetId,
-    };
-    return result;
-  } finally {
-    if (!csrfFailureConfirmed) csrfFailureCleanup();
-  }
+    remotes: [
+      ops.application.release.releaseId,
+      promotedOps.application.release.releaseId,
+      rolledBackOps.application.release.releaseId,
+    ],
+  };
+  return result;
 }
 
 /** @param {SignalOptions & {stream?:import("node:stream").Readable & {unref?:()=>unknown},timeout?:number}} [options] */
@@ -6439,13 +5977,6 @@ function diagnosticString(value, label) {
 export function diagnosticObject(value, label) {
   assert.ok(isRecord(value), `${label} was not an object`);
   return value;
-}
-/** @param {unknown} value @param {...string} path @returns {unknown} */
-function diagnosticField(value, ...path) {
-  /** @type {unknown} */
-  let current = value;
-  for (const key of path) current = diagnosticObject(current, path.join("."))[key];
-  return current;
 }
 /** @param {unknown} value @param {string} label */
 function diagnosticNumber(value, label) {

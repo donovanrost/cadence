@@ -8,7 +8,7 @@ defmodule CadenceWeb.FrontendReleaseSignedActivationFixtures do
   @package_manager "pnpm@11.22.0"
   @release_seed "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"
   @origin "https://cdn.example.com"
-  @application "@cadence/telemetry-decom-plugin"
+  @application "@cadence/ops-console-plugin"
   @source_revision_n_minus_1 "0123456789abcdef0123456789abcdef01234567"
   @source_revision_n "89abcdef0123456789abcdef0123456789abcdef"
   @built_at "2026-09-01T16:00:00Z"
@@ -20,7 +20,7 @@ defmodule CadenceWeb.FrontendReleaseSignedActivationFixtures do
   @package_tool Path.join(@frontend_root, "tools/frontend-release-package.mjs")
 
   @tracked_inputs [
-    "frontend/apps/telemetry-decom",
+    "frontend/apps/ops-console",
     "frontend/packages",
     "frontend/vite.config.ts",
     "frontend/tools/frontend-release-package.mjs",
@@ -51,7 +51,7 @@ defmodule CadenceWeb.FrontendReleaseSignedActivationFixtures do
       status_before = git_status!()
       source_before = tracked_input_state!()
       toolchain = toolchain!()
-      build_output = Path.join(temp_root, "telemetry-release-build")
+      build_output = Path.join(temp_root, "ops-console-release-build")
 
       run_pnpm!(
         toolchain,
@@ -157,12 +157,12 @@ defmodule CadenceWeb.FrontendReleaseSignedActivationFixtures do
 
   defp metadata(source_revision, build_id, released_at) do
     %{
-      "application" => %{"id" => "telemetry_decom", "version" => 1},
-      "package" => %{"id" => "cadence.telemetry-applications", "version" => 1},
-      "surface" => %{"id" => "packet_bindings", "version" => 1},
-      "query" => %{"id" => "cadence.packet_bindings.manage", "version" => 1},
-      "actions" => ["save_packet_bindings"],
-      "remote" => %{"name" => "cadence_telemetry_decom"},
+      "application" => %{"id" => "ops_console", "version" => 1},
+      "package" => %{"id" => "cadence.ops_console", "version" => 1},
+      "surface" => %{"id" => "workspace", "version" => 1},
+      "query" => %{"id" => "cadence.ops.workspace", "version" => 1},
+      "actions" => [],
+      "remote" => %{"name" => "cadence_ops_console"},
       "module" => %{"exposedModule" => "./Application"},
       "hostCompatibility" => %{
         "hostContract" => "cadence.application-host.v1",

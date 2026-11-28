@@ -4,9 +4,10 @@ defmodule CadenceWeb.FrontendReleaseSignedActivationTest do
   import Ecto.Query
   import Plug.Conn
 
-  alias Cadence.Applications.{ApplicationInstallations, HostContext}
+  alias Cadence.Applications.HostContext
   alias Cadence.Auth.Scope
   alias Cadence.Repo
+  alias CadenceWeb.ApplicationHostCatalog
   alias CadenceWeb.FrontendReleaseActivation.{CatalogBinding, CatalogGeneration, Request}
   alias CadenceWeb.FrontendReleaseCatalog
   alias CadenceWeb.FrontendReleasePublication
@@ -77,7 +78,7 @@ defmodule CadenceWeb.FrontendReleaseSignedActivationTest do
     assert n_minus_1.release["provenance"]["buildId"] ==
              "phase-d-signed-activation-n-minus-1"
 
-    context = telemetry_context()
+    context = ops_console_context()
 
     upload_all_artifacts!(n_minus_1)
     upload_all_artifacts!(n)
@@ -297,9 +298,9 @@ defmodule CadenceWeb.FrontendReleaseSignedActivationTest do
         n_minus_1,
         route_snapshot_digest("promotion", 4, @mixed_catalog_published_at, n, n_minus_1),
         identity: %{
-          "application" => %{"id" => "telemetry_decom", "version" => 2},
-          "package" => %{"id" => "cadence.telemetry-applications", "version" => 1},
-          "surface" => %{"id" => "packet_bindings", "version" => 1}
+          "application" => %{"id" => "ops_console", "version" => 2},
+          "package" => %{"id" => "cadence.ops_console", "version" => 1},
+          "surface" => %{"id" => "workspace", "version" => 1}
         }
       )
 
@@ -314,11 +315,11 @@ defmodule CadenceWeb.FrontendReleaseSignedActivationTest do
     assert {:ok, %{source: :database, entries: entries}} =
              CadenceWeb.ApplicationReleaseRegistry.snapshot(now: @test_now)
 
-    assert [{{"telemetry_decom", 1, "packet_bindings", 1}, active_release}] = entries
+    assert [{{"ops_console", 1, "workspace", 1}, active_release}] = entries
     assert active_release.release_id == n_minus_1.release["releaseId"]
 
     assert active_release.manifest_path ==
-             "/releases/telemetry_decom/#{n_minus_1.release["releaseId"]}/artifacts/mf-manifest.json"
+             "/releases/ops_console/#{n_minus_1.release["releaseId"]}/artifacts/mf-manifest.json"
 
     assert_host_query!(context, n_minus_1)
     assert_public_artifact_semantics!(n, "remoteEntry.js")
@@ -329,11 +330,11 @@ defmodule CadenceWeb.FrontendReleaseSignedActivationTest do
     refute Map.has_key?(n_minus_1.release, "actions")
 
     assert fixture.metadata.n_minus_1["query"] == %{
-             "id" => "cadence.packet_bindings.manage",
+             "id" => "cadence.ops.workspace",
              "version" => 1
            }
 
-    assert fixture.metadata.n_minus_1["actions"] == ["save_packet_bindings"]
+    assert fixture.metadata.n_minus_1["actions"] == []
   end
 
   test "accepted staged references fail closed when final chunks are missing or corrupt",
@@ -371,12 +372,13 @@ defmodule CadenceWeb.FrontendReleaseSignedActivationTest do
     assert read_chunks(artifact.sha256, artifact.size) == artifact.bytes
   end
 
-  defp telemetry_context do
+  # Ops Console is a platform application at mission scope: its workspace surface mounts with no
+  # installation.
+  defp ops_console_context do
     user = TestFixtures.persist_user!()
     organization = TestFixtures.persist_org!()
     membership = TestFixtures.grant_membership!(user, organization)
     mission = TestFixtures.persist_mission!(organization)
-    spacecraft = TestFixtures.persist_spacecraft!(mission)
 
     scope =
       Scope.new(%{
@@ -386,19 +388,12 @@ defmodule CadenceWeb.FrontendReleaseSignedActivationTest do
         organization_membership: membership
       })
 
-    host_context = HostContext.spacecraft(mission.mission_id, spacecraft.spacecraft_id)
-
-    assert {:ok, installation} =
-             ApplicationInstallations.install(scope, host_context, "telemetry_decom")
-
     %{
       member_conn: TestFixtures.member_conn(user),
       organization: organization,
       mission: mission,
-      spacecraft: spacecraft,
       scope: scope,
-      host_context: host_context,
-      installation: installation
+      host_context: HostContext.mission(mission.mission_id)
     }
   end
 
@@ -428,7 +423,7 @@ defmodule CadenceWeb.FrontendReleaseSignedActivationTest do
 
       assert package.release["artifactBaseUrl"] ==
                @artifact_origin <>
-                 "/releases/telemetry_decom/#{package.release["releaseId"]}/artifacts/"
+                 "/releases/ops_console/#{package.release["releaseId"]}/artifacts/"
 
       assert sha256(package.payload_bytes) ==
                FrontendReleaseCatalog.digest(package.payload_bytes)
@@ -539,13 +534,13 @@ defmodule CadenceWeb.FrontendReleaseSignedActivationTest do
     assert publication.release_id == package.release["releaseId"]
     assert publication.payload_digest == sha256(package.payload_bytes)
     assert publication.signed_document_digest == sha256(package.document_bytes)
-    assert publication.application_id == "telemetry_decom"
+    assert publication.application_id == "ops_console"
     assert publication.application_version == 1
-    assert publication.package_id == "cadence.telemetry-applications"
+    assert publication.package_id == "cadence.ops_console"
     assert publication.package_version == 1
-    assert publication.surface_id == "packet_bindings"
+    assert publication.surface_id == "workspace"
     assert publication.surface_version == 1
-    assert publication.remote_name == "cadence_telemetry_decom"
+    assert publication.remote_name == "cadence_ops_console"
     assert publication.exposed_module == "./Application"
     assert publication.artifact_base_url == package.release["artifactBaseUrl"]
     assert publication.manifest_path == "mf-manifest.json"
@@ -660,23 +655,18 @@ defmodule CadenceWeb.FrontendReleaseSignedActivationTest do
     assert catalog_response.status == 200
     catalog = json_response(catalog_response, 200)["data"]["catalog"]
     assert [application] = catalog["applications"]
-    assert application["applicationKey"] == "telemetry_decom"
+    assert application["applicationKey"] == "ops_console"
     assert application["applicationVersion"] == 1
-
-    assert application["package"] == %{
-             "packageId" => "cadence.telemetry-applications",
-             "version" => 1
-           }
-
-    assert application["surface"]["surfaceId"] == "packet_bindings"
+    assert application["package"] == %{"packageId" => "cadence.ops_console", "version" => 1}
+    assert application["surface"]["surfaceId"] == "workspace"
     assert application["surface"]["version"] == 1
 
     assert application["surface"]["dataContract"] == %{
-             "id" => "cadence.packet_bindings.manage",
+             "id" => "cadence.ops.workspace",
              "version" => 1
            }
 
-    assert application["surface"]["actions"] == ["save_packet_bindings"]
+    assert application["surface"]["actions"] == []
 
     assert application["surface"]["renderer"] == %{
              "kind" => "federated-vue",
@@ -685,14 +675,14 @@ defmodule CadenceWeb.FrontendReleaseSignedActivationTest do
 
     assert application["release"]["federation"] == "module_federation"
     assert application["release"]["releaseId"] == package.release["releaseId"]
-    assert application["release"]["remoteName"] == "cadence_telemetry_decom"
+    assert application["release"]["remoteName"] == "cadence_ops_console"
     assert application["release"]["exposedModule"] == "./Application"
 
     assert URI.parse(application["release"]["manifestUrl"]).path ==
-             "/releases/telemetry_decom/#{package.release["releaseId"]}/artifacts/mf-manifest.json"
+             "/releases/ops_console/#{package.release["releaseId"]}/artifacts/mf-manifest.json"
 
     assert catalog["session"]["bridgeBaseUrl"] ==
-             "/api/cadence/application-host/v1/missions/#{context.mission.mission_id}/spacecraft/#{context.spacecraft.spacecraft_id}"
+             "/api/cadence/application-host/v1/missions/#{context.mission.mission_id}"
   end
 
   defp assert_host_query!(context, package) do
@@ -709,18 +699,14 @@ defmodule CadenceWeb.FrontendReleaseSignedActivationTest do
 
     query = json_response(query_response, 200)
 
-    assert query["host"] == %{
-             "application_installation_id" => context.installation.application_installation_id,
-             "application_key" => "telemetry_decom",
+    assert %{
+             "application_key" => "ops_console",
              "application_version" => 1,
-             "dom_id" => "spacecraft-application-host",
-             "renderer" => "trusted",
-             "surface_id" => "packet_bindings"
-           }
+             "surface_id" => "workspace"
+           } =
+             query["host"]
 
-    assert query["trusted_surface"]["contract_version"] == 1
-    assert query["trusted_surface"]["configuration"] == nil
-    assert query["trusted_surface"]["packets"]["items"] == []
+    assert is_map(query["trusted_surface"])
     refute Map.has_key?(query, "releaseId")
   end
 
@@ -1218,17 +1204,13 @@ defmodule CadenceWeb.FrontendReleaseSignedActivationTest do
 
   # The console's surface host mints the host session id, CSRF token and pinned scope.
   defp host_path(context),
-    do:
-      "/api/v1/missions/#{context.mission.mission_id}/apps/telemetry_decom/surfaces/packet_bindings/host" <>
-        "?spacecraft_id=#{context.spacecraft.spacecraft_id}"
+    do: "/api/v1/missions/#{context.mission.mission_id}/apps/ops_console/surfaces/workspace/host"
 
   defp query_path(context),
-    do:
-      @host_catalog_suffix <>
-        "/#{context.mission.mission_id}/spacecraft/#{context.spacecraft.spacecraft_id}/query"
+    do: @host_catalog_suffix <> "/#{context.mission.mission_id}/query"
 
   defp artifact_path(package, path),
-    do: "/releases/telemetry_decom/#{package.release["releaseId"]}/artifacts/#{path}"
+    do: "/releases/ops_console/#{package.release["releaseId"]}/artifacts/#{path}"
 
   defp bridge_conn(conn, catalog) do
     conn
@@ -1240,22 +1222,14 @@ defmodule CadenceWeb.FrontendReleaseSignedActivationTest do
 
   defp query_body(context) do
     %{
-      "applicationKey" => "telemetry_decom",
+      "applicationKey" => "ops_console",
       "applicationVersion" => 1,
-      "surfaceId" => "packet_bindings",
+      "surfaceId" => "workspace",
       "surfaceVersion" => 1,
-      "queryId" => "cadence.packet_bindings.manage",
+      "queryId" => "cadence.ops.workspace",
       "queryVersion" => 1,
-      "scope" => scope_document(context),
+      "scope" => ApplicationHostCatalog.scope_document(context.scope, context),
       "params" => %{}
-    }
-  end
-
-  defp scope_document(context) do
-    %{
-      "organizationId" => context.organization.organization_id,
-      "missionId" => context.mission.mission_id,
-      "spacecraftId" => context.spacecraft.spacecraft_id
     }
   end
 

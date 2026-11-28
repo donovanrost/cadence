@@ -7,14 +7,9 @@ import { createDemoHostMiddleware } from "./demo-host-service.ts";
 
 const frontendRoot = resolve(import.meta.dirname, "..");
 const hostRoot = resolve(frontendRoot, "apps/host/dist");
-const telemetryRoot = resolve(frontendRoot, "apps/telemetry-decom/dist");
 const hostMiddleware = createDemoHostMiddleware("production");
 
-await Promise.all([
-  requireBuild(resolve(hostRoot, "index.html")),
-  requireBuild(resolve(telemetryRoot, "current/mf-manifest.json")),
-  requireBuild(resolve(telemetryRoot, "previous/mf-manifest.json")),
-]);
+await requireBuild(resolve(hostRoot, "index.html"));
 
 const host = createServer((request, response) => {
   void hostMiddleware(request, response, () => {
@@ -25,10 +20,10 @@ const host = createServer((request, response) => {
       headers: {
         "content-security-policy": [
           "default-src 'self'",
-          `script-src 'self' ${developmentOrigin("telemetry-decom")} http://127.0.0.1:4199`,
-          `style-src 'self' 'unsafe-inline' ${developmentOrigin("telemetry-decom")}`,
+          "script-src 'self' http://127.0.0.1:4199",
+          "style-src 'self' 'unsafe-inline'",
           "font-src 'self' data:",
-          `connect-src 'self' ${developmentOrigin("telemetry-decom")} http://127.0.0.1:4199`,
+          "connect-src 'self' http://127.0.0.1:4199",
           "img-src 'self' data:",
           "object-src 'none'",
           "base-uri 'self'",
@@ -40,35 +35,10 @@ const host = createServer((request, response) => {
   });
 });
 
-const telemetry = createServer((request, response) => {
-  const pathname = new URL(request.url ?? "/", developmentOrigin("telemetry-decom")).pathname;
-  const releasePath = releaseStaticPath(pathname);
-  if (!releasePath) {
-    notFound(response);
-    return;
-  }
-
-  void serveStatic(response, telemetryRoot, releasePath, { headers: remoteHeaders() }).catch(() =>
-    serverError(response),
-  );
-});
-
-await Promise.all([
-  listen(host, developmentPorts["host"], "Cadence host"),
-  listen(telemetry, developmentPorts["telemetry-decom"], "Telemetry Decom releases"),
-]);
+await listen(host, developmentPorts["host"], "Cadence host");
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
-  process.on(signal, () => {
-    host.close();
-    telemetry.close();
-  });
-}
-
-function releaseStaticPath(pathname: string): string | undefined {
-  const match = /^\/releases\/(current|previous)(\/.*)?$/.exec(pathname);
-  if (!match) return undefined;
-  return `/${match[1]}${match[2] ?? "/index.html"}`;
+  process.on(signal, () => host.close());
 }
 
 async function serveStatic(
@@ -137,14 +107,6 @@ function contentType(path: string): string {
     ".woff2": "font/woff2",
   };
   return types[extname(path)] ?? "application/octet-stream";
-}
-
-function remoteHeaders(): Readonly<Record<string, string>> {
-  return {
-    "access-control-allow-origin": developmentOrigin("host"),
-    "cross-origin-resource-policy": "cross-origin",
-    "x-content-type-options": "nosniff",
-  };
 }
 
 function notFound(response: ServerResponse): void {

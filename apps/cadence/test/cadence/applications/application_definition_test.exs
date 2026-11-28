@@ -66,18 +66,41 @@ defmodule Cadence.Applications.ApplicationDefinitionTest do
              })
   end
 
-  test "requires every available installation scope to have a host workspace" do
+  test "requires every installation scope of an app with surfaces to have a host workspace" do
     application = valid_application()
+    [workspace] = application.surfaces
+    dock = %SurfaceDefinition{workspace | placement: :ops_dock, actions: []}
 
     assert {:error, :invalid_application_definition} =
-             ApplicationDefinition.validate(%ApplicationDefinition{application | surfaces: []})
+             ApplicationDefinition.validate(%ApplicationDefinition{
+               application
+               | surfaces: [dock]
+             })
+
+    assert {:error, :invalid_application_definition} =
+             ApplicationDefinition.validate(%ApplicationDefinition{
+               application
+               | installable_scopes: [:mission, :spacecraft]
+             })
 
     assert :ok =
              ApplicationDefinition.validate(%ApplicationDefinition{
                application
                | availability: :roadmap,
-                 surfaces: []
+                 surfaces: [dock]
              })
+  end
+
+  test "a headless app (no surfaces) is valid without a workspace (#669)" do
+    application = %ApplicationDefinition{valid_application() | surfaces: []}
+
+    assert ApplicationDefinition.headless?(application)
+    refute ApplicationDefinition.headless?(valid_application())
+    assert :ok = ApplicationDefinition.validate(application)
+    assert Cadence.Applications.Registry.workspace_surfaces(application, :mission) == []
+
+    assert {:error, :unknown_surface} =
+             Cadence.Applications.Registry.fetch_default_surface(application, :mission)
   end
 
   test "rejects self dependencies and duplicate resource claim identities" do

@@ -633,13 +633,36 @@ defmodule CadenceWeb.ApplicationHostCatalog do
   end
 
   defp resolve_surface(definition, placement, application_key, nil, release_snapshot) do
+    case ApplicationRegistry.workspace_surfaces(definition, placement) do
+      # A headless application (#669) has nothing for the host to mount.
+      [] -> {:error, :unknown_surface}
+      surfaces -> first_released_surface(surfaces, definition, application_key, release_snapshot)
+    end
+  end
+
+  defp resolve_surface(definition, placement, application_key, surface_id, release_snapshot)
+       when is_binary(surface_id) do
+    with {:ok, surface} <- ApplicationRegistry.fetch_surface(definition, placement, surface_id),
+         {:ok, release} <-
+           ApplicationReleaseRegistry.fetch_from_snapshot(
+             release_snapshot,
+             application_key,
+             definition.version,
+             surface.surface_id,
+             surface.version
+           ) do
+      {:ok, surface, release}
+    end
+  end
+
+  defp first_released_surface(surfaces, definition, application_key, release_snapshot) do
     missing_result =
       case release_snapshot.source do
         :database -> :no_history
         :static -> :unknown_application_release
       end
 
-    ApplicationRegistry.workspace_surfaces(definition, placement)
+    surfaces
     |> Enum.reduce_while({:missing, missing_result}, fn surface, {:missing, missing} ->
       case ApplicationReleaseRegistry.fetch_from_snapshot(
              release_snapshot,
@@ -656,21 +679,6 @@ defmodule CadenceWeb.ApplicationHostCatalog do
     |> case do
       {:missing, missing} -> {:error, missing}
       result -> result
-    end
-  end
-
-  defp resolve_surface(definition, placement, application_key, surface_id, release_snapshot)
-       when is_binary(surface_id) do
-    with {:ok, surface} <- ApplicationRegistry.fetch_surface(definition, placement, surface_id),
-         {:ok, release} <-
-           ApplicationReleaseRegistry.fetch_from_snapshot(
-             release_snapshot,
-             application_key,
-             definition.version,
-             surface.surface_id,
-             surface.version
-           ) do
-      {:ok, surface, release}
     end
   end
 

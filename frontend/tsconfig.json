@@ -14,9 +14,6 @@
       "path": "./apps/surface-fixture"
     },
     {
-      "path": "./apps/telemetry-decom"
-    },
-    {
       "path": "./modules/commanding"
     },
     {
@@ -27,9 +24,6 @@
     },
     {
       "path": "./modules/planning-and-contacts"
-    },
-    {
-      "path": "./modules/telemetry-decom"
     },
     {
       "path": "./packages/apogee-ui"

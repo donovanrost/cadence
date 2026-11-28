@@ -135,6 +135,11 @@ redirect to the generic route and keep that historical mapping in a legacy
 redirect controller. Applications without a previously shipped URL need no
 route change at all.
 
+An application with no surfaces is headless (`ApplicationDefinition.headless?/1`): it needs no
+workspace surface and no frontend release, and the console's own screens drive it. Telemetry
+Decom is one (#669). An application that declares any surface gives every installable scope an
+`:application_workspace` surface.
+
 Describe each application surface with a `SurfaceDefinition`. Prefer the
 declarative renderer and a `SurfaceDocument` assembled by a host-registered
 query provider. Current host primitives cover:
@@ -152,10 +157,8 @@ queries, or effect callbacks. The host owns rendering, form events, table
 navigation, action dispatch, and feedback.
 
 Use a trusted renderer only when the workflow cannot be expressed without
-losing essential behavior. Telemetry Decom's interactive APID claim editor is
-the current example. Register the renderer explicitly in
-[`CadenceWeb.ApplicationSurfaceRegistry`](../../apps/cadence_web/lib/cadence_web/application_surface_registry.ex)
-and keep all mutations behind the same typed action dispatcher.
+losing essential behavior, and keep all mutations behind the same typed action
+dispatcher.
 
 Do not broaden the surface grammar for a hypothetical future workflow. Add a
 primitive only with a real application consumer and bounded validation.

@@ -346,8 +346,11 @@ defmodule Cadence.Extensions.RegistryTest do
     assert {:error, :invalid_application_surface_provider_registry} =
              ApplicationSurfaces.validate_providers(definitions, %{})
 
+    # No surface declares a reference (#669), so a registered provider is one nothing uses.
     assert {:error, :invalid_application_reference_provider_registry} =
-             ReferenceResolver.validate_providers(definitions, %{})
+             ReferenceResolver.validate_providers(definitions, %{
+               "cadence.unreferenced" => %{1 => ReferenceResolver}
+             })
   end
 
   test "rejects unresolved contribution versions, kinds, and surface contracts" do

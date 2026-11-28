@@ -2,7 +2,6 @@ defmodule CadenceWeb.ApplicationHostCatalogTest do
   use CadenceWeb.ConnCase, async: false
 
   alias Cadence.Applications.{ApplicationInstallations, HostContext}
-  alias Cadence.Applications.Registry, as: ApplicationRegistry
   alias Cadence.Auth.Scope
   alias Cadence.Missions.Mission
   alias CadenceWeb.{ApplicationHostCatalog, TestFixtures}
@@ -19,55 +18,52 @@ defmodule CadenceWeb.ApplicationHostCatalogTest do
   end
 
   test "passes explicit validated time to release lookup boundaries", %{conn: _conn} do
-    {scope, route_context} = installed_telemetry_context()
+    {scope, route_context} = installed_mission_representatives_context()
 
     assert {:ok, admission} =
              ApplicationHostCatalog.admit_application(
                scope,
                route_context,
-               "telemetry_decom",
-               "packet_bindings",
+               "ops_console",
+               "workspace",
                now: @now
              )
 
-    assert admission.release.release_id == "telemetry-decom-v1"
+    assert admission.release.release_id == "ops-console-v1"
 
     assert {:error, {:integrity_failure, :invalid_snapshot_clock}} =
              ApplicationHostCatalog.admit_application(
                scope,
                route_context,
-               "telemetry_decom",
-               "packet_bindings"
+               "ops_console",
+               "workspace"
              )
 
     assert {:error, {:integrity_failure, :invalid_snapshot_clock}} =
              ApplicationHostCatalog.admit_application(
                scope,
                route_context,
-               "telemetry_decom",
-               "packet_bindings",
+               "ops_console",
+               "workspace",
                now: "not-a-canonical-timestamp"
              )
   end
 
-  test "admits the registered telemetry packet_bindings surface after release lookup", %{
+  test "an installed headless application has nothing to admit or catalog (#669)", %{
     conn: _conn
   } do
     {scope, route_context} = installed_telemetry_context()
 
-    assert {:ok, definition} =
-             Cadence.ExtensionCatalog.fetch_available_application("telemetry_decom")
-
-    assert {:ok, surface} =
-             ApplicationRegistry.fetch_surface(
-               definition,
-               :spacecraft,
-               "packet_bindings"
+    assert {:error, :unknown_surface} =
+             ApplicationHostCatalog.admit_application(
+               scope,
+               route_context,
+               "telemetry_decom",
+               nil,
+               now: @now
              )
 
-    assert surface.surface_id == "packet_bindings"
-
-    assert {:ok, admission} =
+    assert {:error, :unknown_surface} =
              ApplicationHostCatalog.admit_application(
                scope,
                route_context,
@@ -76,19 +72,8 @@ defmodule CadenceWeb.ApplicationHostCatalogTest do
                now: @now
              )
 
-    assert admission.release.release_id == "telemetry-decom-v1"
-    assert admission.release.remote_name == "cadence_telemetry_decom"
-
-    assert admission.release.manifest_path ==
-             "/assets/application-host/telemetry-decom/mf-manifest.json"
-  end
-
-  test "the generic catalog supports a second registry application", %{
-    conn: _conn
-  } do
-    {scope, route_context} = installed_telemetry_context()
-
-    assert {:ok, catalog} =
+    # No spacecraft-scope application has a surface, so the spacecraft catalog is empty.
+    assert {:error, :application_catalog_unavailable} =
              ApplicationHostCatalog.build(
                scope,
                route_context,
@@ -98,15 +83,6 @@ defmodule CadenceWeb.ApplicationHostCatalogTest do
                manifest_url: fn path -> "https://example.test" <> path end,
                now: @now
              )
-
-    assert catalog["generatedAt"] == @now
-
-    assert application =
-             Enum.find(catalog["applications"], &(&1["applicationKey"] == "telemetry_decom"))
-
-    assert application["applicationKey"] == "telemetry_decom"
-    assert application["surface"]["surfaceId"] == "packet_bindings"
-    assert application["release"]["releaseId"] == "telemetry-decom-v1"
   end
 
   test "mission catalogs include platform modules without installations", %{conn: _conn} do
@@ -128,7 +104,7 @@ defmodule CadenceWeb.ApplicationHostCatalogTest do
   end
 
   test "rejects oversized persisted display data before returning a catalog" do
-    {scope, route_context} = installed_telemetry_context()
+    {scope, route_context} = installed_mission_representatives_context()
     mission = %{route_context.mission | display_name: String.duplicate("x", 241)}
     route_context = %{route_context | mission: mission}
 

@@ -11,8 +11,7 @@ defmodule Cadence.TestSupport.SurfaceFixtureApplication do
   both forbid the remote, so it can't ship.
 
   - `mission_surface` (mission scope) shows what the host handed the remote (scope and ids) and
-    the release serving it. One surface: activation gives each released surface its own remote,
-    and the console smoke's spacecraft-scope side is the telemetry_decom canary.
+    the release serving it. One surface: activation gives each released surface its own remote.
   - `record_nonce` (mission scope) echoes a nonce. It changes nothing, so a smoke can count
     requests without side effects.
   """

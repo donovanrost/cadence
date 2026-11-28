@@ -197,8 +197,8 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
                binding_set_content_sha256: activation.binding_set_content_sha256
              )
 
-    # Sweep row 6 (rule (b)): the direct host writes are refused server-side too, before review,
-    # and write nothing; only request_activation was gated before.
+    # Sweep row 6 (rule (b)): the direct host writes are refused server-side and write nothing.
+    # Telemetry Decom is headless (#669), so no surface admits them at all.
     host = HostContext.spacecraft(c.mission.mission_id, c.first.spacecraft_id)
 
     {:ok, before} =
@@ -218,7 +218,7 @@ defmodule Cadence.Activations.SpacecraftConfigurationTest do
         params: %{}
       }
 
-      assert {:error, :spacecraft_configuration_review_required} =
+      assert {:error, :unsupported_application_action} =
                DecomActions.execute(c.scope, host, request),
              action
     end
