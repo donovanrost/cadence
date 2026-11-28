@@ -18,7 +18,7 @@ describe("a density window the server cut (#677)", () => {
   it("says the counts are a floor, and what to do", () => {
     expect(densityTruncation(density(false))).toBeNull();
     expect(densityTruncation(density(true))).toBe(
-      "The bars count the first 5,000 events in this window, so there are more than shown. Narrow the window to count every event; Older events in the log reads them all.",
+      "The bars count only the first 5,000 events in this window. Narrow the window to count them all; the event log below lists every one.",
     );
     expect(densityLabel(density(false))).toBe("11 events in the window, busiest 04:00Z with 9.");
     expect(densityLabel(density(true))).toBe(
@@ -33,7 +33,7 @@ describe("a density window the server cut (#677)", () => {
       now: Date.parse("2026-11-08T04:30:00Z"),
     });
     const cut = mount(DensityStrip, { props: props(true) });
-    expect(cut.text()).toContain("The bars count the first 5,000 events");
+    expect(cut.text()).toContain("The bars count only the first 5,000 events");
     expect(cut.get("svg").attributes("aria-label")).toMatch(/^At least 11 events/);
     const whole = mount(DensityStrip, { props: props(false) });
     expect(whole.text()).not.toContain("first 5,000");

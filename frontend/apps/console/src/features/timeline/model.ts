@@ -267,7 +267,7 @@ export const DENSITY_READ_CAP = 5_000;
  */
 export function densityTruncation(density: Density): string | null {
   if (!density.truncated) return null;
-  return `The bars count the first ${formatCount(DENSITY_READ_CAP)} events in this window, so there are more than shown. Narrow the window to count every event; Older events in the log reads them all.`;
+  return `The bars count only the first ${formatCount(DENSITY_READ_CAP)} events in this window. Narrow the window to count them all; the event log below lists every one.`;
 }
 
 /** The strip's accessible summary: "48 events in the window, busiest 04:00Z with 9." */
@@ -276,7 +276,7 @@ export function densityLabel(density: Density): string {
   const total = bars.reduce((n, b) => n + b.total, 0);
   const busiest = [...bars].sort((a, b) => b.total - a.total)[0];
   const count = density.truncated ? `At least ${plural(total, "event")}` : plural(total, "event");
-  return `${count} in the window${busiest && busiest.total ? `, busiest ${new Date(busiest.t).toISOString().slice(11, 16)}Z with ${busiest.total}` : ""}.`;
+  return `${count} in the window${busiest && busiest.total ? `, busiest ${formatHourMinute(new Date(busiest.t))} with ${busiest.total}` : ""}.`;
 }
 
 /**
