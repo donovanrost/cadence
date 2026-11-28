@@ -14,7 +14,7 @@ defmodule Cadence.Spacecraft.ConfigKinds.ScidHolds do
   name, `name` nullable; the union on a folded item), `mission` (`%{id, name}` or nil) and
   `mission_count`. Sentences are ux's; an unnamed account is counted, never shown by id.
 
-  The sharing read comes through the `:scid_sharing` adapter, so the spacecraft kind keeps no
+  One read covers every SCID of the change set (#1049). The sharing read comes through the `:scid_sharing` adapter, so the spacecraft kind keeps no
   compile-time edge to ground networks.
   """
 
@@ -30,10 +30,13 @@ defmodule Cadence.Spacecraft.ConfigKinds.ScidHolds do
         []
 
       sharing ->
-        for {id, scid} <- new_scids(entries),
-            shared = sharing.shared(organization_id, mission_id, scid),
-            shared != [] do
-          item(id, scid, Enum.flat_map(shared, & &1.provider_accounts), nil, length(shared))
+        new = new_scids(entries)
+
+        shared =
+          sharing.shared_many(organization_id, mission_id, Enum.uniq(Enum.map(new, &elem(&1, 1))))
+
+        for {id, scid} <- new, others = Map.get(shared, scid, []), others != [] do
+          item(id, scid, Enum.flat_map(others, & &1.provider_accounts), nil, length(others))
         end
     end
   end
