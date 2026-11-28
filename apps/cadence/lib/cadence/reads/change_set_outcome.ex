@@ -31,8 +31,9 @@ defmodule Cadence.Reads.ChangeSetOutcome do
   # Kinds whose changes Readiness doesn't read (domain, #522): app configuration, and the derived
   # kinds the pipeline adds after the staged ops. Every registered kind is in one list or the
   # other (`ChangeSetOutcomeKindsTest`), so a new kind is classified on purpose.
-  @not_read_kinds ~w(derived_telemetry limit_definition spacecraft_routes framing_compatibility
-                     catalog_compatibility switch_compatibility apid_compatibility)
+  @not_read_kinds ~w(derived_telemetry limit_definition monitoring_policy spacecraft_routes
+                     framing_compatibility catalog_compatibility switch_compatibility
+                     apid_compatibility)
 
   @doc "The kinds whose changes Readiness reads."
   @spec readiness_kinds() :: [String.t()]

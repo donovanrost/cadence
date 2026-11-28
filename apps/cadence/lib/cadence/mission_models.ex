@@ -22,6 +22,7 @@ defmodule Cadence.MissionModels do
     RuntimePlanRow
   }
 
+  alias Cadence.Persistence.JsonDocument
   alias Cadence.Repo
 
   @doc "Builds the exact revision and compiled-plan identity manifest for activation requests."
@@ -60,10 +61,47 @@ defmodule Cadence.MissionModels do
           {:ok, CompilerResult.t()} | {:error, term()}
   def compile_layers(layers, opts \\ []) when is_list(layers) and is_list(opts) do
     with {:ok, %CompilerResult{} = result} <- Compiler.compile(layers, opts),
+         {:ok, result} <- keep_command_plan(result, Keyword.get(opts, :command_plan)),
          {:ok, _changes} <- persist_compilation(layers, result) do
       {:ok, result}
     end
   end
+
+  # A revision at an authored head runs its base's command plan unchanged (P3 M2, #451; option B
+  # agreed with commanding): the authored layer can't hold a command declaration, so its own
+  # command plan differs from the base's only by the embedded revision id. That is checked, never
+  # assumed: any other difference refuses the compile.
+  defp keep_command_plan(result, nil), do: {:ok, result}
+
+  defp keep_command_plan(
+         %CompilerResult{plans: %{command: own} = plans} = result,
+         %RuntimePlan{} = base
+       ) do
+    # The fresh plan is in memory (atom values), the base's as stored (JSON): compare both in the
+    # stored form, the encoding persistence applies (commanding-eng's report on #1106).
+    if without_revision(JsonDocument.encode(own.plan)) == without_revision(base.plan),
+      do:
+        {:ok,
+         %{
+           result
+           | plans: %{
+               plans
+               | command: %{base | mission_model_revision_id: result.revision.revision_id}
+             }
+         }},
+      else: {:error, :authored_head_changes_command_plan}
+  end
+
+  defp keep_command_plan(result, _base), do: {:ok, result}
+
+  defp without_revision(%{} = map) when not is_struct(map),
+    do:
+      map
+      |> Map.drop(["mission_model_revision_id", :mission_model_revision_id])
+      |> Map.new(fn {k, v} -> {k, without_revision(v)} end)
+
+  defp without_revision(list) when is_list(list), do: Enum.map(list, &without_revision/1)
+  defp without_revision(value), do: value
 
   @doc """
   The mission composition that names `revision_id` (#542), or
@@ -194,6 +232,11 @@ defmodule Cadence.MissionModels do
   """
   @spec approval_bases(binary(), binary(), [binary()]) :: %{binary() => binary() | nil}
   defdelegate approval_bases(organization_id, mission_id, revision_ids),
+    to: Cadence.MissionModels.EffectiveStatuses
+
+  @doc "The authored head each of `revision_ids` is linked at, nil for a base (P3 M2, #451)."
+  @spec authored_heads(binary(), binary(), [binary()]) :: %{binary() => binary() | nil}
+  defdelegate authored_heads(organization_id, mission_id, revision_ids),
     to: Cadence.MissionModels.EffectiveStatuses
 
   @spec fetch_plan(binary() | nil, binary(), binary(), atom()) ::

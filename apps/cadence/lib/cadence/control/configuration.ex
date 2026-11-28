@@ -30,6 +30,7 @@ defmodule Cadence.Control.Configuration do
 
   alias Cadence.Configuration.ChangeSetStore
   alias Cadence.Contacts.Scheduler
+  alias Cadence.Control.AuthoredVersions
   alias Cadence.Control.MissionRuntimeReconciler
   alias Cadence.Control.Missions, as: ControlMissions
   alias Cadence.Control.ScidSharing
@@ -185,13 +186,16 @@ defmodule Cadence.Control.Configuration do
     with {:ok, mission} <- Access.authorize(scope, mission_id, :apply) do
       progress(change_set_id, "validate", :running)
 
-      mission.organization_id
-      |> Submission.submit(
-        mission.mission_id,
-        change_set_id,
-        Access.actor(scope),
-        record(scope, params)
-      )
+      fn ->
+        Submission.submit(
+          mission.organization_id,
+          mission.mission_id,
+          change_set_id,
+          Access.actor(scope),
+          record(scope, params)
+        )
+      end
+      |> committed()
       |> after_apply(mission, change_set_id)
       |> ScidSharing.for_viewer(scope, mission)
     end
@@ -204,17 +208,34 @@ defmodule Cadence.Control.Configuration do
     with {:ok, mission} <- Access.authorize(scope, mission_id, :review) do
       if decision == :approve, do: progress(change_set_id, "validate", :running)
 
-      mission.organization_id
-      |> Submission.review(
-        mission.mission_id,
-        change_set_id,
-        Access.actor(scope),
-        decision,
-        record(scope, params)
-      )
+      fn ->
+        Submission.review(
+          mission.organization_id,
+          mission.mission_id,
+          change_set_id,
+          Access.actor(scope),
+          decision,
+          record(scope, params)
+        )
+      end
+      |> committed()
       |> after_apply(mission, change_set_id)
       |> ScidSharing.for_viewer(scope, mission)
     end
+  end
+
+  @doc false
+  # An apply whose commit the database refused because of a monitoring version (#451 M2: the
+  # deferred checks that the set is applied as exactly its revision) answers that refusal's closed
+  # error, never a retry without the version. Any other database error is raised as it was.
+  def committed(apply) do
+    apply.()
+  rescue
+    error in Postgrex.Error ->
+      case AuthoredVersions.refusal(error) do
+        nil -> reraise error, __STACKTRACE__
+        code -> {:error, code}
+      end
   end
 
   # #117 step 2: the decision record's admin_mode comes from the scope, never from the request.
