@@ -76,7 +76,9 @@ defmodule Cadence.SpacecraftStore.Bulk do
 
   @doc """
   Inserts new spacecraft (switches included). `{:error, id, changeset}` names the first one the row
-  rules refuse, with nothing inserted. An id that already exists is left as it is.
+  rules refuse, with nothing inserted. An id that already exists is refused with `:entity_exists`
+  (someone wrote it outside the change set between its check and this write), never recorded as
+  this change's create.
   """
   @spec insert(binary(), binary(), [Spacecraft.t()]) ::
           {:ok, [Spacecraft.t()]} | {:error, binary(), term()}
@@ -86,16 +88,8 @@ defmodule Cadence.SpacecraftStore.Bulk do
     now = DateTime.utc_now()
 
     with {:ok, _mission} <- mission(organization_id, mission_id),
-         {:ok, rows} <- insert_rows(spacecraft, organization_id, now) do
-      rows
-      |> Enum.chunk_every(@insert_chunk)
-      |> Enum.each(
-        &Repo.insert_all(SpacecraftRow, &1,
-          on_conflict: :nothing,
-          conflict_target: [:mission_id, :spacecraft_id]
-        )
-      )
-
+         {:ok, rows} <- insert_rows(spacecraft, organization_id, now),
+         :ok <- all_inserted(spacecraft, insert_chunks(rows)) do
       announce(organization_id, mission_id)
       {:ok, spacecraft}
     else
@@ -191,6 +185,31 @@ defmodule Cadence.SpacecraftStore.Bulk do
       telemetry_enabled: craft.telemetry_enabled,
       inserted_at: now
     })
+  end
+
+  # The ids the rows really created: a conflicting id inserts nothing.
+  defp insert_chunks(rows) do
+    rows
+    |> Enum.chunk_every(@insert_chunk)
+    |> Enum.flat_map(fn chunk ->
+      {_count, inserted} =
+        Repo.insert_all(SpacecraftRow, chunk,
+          on_conflict: :nothing,
+          conflict_target: [:mission_id, :spacecraft_id],
+          returning: [:spacecraft_id]
+        )
+
+      Enum.map(inserted, & &1.spacecraft_id)
+    end)
+  end
+
+  defp all_inserted(spacecraft, inserted) do
+    inserted = MapSet.new(inserted)
+
+    case Enum.find(spacecraft, &(not MapSet.member?(inserted, &1.spacecraft_id))) do
+      nil -> :ok
+      %Spacecraft{spacecraft_id: id} -> {:error, id, :entity_exists}
+    end
   end
 
   defp check_rows(items, changeset_of) do

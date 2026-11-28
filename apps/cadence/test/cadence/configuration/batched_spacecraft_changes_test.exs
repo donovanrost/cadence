@@ -10,6 +10,7 @@ defmodule Cadence.Configuration.BatchedSpacecraftChangesTest do
   import Cadence.ConfigurationFixtures
 
   alias Cadence.Control.{Configuration, ConfigurationRollback}
+  alias Cadence.Spacecraft
   alias Cadence.SpacecraftStore
   alias Cadence.SpacecraftStore.Bulk
 
@@ -167,6 +168,22 @@ defmodule Cadence.Configuration.BatchedSpacecraftChangesTest do
 
       assert {:ok, %{commanding_enabled: true, telemetry_enabled: nil}} =
                SpacecraftStore.fetch_spacecraft(c.org, c.mission, id)
+    end
+  end
+
+  describe "a spacecraft written outside the change set" do
+    test "is not recorded as this change set's create", c do
+      [existing] = apply_ops(c, "One", adds(1, 80))
+      {:ok, taken} = SpacecraftStore.fetch_spacecraft(c.org, c.mission, existing)
+      fresh = Spacecraft.new(%{mission_id: c.mission, display_name: "Fresh", scid: 81})
+      clash = %{taken | display_name: "Clash", scid: 82}
+
+      assert {:error, ^existing, :entity_exists} =
+               Bulk.insert(c.org, c.mission, [fresh, clash])
+
+      # The craft that is there keeps what it had.
+      assert {:ok, %{display_name: "Craft 80", scid: 80}} =
+               SpacecraftStore.fetch_spacecraft(c.org, c.mission, existing)
     end
   end
 
