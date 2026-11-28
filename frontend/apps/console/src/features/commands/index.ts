@@ -12,6 +12,7 @@ export { fetchCatalog, type CommandSummary } from "./api.ts";
 export { fetchGroups, type GroupRow } from "./groups/api.ts";
 export { usePeopleNames } from "./groups/usePeopleNames.ts";
 /** Mobile.md §3: the paged alarm view's "Your GO is requested" block. */
-export { namelessTargets, phoneGoBlocked, useYourGo, yourGoWords } from "./request/yourGo.ts";
+export { namelessLine, phoneGoBlocked, useYourGo, yourGoWords } from "./request/yourGo.ts";
+export { default as NamelessTargets } from "./request/NamelessTargets.vue";
 export { decisionErrorWords } from "./request/decision.ts";
 export { decide } from "./groups/show.ts";

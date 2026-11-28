@@ -7,7 +7,8 @@ import { ApButton, ApCallout, ApPanel, ApSheet, ApTextarea, OutcomeCallout, useN
 import {
   decide,
   decisionErrorWords,
-  namelessTargets,
+  namelessLine,
+  NamelessTargets,
   phoneGoBlocked,
   useCommandAccess,
   usePeopleNames,
@@ -65,7 +66,12 @@ const targetNames = computed(() => {
     : names.join(", ");
 });
 /** ux #237: a target without a name doesn't block GO; its id stays in Technical details. */
-const nameless = computed(() => (group.value ? namelessTargets(group.value) : null));
+const nameless = computed(() => (group.value ? namelessLine(group.value) : null));
+/** #1064: Technical details reads the unnamed targets only once it's opened. */
+const idsOpen = ref(false);
+const onIdsToggle = (e: Event) => {
+  idsOpen.value = e.target instanceof HTMLDetailsElement && e.target.open;
+};
 
 async function sign(kind: "go" | "no_go") {
   const g = group.value;
@@ -125,11 +131,11 @@ function openNoGo() {
       </ol>
       <OutcomeCallout v-if="outcome" :outcome="outcome" />
       <p v-if="blocked" class="m-0 text-sm text-caution-text">{{ blocked }}</p>
-      <ApCallout v-if="nameless" tone="caution">
-        {{ nameless.line }}
-        <details class="mt-1 text-xs text-text-3">
+      <ApCallout v-if="nameless && group" tone="caution">
+        {{ nameless }}
+        <details class="mt-1 text-xs text-text-3" @toggle="onIdsToggle">
           <summary class="cursor-pointer font-mono uppercase">Technical details</summary>
-          <p v-for="id in nameless.ids" :key="id" class="m-0 font-mono">{{ id }}</p>
+          <NamelessTargets v-if="idsOpen" :group="group" :mission-id="missionId" />
         </details>
       </ApCallout>
       <div class="grid grid-cols-2 gap-2 pt-1">

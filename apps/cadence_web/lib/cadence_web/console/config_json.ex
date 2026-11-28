@@ -21,6 +21,8 @@ defmodule CadenceWeb.Console.ConfigJSON do
     activation_policy_changed: 409,
     entity_gone: 409,
     invalid_op: 422,
+    invalid_lane: 422,
+    mixed_lanes: 422,
     reason_required: 422,
     comment_required: 422,
     nothing_staged: 422,
@@ -55,6 +57,9 @@ defmodule CadenceWeb.Console.ConfigJSON do
 
   @messages %{
     frozen_in_review: "The change set is in review; staging is paused until it is decided.",
+    invalid_lane: "Choose the configuration or monitoring lane.",
+    mixed_lanes:
+      "Configuration and monitoring changes stage separately. Stage them one lane at a time.",
     change_set_changed: "The change set changed since you loaded it. Reload and try again.",
     path_already_staged: "Someone else already staged a change to this field.",
     reviewer_is_author: "You can't review a change set you submitted or contributed to.",
