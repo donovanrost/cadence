@@ -15,16 +15,15 @@ defmodule Cadence.Configuration.ProfileRolloutPreviewTest do
   alias Cadence.Control.Configuration
   alias Cadence.Governance.ActivationPolicy
   alias Cadence.Management.Activations
+  alias Cadence.Repo
   alias Cadence.SpacecraftStore
 
   @fleet String.to_integer(System.get_env("ROLLOUT_FLEET", "500"))
 
-  setup do
-    org = "org-rollout-preview"
-    mid = "mission-rollout-preview"
-    # Dev-sized catalog and model (10 packets, 146 fields, 83 limits): director, 11-15.
-    {first, revision, _endpoint} =
-      Fixtures.setup_imported_mission!(org, mid, yaml: Fixtures.dev_sized_yaml())
+  defp setup_mission(label, revision_options, apids) do
+    org = "org-rollout-#{label}"
+    mid = "mission-rollout-#{label}"
+    {first, revision, _endpoint} = Fixtures.setup_imported_mission!(org, mid, revision_options)
 
     {:ok, mission} = Cadence.Missions.fetch_mission(org, mid)
     scope = Fixtures.user_scope(org, "operator")
@@ -35,12 +34,21 @@ defmodule Cadence.Configuration.ProfileRolloutPreviewTest do
         "value" => %{"approval_requirement" => "direct"}
       })
 
-    %{org: org, mission: mission, scope: scope, first: first, revision: revision}
+    %{
+      org: org,
+      mission: mission,
+      scope: scope,
+      first: first,
+      revision: revision,
+      revision_options: revision_options,
+      apids: apids
+    }
   end
 
   @tag timeout: 600_000
-  test "a profile catalog move previewed for the whole fleet", c do
-    ops = fleet_move!(c)
+  test "a profile catalog move previewed for the whole fleet" do
+    c = setup_mission("preview", [yaml: Fixtures.dev_sized_yaml()], Fixtures.dev_sized_apids())
+    ops = fleet_move!(c, @fleet)
 
     {result, ms, queries, by_query} =
       measure(fn -> Configuration.preview(c.scope, c.mission.mission_id, {:ops, ops}) end)
@@ -65,26 +73,21 @@ defmodule Cadence.Configuration.ProfileRolloutPreviewTest do
     assert ms < 10_000, "#{ms} ms for #{@fleet} spacecraft"
   end
 
-  # Step 4 (11-15): the APPLY of the same move ran past its 120 s transaction timeout and rolled
-  # back. Each spacecraft's compile re-read the same catalog and mission-model revisions.
-  @tag timeout: 600_000
-  test "a profile catalog move applied to the whole fleet", c do
-    ops = fleet_move!(c)
+  @tag timeout: 180_000
+  test "a fleet catalog move uses a constant number of statements from 100 to 1,000 spacecraft" do
+    small = count_apply(100)
+    large = count_apply(1_000)
+
+    assert small.queries == large.queries,
+           "100 craft: #{small.queries}, 1,000 craft: #{large.queries}; #{top(large.by_query)}"
+  end
+
+  defp count_apply(size) do
+    c = setup_mission("apply-#{size}", [], [42])
+    ops = fleet_move!(c, size, enable_telemetry: true)
     {:ok, staged} = Configuration.stage(c.scope, c.mission.mission_id, %{summary: "Move"}, ops)
 
-    test_pid = self()
-
-    :telemetry.attach(
-      "apply-transaction-#{System.unique_integer([:positive])}",
-      [:cadence, :configuration, :apply_transaction],
-      fn _event, %{duration: duration}, _meta, _config ->
-        ms = System.convert_time_unit(duration, :native, :millisecond)
-        send(test_pid, {:apply_transaction_ms, ms})
-      end,
-      nil
-    )
-
-    {result, ms, queries, by_query} =
+    {result, _ms, queries, by_query} =
       measure(fn ->
         Configuration.submit(c.scope, c.mission.mission_id, staged.change_set_id, %{
           reason: "Move the whole fleet to rev 2",
@@ -95,61 +98,55 @@ defmodule Cadence.Configuration.ProfileRolloutPreviewTest do
 
     assert {:ok, %{state: :applied}} = result
 
-    assert_received {:apply_transaction_ms, transaction_ms}
-
-    # Every spacecraft's stored decom config follows the move (11-15: it kept the old catalog).
     [%{changes: [%{value: composition}]}] = ops
     rev2 = CompositionPins.catalog_revision_for(c.org, c.mission.mission_id, composition)
 
     assert c.org
            |> TelemetryDecom.list_configs(c.mission.mission_id)
-           |> Enum.map(& &1.catalog_revision_id)
-           |> Enum.frequencies() == %{rev2 => @fleet}
+           |> Enum.frequencies_by(& &1.catalog_revision_id) == %{rev2 => size}
 
-    # Each catalog's compile inputs are read once per distinct catalog and passed explicitly
-    # (Review.cached_inputs/3), not once per spacecraft and not in the process dictionary.
-    # (A runtime plan is 4 queries, one per target.)
-    for {reader, bound} <- [
-          {"Catalog.fetch_revision", 16},
-          # +2: the model approval gate compares the introduced revision with its baseline once.
-          {"MissionModels.fetch_revision", 6},
-          # +8: the gate's comparison loads both revisions' four plans once.
-          {"MissionModels.fetch_plan", 24}
-        ] do
-      assert reads(by_query, reader) <= bound, "#{reader}: #{top(by_query)}"
-    end
+    assert %{rows: [[2]]} =
+             Repo.query!(
+               "SELECT count(*) FROM spacecraft_configuration_artifacts WHERE organization_id = $1 AND mission_id = $2",
+               [c.org, c.mission.mission_id]
+             )
 
-    # Still per spacecraft: each one's derived revision, its stored decom config (projected since
-    # the 11-15 drift fix: 4 statements), and its capability instances and binding rules row by row
-    # (one of each per packet, 20 of the 35): 17,524 for 500 on 11-15. The model review
-    # (config-materialization-model.md) decides what replaces them; this bound catches any new
-    # per-spacecraft query.
-    assert queries <= @fleet * 37, "#{queries} queries for #{@fleet} spacecraft: #{top(by_query)}"
+    assert %{rows: [[^size]]} =
+             Repo.query!(
+               "SELECT count(*) FROM spacecraft_configuration_heads WHERE organization_id = $1 AND mission_id = $2",
+               [c.org, c.mission.mission_id]
+             )
 
-    # The transaction itself (a 120 s timeout): 7.8 s for 500 spacecraft on a dev-sized catalog on
-    # 11-15. Before the fix it grew super-linearly (120 spacecraft: 48 s) and rolled back on dev.
-    assert transaction_ms < 60_000, "#{transaction_ms} ms in the transaction for #{@fleet}"
-    assert ms < 90_000, "#{ms} ms for #{@fleet} spacecraft"
-  end
+    assert %{rows: [["membership", ^size]]} =
+             Repo.query!(
+               """
+               SELECT storage_form, member_count FROM governed_binding_sets
+               WHERE organization_id = $1 AND mission_id = $2 ORDER BY version DESC LIMIT 1
+               """,
+               [c.org, c.mission.mission_id]
+             )
 
-  # Queries a Cadence function ran (by the caller recorded with each query).
-  defp reads(by_query, function) do
-    by_query
-    |> Enum.filter(fn {key, _n} -> String.contains?(key, function <> "/") end)
-    |> Enum.map(fn {_key, n} -> n end)
-    |> Enum.sum()
+    assignments = 2 * size
+
+    assert %{rows: [[^assignments]]} =
+             Repo.query!(
+               "SELECT count(*) FROM spacecraft_configuration_assignments WHERE organization_id = $1 AND mission_id = $2",
+               [c.org, c.mission.mission_id]
+             )
+
+    %{queries: queries, by_query: by_query}
   end
 
   # The whole fleet on one profile pinned to v1, and the ops that move its catalog to rev 2.
-  defp fleet_move!(c) do
+  defp fleet_move!(c, size, opts \\ []) do
     fleet = [
       c.first
-      | Enum.map(2..@fleet, fn i ->
+      | Enum.map(2..size, fn i ->
           Fixtures.persist_spacecraft!(c.org, c.mission.mission_id, display_name: "Fleet #{i}")
         end)
     ]
 
-    tokens = Map.new(fleet, fn craft -> {craft.spacecraft_id, save(c, craft)} end)
+    tokens = Map.new(fleet, fn craft -> {craft.spacecraft_id, save(c, craft, opts)} end)
     {:ok, request} = Review.request_many(c.scope, c.mission.mission_id, tokens)
     {:ok, approved} = Activations.fetch_approved(request.activation_request_id)
     {:ok, %{status: :succeeded}} = ControlActivations.execute(approved)
@@ -170,9 +167,10 @@ defmodule Cadence.Configuration.ProfileRolloutPreviewTest do
     end
 
     rev2 =
-      Fixtures.persist_imported_revision!(c.org, c.mission.mission_id,
-        revision_label: "Rev 2",
-        yaml: Fixtures.dev_sized_yaml()
+      Fixtures.persist_imported_revision!(
+        c.org,
+        c.mission.mission_id,
+        Keyword.put(c.revision_options, :revision_label, "Rev 2")
       )
 
     [
@@ -276,16 +274,21 @@ defmodule Cadence.Configuration.ProfileRolloutPreviewTest do
   defp arity(args) when is_list(args), do: length(args)
   defp arity(arity), do: arity
 
-  defp save(c, craft) do
-    current = Drafts.snapshot(c.mission, craft)
-
+  defp save(c, craft, opts) do
     document =
       Map.merge(SpacecraftConfigurationInput.empty(), %{
         "catalog_revision_id" => c.revision.catalog_revision_id,
         "telemetry_enabled" => true,
         "commanding_enabled" => true,
-        "handled_apids" => Fixtures.dev_sized_apids()
+        "handled_apids" => c.apids
       })
+
+    if opts[:enable_telemetry] do
+      :ok =
+        Fixtures.change_set_switches!(c.org, c.mission.mission_id, craft.spacecraft_id, document)
+    end
+
+    current = Drafts.snapshot(c.mission, craft)
 
     {:ok, _} =
       Drafts.save(c.scope, c.mission.mission_id, craft.spacecraft_id, current.token, document)

@@ -13,6 +13,7 @@ defmodule Cadence.Commanding.Groups.TimelineTest do
 
   alias Cadence.Commanding.Groups.{GroupStore, Timeline}
   alias Cadence.Control.Commanding.{GroupAbort, GroupSubmission}
+  alias Cadence.Reads.CommandGroups
 
   setup do
     c = setup!(2)
@@ -85,6 +86,24 @@ defmodule Cadence.Commanding.Groups.TimelineTest do
 
     # Explicit system actor, no invented user (director, qa #29).
     assert actor == %{"actor_kind" => "system"}
+  end
+
+  # #795: the member row says why it failed, from the same fact the member_failed event does, so
+  # a card needn't find that event in a paged log.
+  test "a failed member's row carries the reason its member_failed event states", c do
+    for {state, reason} <- [{"failed", "verify_failed"}, {"timed_out", "verify_timed_out"}] do
+      {group, [member | _]} = submit(c, [signed(c, 1)])
+      released!(member, state)
+      Timeline.settle_requests(c.org, c.mission, [member.command_request_id])
+
+      assert %{payload: %{"reason" => ^reason}} = event(c, group, :member_failed)
+
+      {:ok, view} =
+        CommandGroups.get(c.org, c.mission, group.command_group_id, nil)
+
+      assert [%{stage: :verify_failed, members: [%{failure_reason: failure}]} | _] = view.targets
+      assert Atom.to_string(failure) == reason
+    end
   end
 
   test "a failed verification writes member_failed, counting the later members it stops", c do

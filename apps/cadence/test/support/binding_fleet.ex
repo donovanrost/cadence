@@ -14,9 +14,9 @@ defmodule Cadence.TestSupport.BindingFleet do
   @doc "The source endpoint id of craft `n`."
   def endpoint(n), do: "spacecraft_runtime:sc-#{n}"
 
-  @doc "The spacecraft and source endpoint rows craft `1..n` need, in the mission."
+  @doc "The spacecraft and source endpoint rows craft `1..n` (or the range given) need, in the mission."
   def persist_endpoints!(org, mission, craft) do
-    for n <- 1..craft do
+    for n <- if(is_integer(craft), do: 1..craft, else: craft) do
       {:ok, _} =
         Cadence.SpacecraftStore.persist_spacecraft(
           org,
