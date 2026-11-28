@@ -40,8 +40,11 @@ export const occurrenceReader = d.object({
   opened_at: d.timestamp,
   cleared_at: d.nullable(d.timestamp),
   duration_s: d.nullable(d.integer),
-  /** null while still open; an unknown way of ending reads "Cleared". */
-  ended: d.nullable(d.known(["back_in_limits", "source_stopped"] as const)),
+  /**
+   * null while still open; an unknown way of ending reads "Cleared". `rule_retired` (#451 T3b): a
+   * monitoring change set retired the catalog alarm's policy while it was open, which closed it.
+   */
+  ended: d.nullable(d.known(["back_in_limits", "source_stopped", "rule_retired"] as const)),
   cleared_unacknowledged: d.boolean,
   acknowledged_by: d.nullable(actor),
   first_value: d.nullable(engineeringValue),
@@ -143,6 +146,7 @@ export const durationWords = (o: Occurrence) =>
 export function howItEnded(o: Occurrence): string {
   if (o.ended === "back_in_limits") return "Back in limits";
   if (o.ended === "source_stopped") return "Source stopped reporting it";
+  if (o.ended === "rule_retired") return "Its rule was retired";
   return o.cleared_at === null ? "Still open" : "Cleared";
 }
 
