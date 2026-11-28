@@ -11,7 +11,7 @@ defmodule Cadence.Configuration.ConfigKindsTest do
   alias Cadence.Platform.ConfigurationSettings
   alias Cadence.Spacecraft.ConfigKinds.Spacecraft, as: SpacecraftKind
   alias Cadence.SpacecraftStore
-  alias Cadence.SpacecraftStore.Overrides
+  alias Cadence.SpacecraftStore.{Bulk, Overrides}
   alias Cadence.SpacecraftTypeStore
 
   setup do
@@ -170,7 +170,7 @@ defmodule Cadence.Configuration.ConfigKindsTest do
 
       assert SpacecraftKind.load(ctx.org, ctx.mission, [id]) == %{}
       # Its SCID stays taken: history keeps pointing at it.
-      assert SpacecraftStore.scid_taken?(ctx.org, ctx.mission, 901)
+      assert %{901 => _holder} = Bulk.scid_holders(ctx.org, ctx.mission, [901])
     end
 
     test "archiving a spacecraft with traffic holds", ctx do

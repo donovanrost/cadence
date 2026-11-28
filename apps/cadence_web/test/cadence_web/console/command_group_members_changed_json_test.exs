@@ -1,7 +1,7 @@
 defmodule CadenceWeb.Console.CommandGroupMembersChangedJSONTest do
   @moduledoc """
-  #120 (ux U92 "Up front"): the group view (show and the channel push both encode it with
-  CommandGroupJSON.show/1) always carries `members_changed`, `submitted_member_count` and
+  #120 (ux U92 "Up front"): the group view (show encodes it with
+  CommandGroupJSON.show_first_page/1, the channel push with push/1) always carries `members_changed`, `submitted_member_count` and
   `current_member_count`: the GO refusal's own test while the group awaits a decision, all three
   null otherwise.
   """
@@ -54,6 +54,6 @@ defmodule CadenceWeb.Console.CommandGroupMembersChangedJSONTest do
     {:ok, view} =
       CommandGroups.get(c.org, c.mission, c.group.command_group_id, c.approver.user.user_id)
 
-    view |> CommandGroupJSON.show() |> Jason.encode!() |> Jason.decode!()
+    view |> CommandGroupJSON.show_first_page() |> Jason.encode!() |> Jason.decode!()
   end
 end

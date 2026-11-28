@@ -8,6 +8,8 @@ import { fetchModelRevision, type ModelRevision } from "./api.ts";
 import ApprovalPanel from "./ApprovalPanel.vue";
 import RevisionRollout from "./RevisionRollout.vue";
 import ComposedHeader from "./ComposedHeader.vue";
+import RevisionSpacecraftPanel from "./RevisionSpacecraftPanel.vue";
+import { importerLine } from "./words.ts";
 import { compositionTitle, isComposed } from "../composition.ts";
 
 /**
@@ -118,6 +120,26 @@ const details = (r: ModelRevision) => [
         />
         <!-- U102 "Where": C3 under the Approval panel (or its decided line). -->
         <RevisionRollout :revision="value" />
+        <!-- #678: where it came from, and which spacecraft use it (one catalog revision only). -->
+        <ApPanel v-if="value.catalog_revision" index="F1" title="Source">
+          <p class="m-0 text-md text-text-2">
+            {{ importerLine(value) ?? "Importer not recorded." }}
+            <RouterLink
+              v-if="value.catalog_revision.import_run_id"
+              :to="{
+                name: 'setup.catalog.import',
+                params: { importId: value.catalog_revision.import_run_id },
+              }"
+              class="text-readout underline"
+              >Open its import run</RouterLink
+            >
+          </p>
+        </ApPanel>
+        <RevisionSpacecraftPanel
+          v-if="value.catalog_revision"
+          :mission-id="scope.mission.id"
+          :catalog-revision-id="value.catalog_revision.id"
+        />
         <ApPanel index="F3" title="Technical details">
           <ApKeyValue :items="details(value)" :columns="2" />
         </ApPanel>

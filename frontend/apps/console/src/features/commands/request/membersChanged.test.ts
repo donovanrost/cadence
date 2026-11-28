@@ -7,6 +7,10 @@ import { groupOf } from "../groups/fixtures.ts";
 import DecisionPanel from "./DecisionPanel.vue";
 import { membersChangedLine } from "./decision.ts";
 
+vi.mock("@/live/index.ts", async (original) => ({
+  ...(await original<typeof import("@/live/index.ts")>()),
+  useMissionInvalidation: () => undefined,
+}));
 vi.mock("@/shell/index.ts", async (original) => ({
   ...(await original<typeof import("@/shell/index.ts")>()),
   useMissionScope: () => computed(() => ({ mission: { id: missionId("m-1"), name: "EARENDIL" } })),
@@ -44,9 +48,22 @@ describe("command_group_members_changed (U92)", () => {
   });
 
   it("after the refusal GO stays off with the line as its reason; NO-GO stays the way out", async () => {
-    const fetch = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>();
-    fetch.mockResolvedValueOnce(refusal());
+    // #795: the panel also reads the log and the HOLD acks (empty here); the decision is refused.
+    const empty = (key: string) =>
+      new Response(JSON.stringify({ data: { [key]: [] }, meta: { next_cursor: null, total: 0 } }), {
+        status: 200,
+      });
+    const fetch = vi.fn((url: string, init?: RequestInit) =>
+      Promise.resolve(
+        init?.method === "POST"
+          ? refusal()
+          : url.includes("/events")
+            ? empty("events")
+            : empty("names"),
+      ),
+    );
     vi.stubGlobal("fetch", fetch);
+    const decisions = () => fetch.mock.calls.filter(([, init]) => init?.method === "POST");
     const w = mount(DecisionPanel, {
       props: {
         group: groupOf(),
@@ -58,12 +75,13 @@ describe("command_group_members_changed (U92)", () => {
       },
       attachTo: document.body,
     });
+    await flushPromises();
     await w.get('input[value="go"]').setValue(true);
     const commit = () => w.findAll("button").find((b) => b.text().startsWith("Sign GO"));
     await commit()?.trigger("click");
     await flushPromises();
     expect(w.emitted("decided")).toBeUndefined();
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(decisions()).toHaveLength(1);
     expect(w.find('[role="alert"]').text()).toBe(LINE);
     expect(w.text()).not.toContain("Not recorded");
     expect(commit()?.attributes("aria-disabled")).toBe("true");

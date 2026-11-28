@@ -30,7 +30,7 @@ const armed = computed(() => contact.value?.armed_group_ids ?? []);
 const spacecraft = computed(
   () =>
     props.group.uplink?.spacecraft?.name ??
-    (props.group.targets.length === 1 ? (props.group.targets[0]?.name ?? null) : null),
+    (props.group.target_count === 1 ? (props.group.targets[0]?.name ?? null) : null),
 );
 const body = computed(() => {
   const c = contact.value;

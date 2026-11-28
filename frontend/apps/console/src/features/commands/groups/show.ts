@@ -1,3 +1,4 @@
+import { MAX_TARGETS } from "./bounds.ts";
 import type { MissionId } from "@/api/index.ts";
 import { expiryReader } from "./expiryReader.ts";
 import { resolvedArgumentsReader } from "./resolved.ts";
@@ -65,6 +66,10 @@ export const eventKinds = [
   // U75 (api be3fa592b): once per request, at its expires_at, when members ended expired.
   "expired",
 ] as const;
+export type EventKind = (typeof eventKinds)[number];
+
+/** #795: why a failed member failed, from the same fact its member_failed event states. */
+export const failureReasons = ["release_failed", "verify_failed", "verify_timed_out"] as const;
 
 const member = d.object({
   position: d.integer,
@@ -74,6 +79,7 @@ const member = d.object({
   command_name: d.nullable(d.string),
   stage,
   end_reason: d.nullable(d.knownText(endReasons)),
+  failure_reason: d.nullable(d.knownText(failureReasons)),
   verify_by: d.nullable(d.timestamp),
   /** api 3438b783c: when it verified, timed out or failed (null when it doesn't apply). */
   verified_at: d.optional(d.nullable(d.timestamp)),
@@ -85,7 +91,9 @@ const member = d.object({
 });
 export type GroupMember = Decoded<typeof member>;
 
-const target = d.object({
+export const targetReader = d.object({
+  /** #795: its place in the group's target order (what the targets read pages by). */
+  index: d.integer,
   spacecraft_id: d.token,
   name: d.nullable(d.string),
   scid: d.nullable(scidReader),
@@ -102,7 +110,7 @@ const target = d.object({
     ),
   ),
 });
-export type GroupTarget = Decoded<typeof target>;
+export type GroupTarget = Decoded<typeof targetReader>;
 
 const command = d.object({
   position: d.integer,
@@ -118,7 +126,7 @@ const command = d.object({
   resolved_arguments: resolvedArgumentsReader,
   // api f1bed1880: each target's own values ([] when none); optional for older reads.
   per_target: d.optional(
-    d.array(d.object({ spacecraft_id: d.token, argument_values_json: d.string }), 2_000),
+    d.array(d.object({ spacecraft_id: d.token, argument_values_json: d.string }), MAX_TARGETS),
   ),
 });
 export type GroupCommand = Decoded<typeof command>;
@@ -169,7 +177,7 @@ export type OutcomeKey = (typeof outcomeKeys)[number];
 export const reasonText = (reason: OutcomeKey | Unrecognized): string =>
   isKnown(reason) ? reason : reason.unrecognized;
 
-const event = d.object({
+export const eventReader = d.object({
   id: d.token,
   kind: d.knownText(eventKinds),
   actor: d.nullable(eventActor),
@@ -182,7 +190,7 @@ const event = d.object({
       reason: d.optional(d.nullable(d.knownText(outcomeKeys))),
       members: d.optional(eventMembers),
       approved: d.optional(d.integer),
-      excluded: d.optional(d.array(d.token, 1_000)),
+      excluded: d.optional(d.array(d.token, MAX_TARGETS)),
       /** A count; `already_started` lists the request ids that kept running. */
       canceled: d.optional(d.integer),
       already_started: d.optional(d.array(d.token, 5_000)),
@@ -193,7 +201,7 @@ const event = d.object({
       at_decision: d.optional(d.boolean),
       // #546 (ca-engineer): the HOLD's evidence as acknowledged; the Composition check names its targets.
       evidence: d.optional(
-        d.nullable(d.object({ spacecraft_ids: d.optional(d.array(d.token, 1_000)) })),
+        d.nullable(d.object({ spacecraft_ids: d.optional(d.array(d.token, MAX_TARGETS)) })),
       ),
       // expired (U75): how many went out, and how many it ended.
       sent: d.optional(d.integer),
@@ -218,9 +226,19 @@ const event = d.object({
     }),
   ),
 });
-export type GroupEvent = Decoded<typeof event>;
+export type GroupEvent = Decoded<typeof eventReader>;
 
-export const groupReader = d.object({
+/** #795: how many targets there are and a revision that moves with any target's stage. */
+const targetsPage = d.object({
+  total: d.integer,
+  revision: d.integer,
+  next_cursor: d.nullable(d.string),
+});
+/** #795: how many events there are; a push carrying a new total means new events. */
+const eventsPage = d.object({ total: d.integer, next_cursor: d.nullable(d.string) });
+
+/** Everything a group read and its push both carry (the push has no targets or events, #795). */
+const groupShape = {
   id: d.token,
   state: d.oneOf(groupStates),
   title: d.string,
@@ -254,7 +272,8 @@ export const groupReader = d.object({
   decision: d.nullable(
     d.object({
       kind: d.knownText(decisionKinds),
-      excluded: d.optional(d.array(d.token, 1_000)),
+      // The size guard's max_targets (5,000) bounds it; the server validates each id.
+      excluded: d.optional(d.array(d.token, MAX_TARGETS)),
       note: d.nullable(d.string),
     }),
   ),
@@ -264,13 +283,27 @@ export const groupReader = d.object({
   aborted_at: d.nullable(d.timestamp),
   // free-text: the operator's own sentence
   abort_reason: d.nullable(d.string),
-  targets: d.array(target, 1_000),
   progress,
   finished: d.optional(d.boolean),
   uplink: d.optional(d.nullable(groupUplinkReader)),
-  events: d.array(event, 10_000),
+  targets_page: targetsPage,
+  events_page: eventsPage,
+};
+
+/**
+ * The group read (#795): the first targets (at most 100, in target order) and the latest events
+ * (at most 50, oldest first), with their pages' totals; `groups/pages.ts` reads the rest.
+ */
+export const groupReader = d.object({
+  ...groupShape,
+  targets: d.array(targetReader, 500),
+  events: d.array(eventReader, 200),
 });
 export type Group = Decoded<typeof groupReader>;
+
+/** The group channel's push: the same read without the targets and events (#795). */
+export const groupPushReader = d.object(groupShape);
+export type GroupPush = Decoded<typeof groupPushReader>;
 
 const one = (missionId: MissionId, id: string) =>
   `${groupsBase(missionId)}/${encodeURIComponent(id)}`;

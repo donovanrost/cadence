@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, shallowRef } from "vue";
+import { computed, ref, shallowRef, toRef } from "vue";
 import { describeApiError, isError } from "@/api/index.ts";
 import { useMissionScope } from "@/shell/index.ts";
 import { ApButton, ApCallout, ApDecision, ApPanel } from "@/ui";
@@ -9,6 +9,7 @@ import HoldAckFields from "../compose/HoldAckFields.vue";
 import { decide, type DecisionKind, type Group } from "../groups/show.ts";
 import type { PersonName } from "../groups/words.ts";
 import RequestLogList from "./RequestLogList.vue";
+import { useHoldEvents } from "./useGroupPages.ts";
 import {
   cannotDecide,
   decisionErrorWords,
@@ -42,7 +43,13 @@ const flagged = computed(() => flaggedTargets(props.review, props.targetName));
 const options = computed(() => decisionOptions(props.group, flagged.value));
 /** #61: the approver's notes for review HOLDs the author's acks don't cover. */
 const acks = ref<HoldAcks>({});
-const holds = computed(() => reviewHolds(props.review, props.group.events));
+/** #795: the request's HOLD acknowledgements, read on their own (never a page of the log). */
+const missionId = computed(() => scope.value.mission.id);
+const holdEvents = useHoldEvents(missionId, toRef(props, "group"));
+const acked = computed(() =>
+  holdEvents.state.value.status === "ready" ? holdEvents.state.value.value : null,
+);
+const holds = computed(() => reviewHolds(props.review, acked.value ?? []));
 const goKind = computed(() => choice.value === "go" || choice.value === "go_excluding");
 /** U92: a GO refused because the group changed; GO stays off with it, NO-GO stays open. */
 const membersChanged = ref<string | null>(null);
@@ -57,8 +64,12 @@ const blocked = computed(() => {
         ? noGoAfter(props.review, new Set(flagged.value.map((f) => f.spacecraftId)))
         : null;
   if (noGo) return noGo;
+  if (goKind.value && acked.value === null)
+    return holdEvents.state.value.status === "failed"
+      ? `Couldn't read the request's HOLD acknowledgements: ${describeApiError(holdEvents.state.value.error)}. Reload to try again.`
+      : "Reading the request's HOLD acknowledgements…";
   return goKind.value
-    ? goHoldReason(props.review, props.group.events, acks.value, props.targetName)
+    ? goHoldReason(props.review, acked.value ?? [], acks.value, props.targetName)
     : null;
 });
 /** ux §7 #15: a decided request shows its record and the log, not disabled options. */
@@ -75,7 +86,7 @@ async function commit({ value, note }: { value: DecisionKind; note: string }) {
       expectedReview: props.group.review_token,
       acknowledgedHolds:
         value === "go" || value === "go_excluding"
-          ? goAcksToSend(props.review, props.group.events, acks.value)
+          ? goAcksToSend(props.review, acked.value ?? [], acks.value)
           : [],
     });
     if (result.status === "done") {
@@ -118,7 +129,7 @@ const onCommit = (d: { value: DecisionKind; note: string }) =>
   <ApPanel v-if="record" index="D" title="Decision" pane flush>
     <div class="flex flex-col gap-3 p-3">
       <ApCallout :tone="record.tone">{{ record.text }}</ApCallout>
-      <div><RequestLogList :group="group" :name-of="nameOf" /></div>
+      <div><RequestLogList :group="group" :name-of="nameOf" :mission-id="missionId" /></div>
     </div>
   </ApPanel>
   <ApPanel v-else index="D" title="Your call" pane flush>
@@ -146,7 +157,7 @@ const onCommit = (d: { value: DecisionKind; note: string }) =>
       @commit="onCommit"
     >
       <template #log>
-        <RequestLogList :group="group" :name-of="nameOf" />
+        <RequestLogList :group="group" :name-of="nameOf" :mission-id="missionId" />
       </template>
     </ApDecision>
   </ApPanel>
