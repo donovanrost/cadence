@@ -23,6 +23,7 @@ Conventions: [README.md](README.md). Requested shapes: `docs/apogee/plans/setup-
 | G1, T1, T2 | `GET /missions/:mission_id/ground-stations`, `/transports`, `/routing-rules` | **implemented** |
 | kind schema | `GET /missions/:mission_id/config/kinds/:kind/schema` | **implemented** |
 | catalog APIDs | `GET /missions/:mission_id/catalog/revisions/:revision_id/apids` | **implemented** (L17) |
+| catalog systems | `GET /missions/:mission_id/catalog/revisions/:revision_id/systems` | **implemented** (P5, #1078) |
 | revision spacecraft | `GET /missions/:mission_id/catalog/revisions/:revision_id/spacecraft` | **implemented** (#678, `Cadence.Reads.CatalogRevisionSpacecraft`) |
 | change-set lanes | `GET /missions/:mission_id/config?lane=configuration\|monitoring` | **implemented** (#451 slice L; see below) |
 
@@ -444,6 +445,11 @@ switches. The editable `document` never carries them; they're read-only in `swit
   ocf_length, truncated_primary_header} | null}`. No switch keys.
 - `composition` (D2, #543), beside `document`: the composition behind the document's
   `catalog_revision_id` (shape in setup.md's 'Compositions' section), or null.
+- `systems` (ADR-020 P5, #1078 B1), beside `document`: the SpaceSystems the saved `handled_apids`
+  amount to in the document catalog's model, `[{system_id, path, name, bound: "all"|"some",
+  apids: [int]}]` by path (`bound: "all"` when every container of the system is selected); `[]`
+  when no APID is selected (a document whose `handled_apids` is absent reads as every APID: every system that has a container, `bound: "all"`); null when the document has no catalog or it has no compiled model. It is read from the catalog's telemetry plan alone (one row).
+  Read-only: until B2 the input is still `handled_apids`.
 - `external_changes`: bool.
 - `switches`: `{telemetry_enabled: SWITCH, commanding_enabled: SWITCH}`, where SWITCH is `{value:
   bool, set: bool, revision: int|null}`. `set` false means no change set has set it (the value
@@ -453,6 +459,7 @@ switches. The editable `document` never carries them; they're read-only in `swit
   for the craft.
   - `active.composition` (D2, #543): the composition behind the active document's catalog
     revision (shape in setup.md's 'Compositions' section), or null.
+  - `active.systems` (P5): as `systems`, for the active document.
 - `review`: `{id, state: approval_pending|approved|rejected|withdrawn|superseded|stale|active,
   requester_id, version|null}` or null. From the dev reset (DECISIONS #112) it also carries the
   decision record's `subject`, `separated_from`, `admin_mode` and `applied_by`. Read them as
@@ -833,6 +840,26 @@ The APIDs the revision defines, with their packets: the choices for `handled_api
   exactly what decode can handle.
 - `available: false` (with `apids: []`) when the revision has no telemetry plan yet. Say "not
   compiled yet", not "no APIDs".
+- Errors: `404 catalog_revision_not_found`.
+
+## `GET /api/v1/missions/:mission_id/catalog/revisions/:revision_id/systems` (ADR-020 P5, #1078)
+
+The SpaceSystems of the revision's mission model and what each holds: the choices a spacecraft's
+binding offers (B2 switches the input from `handled_apids` to these).
+
+```json
+{"data": {"revision_id": "catalog_revision_…", "available": true,
+  "systems": [{"system_id": "semantic:space_system:…", "path": "/bus", "name": "bus",
+    "parent_id": "semantic:space_system:…" | null,
+    "packets": [{"packet_definition_id": "…", "name": "HK", "runtime_name": "/bus/HK", "apid": 10}],
+    "commands": [{"command_id": "…", "name": "SET_MODE", "runtime_name": "/bus/SET_MODE"}],
+    "algorithms": 0, "policies": 1}]}}
+```
+
+- By path; `parent_id` is null only for the root `/`. A system with nothing in it is listed.
+- A system binds its descendants (B2). `runtime_name` is the system's path joined with the
+  definition's name; the id a point or command takes is that without its leading `/` (B3).
+- `available: false` (with `systems: []`) when the revision has no compiled model yet.
 - Errors: `404 catalog_revision_not_found`.
 
 ## Source files (§11 L18: K1-K3)
