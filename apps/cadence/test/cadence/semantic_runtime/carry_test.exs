@@ -134,6 +134,66 @@ defmodule Cadence.SemanticRuntime.CarryTest do
     end
   end
 
+  describe "per-craft overrides (#451)" do
+    # p1 has a mission entry and an override for craft-a that shares its policy id.
+    defp with_override(opts \\ []) do
+      override =
+        policy("p1",
+          scope: :spacecraft,
+          spacecraft_id: "craft-a",
+          rule_id: "policy:p1",
+          minimum_violations: Keyword.get(opts, :violations, 2)
+        )
+
+      %{plan() | monitoring: [policy("p1"), override, policy("p2")]}
+    end
+
+    test "the mission entry keeps its plain key and the override's key carries the craft" do
+      monitoring = Carry.fingerprints(%{}, with_override()).monitoring
+
+      assert Map.has_key?(monitoring, "p1")
+      assert Map.has_key?(monitoring, {"p1", "craft-a"})
+      assert monitoring["p1"] != monitoring[{"p1", "craft-a"}]
+    end
+
+    test "adding an override starts fresh only the craft it is for" do
+      runtime_plans = telemetry([field("temp", "float", "K")])
+      state = evolved(Carry.fingerprints(runtime_plans, plan()))
+
+      assert {carried, %{dropped: 1}} =
+               Carry.carry(state, Carry.fingerprints(runtime_plans, with_override()))
+
+      refute Map.has_key?(carried.monitoring_state, {@scope, "p1"})
+      assert Map.has_key?(carried.monitoring_state, {@other_scope, "p1"})
+      assert Map.has_key?(carried.monitoring_state, {@scope, "p2"})
+    end
+
+    test "editing the override changes that craft's state only, and an unchanged plan keeps all" do
+      runtime_plans = telemetry([field("temp", "float", "K")])
+      state = evolved(Carry.fingerprints(runtime_plans, with_override()))
+
+      assert {^state, %{dropped: 0}} =
+               Carry.carry(state, Carry.fingerprints(runtime_plans, with_override()))
+
+      edited = Carry.fingerprints(runtime_plans, with_override(violations: 5))
+      assert {carried, %{dropped: 1}} = Carry.carry(state, edited)
+
+      refute Map.has_key?(carried.monitoring_state, {@scope, "p1"})
+      assert Map.has_key?(carried.monitoring_state, {@other_scope, "p1"})
+    end
+
+    test "removing the override brings the craft back to the mission entry, fresh" do
+      runtime_plans = telemetry([field("temp", "float", "K")])
+      state = evolved(Carry.fingerprints(runtime_plans, with_override()))
+
+      assert {carried, %{dropped: 1}} =
+               Carry.carry(state, Carry.fingerprints(runtime_plans, plan()))
+
+      refute Map.has_key?(carried.monitoring_state, {@scope, "p1"})
+      assert Map.has_key?(carried.monitoring_state, {@other_scope, "p1"})
+    end
+  end
+
   describe "across two compiled revisions" do
     test "the untouched policy's streak carries and the edited policy's resets" do
       first = compile(threshold: 5)
