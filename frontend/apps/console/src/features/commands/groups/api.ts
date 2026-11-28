@@ -75,7 +75,7 @@ const nextContact = d.object({
 export type NextContact = Decoded<typeof nextContact>;
 
 /** A route named by an identity NO-GO (DECISIONS #41), so the screen can link to its routing. */
-/** commanding.md §GET /command-endpoints: why a target has no uplink endpoint. */
+/** commanding.md §POST /command-endpoints: why a target has no uplink endpoint. */
 export const endpointFailures = ["no_uplink_route", "multiple_primary_uplink_routes"] as const;
 export type EndpointFailure = (typeof endpointFailures)[number];
 const endpointFailure = d.nullable(d.knownText(endpointFailures));
