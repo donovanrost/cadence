@@ -1,5 +1,7 @@
 import Config
 
+config :cadence_web, :request_cost, :dev
+
 # CADENCE_LIVE_VUE_VITE_PORT (default 5173) must match the port vite.config.mjs
 # binds, so each worktree's LiveView pages load their own Vite dev server.
 config :live_vue,
