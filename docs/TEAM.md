@@ -8,7 +8,7 @@ the shared worktree, "Refs not Closes") are **repealed**. Git history has them i
 
 Cadence: a multi-tenant platform for constellation-scale spacecraft operations. **500 spacecraft is the floor**,
 and nothing should have a hard ceiling. The **console** (`frontend/apps/console`, Vue 3 + `packages/apogee-ui`)
-is the UI. Everything else UI-side is legacy and is being deleted.
+is the only UI; the LiveView pages and the federated apps were deleted on 2026-11-28 (#209, DECISIONS #116).
 
 ## Ground rules
 
@@ -31,7 +31,7 @@ Heads are working engineers and may hire and fire within their headcount (below)
 | Head | Handle | Machine | Owns |
 | --- | --- | --- | --- |
 | Platform | `platform` | laptop 1 | CI (develop stays green), dev environment (per-worktree stack, seeds), build/test tooling, the scale harness (simulator at 500-1,000 spacecraft, benchmarks), `platform/`, `persistence/`, `jobs/`, `observability`, cluster runtime, migrations hygiene |
-| Console | `console` | laptop 1 | `frontend/` (console shell, router, API client, `apogee-ui`, design system, words, a11y); **deleting the federated apps and host**; console-wide quality and performance. Domain heads build their own screens; console sets the patterns and reviews them |
+| Console | `console` | laptop 1 | `frontend/` (console shell, router, API client, `apogee-ui`, design system, words, a11y); console-wide quality and performance. Domain heads build their own screens; console sets the patterns and reviews them |
 | Commanding & Approvals | `commanding` | laptop 2 | commanding, approvals/four-eyes, identity, accounts, organizations, secrets, authz. **Security reviewer** for every PR touching permissions, approvals, secrets or tenant boundaries |
 | Mission Model & Spacecraft | `mission-model` | laptop 2 | mission models, catalog/XTCE, spacecraft, spacecraft profiles, configuration, activations, applications, the change-set framework |
 | Telemetry & Data | `telemetry` | laptop 2 | ingest, decom, projections, QuestDB storage and retention, replay, derived telemetry, calibration, limits and alarms, dashboards backend |
@@ -126,17 +126,21 @@ Laptop 1 worktrees live in `~/.herdr/worktrees/cadence/<handle>`. The new agent 
   above your area, a hire or fire. Not routine progress; that goes on the board.
 - If a session dies or the machine reboots, each agent's worktree and branch are the recovery point.
 
-## Priorities (2026-11-25)
+## Priorities (2026-11-28)
 
-1. **Develop green** (Platform, today).
-2. **Retire legacy UI** (epic #209): every LiveView operations page and every federated app (`frontend/apps/host`,
-   `comms-overview`, `organization-admin`, `telemetry-decom`, `ops-console`, `surface-fixture`, `contract-probe`,
-   `packages/ui`, `plugin-sdk`, `legacy/`) is deleted once the console covers what it did. Domain Heads retire
-   their pages; Console retires the host, shells and shared packages.
-3. **Scale baseline**: Platform builds a 500 and 1,000 spacecraft simulator load; Telemetry and the other Heads
-   measure their paths against it (epic #217, M8).
-4. **Domain epics**, each Head in their own order.
-5. **Stale PR triage**: each Head merges or closes the open PRs in their area within their first day.
+1. **Mission-model overhaul** (ADR-020, DECISIONS #92): the user's top priority, led by Mission Model.
+2. **Domain epics**, each Head in their own order. An assigned egregious request-cost fix (#1049: a query
+   count that grows with fleet size, more than about 50 queries or about 1 s on the 500 seed, or a screen that
+   reads per spacecraft) goes ahead of new feature work; nothing else does.
+3. **Develop stays green** (standing): a red develop is fixed forward or reverted the same day, and Platform
+   routes it to the owning Head.
+
+Done: **Retire legacy UI** (epic #209), 2026-11-28, ahead of 12-02. Every LiveView page, the federated apps
+and their host, the application-host and frontend-release APIs and the surface and action framework are deleted,
+not ported (#1174, #668, #672, DECISIONS #116). The console is the only UI.
+
+Deferred by the user (2026-11-28): fleet-level load baselines (#717 scorecards, #686, #177). The hosted
+scorecard workflow (#1018) exists but is not dispatched until this is picked up again.
 
 ## Roster
 
