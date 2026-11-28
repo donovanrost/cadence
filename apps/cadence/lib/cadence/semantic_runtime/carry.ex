@@ -128,7 +128,15 @@ defmodule Cadence.SemanticRuntime.Carry do
   defp value(map, key) when is_map(map),
     do: Map.get(map, key)
 
-  defp digest(%MonitoringPlan{} = plan), do: ContentHash.term_sha256({:monitoring_plan, plan})
-  defp digest(%AlgorithmPlan{} = plan), do: ContentHash.term_sha256({:algorithm_plan, plan})
+  # Where a definition lives (its system, its qualified name) is not what it evaluates: moving it
+  # between systems keeps its state.
+  defp digest(%MonitoringPlan{} = plan),
+    do: ContentHash.term_sha256({:monitoring_plan, placed(plan)})
+
+  defp digest(%AlgorithmPlan{} = plan),
+    do: ContentHash.term_sha256({:algorithm_plan, placed(plan)})
+
   defp digest(term), do: ContentHash.term_sha256(term)
+
+  defp placed(plan), do: %{plan | space_system_id: nil, runtime_name: nil}
 end

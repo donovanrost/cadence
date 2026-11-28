@@ -14,6 +14,9 @@ defmodule Cadence.Catalog.MissionModel.MonitoringLowering do
       persistence counters and says `rule_changed` when it changes.
     * `origin`: `"catalog"` (an imported layer wrote it last) or `"mission_layer"` (an authored
       layer did), and `declaration_id`, the declaration that produced the entry.
+    * `space_system_id`, `space_system_path` and `runtime_name`: the `SpaceSystem` that owns the
+      policy and its qualified runtime name (ADR-020 P5). Where a policy lives is not what it
+      evaluates, so the digest ignores them.
     * `scope` and `spacecraft_id`: `"mission"` with `nil` applies to every craft on the revision;
       `"spacecraft"` with an id applies to that craft only. A policy scoped to several craft (its
       definition's `spacecraft_ids`) becomes one entry per craft.
@@ -29,7 +32,7 @@ defmodule Cadence.Catalog.MissionModel.MonitoringLowering do
   reads per craft (the per-request rule, #1049).
   """
 
-  alias Cadence.Catalog.MissionModel.{Canonical, Declaration, Diagnostic}
+  alias Cadence.Catalog.MissionModel.{Canonical, Declaration, Diagnostic, SystemOwner}
 
   @digest_version 1
 
@@ -38,13 +41,15 @@ defmodule Cadence.Catalog.MissionModel.MonitoringLowering do
   diagnostics their overrides raise. `origins` maps a declaration's semantic id to the kind of the
   layer that wrote it last (`:imported | :authored`).
   """
-  @spec lower([Declaration.t()], %{optional(binary()) => atom()}) :: {[map()], [Diagnostic.t()]}
-  def lower(declarations, origins) when is_list(declarations) and is_map(origins) do
+  @spec lower([Declaration.t()], %{optional(binary()) => atom()}, SystemOwner.index()) ::
+          {[map()], [Diagnostic.t()]}
+  def lower(declarations, origins, systems)
+      when is_list(declarations) and is_map(origins) and is_map(systems) do
     by_id = Map.new(declarations, &{&1.semantic_id, &1})
 
     {entries, diagnostics} =
       Enum.reduce(declarations, {[], []}, fn declaration, {entries, diagnostics} ->
-        case entries(declaration, by_id, origins) do
+        case entries(declaration, by_id, origins, systems) do
           {:ok, new} -> {entries ++ new, diagnostics}
           {:error, diagnostic} -> {entries, [diagnostic | diagnostics]}
         end
@@ -57,13 +62,17 @@ defmodule Cadence.Catalog.MissionModel.MonitoringLowering do
   @spec rule_digest(map()) :: binary()
   def rule_digest(entry) when is_map(entry) do
     evaluated =
-      Map.drop(entry, ~w(rule_id rule_digest origin declaration_id scope spacecraft_id policy_id))
+      Map.drop(
+        entry,
+        ~w(rule_id rule_digest origin declaration_id scope spacecraft_id policy_id
+           space_system_id space_system_path runtime_name)
+      )
 
     "monitoring_rule:v#{@digest_version}:" <> Canonical.sha256({@digest_version, evaluated})
   end
 
-  defp entries(declaration, by_id, origins) do
-    base = base(declaration, origins)
+  defp entries(declaration, by_id, origins, systems) do
+    base = base(declaration, origins, systems)
     spacecraft_ids = spacecraft_ids(declaration)
 
     case overridden(declaration) do
@@ -102,10 +111,11 @@ defmodule Cadence.Catalog.MissionModel.MonitoringLowering do
          )}
   end
 
-  defp base(declaration, origins) do
+  defp base(declaration, origins, systems) do
     declaration.definition
     |> stringify_keys()
     |> Map.drop(["spacecraft_ids"])
+    |> Map.merge(SystemOwner.fields(declaration, systems))
     |> Map.put("policy_id", declaration.semantic_id)
     |> Map.put("parameter_id", parameter_id(declaration))
     |> Map.put("declaration_id", declaration.semantic_id)
