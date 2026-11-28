@@ -104,7 +104,7 @@ overrides are change-set kinds). `L` = `apps/cadence/lib/cadence`.
 | Spacecraft Profile (`mission_spacecraft_types`) | append-only `(type_id, version)`, latest wins; **no v+1 path in prod** | none | pinned on spacecraft during admission only (`L/activations/spacecraft_configuration.ex:98-150`) |
 | Transport (`comms_transports`) | append-only, latest wins, `version_transport` unlocked | none | read at contact scheduling (`L/contacts/provider_scheduling.ex:88`) |
 | Spacecraft (`mission_spacecraft`) | mutable row, pins `{type_id, version}` | none | identity + activation snapshot |
-| Spacecraft configuration (`spacecraft_configuration_revisions`) | per-spacecraft drafts; review builds a binding set + activation request with a **full fleet snapshot** (500 SC / 4 MiB cap, `L/catalog/spacecraft_model_bindings.ex:5-6`) | `created_by`; decisions have actor + reason | **the only governed path**: activation → generation → `MissionRuntimeReconciler.apply_generation` |
+| Spacecraft configuration (artifact, assignment history, head) | Per-spacecraft drafts point to immutable shared artifacts. Review resolves the assignments and builds a binding set and activation request with a fleet snapshot. | Assignment `created_by`; decisions have actor + reason | **the only governed path**: activation → generation → `MissionRuntimeReconciler.apply_generation` |
 | Routing rule (`comms_routing_rules`) | mutable, no PK; per-rule event log (actor never passed) | partial | read at scheduling; snapshotted into contacts |
 | Catalog revision (`catalog_revisions`) | immutable imports | `created_by` | via spacecraft configuration `catalog_revision_id` |
 | Ground station (`comms_ground_stations`) | mutable | none | not linked to routing at all |

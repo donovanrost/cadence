@@ -3,7 +3,14 @@ defmodule Cadence.Configuration.CatalogGenerationTest do
   use Cadence.RuntimeCase, async: false
 
   alias Cadence.Applications.{ApplicationInstallations, HostContext, PacketBindings}
-  alias Cadence.Applications.SpacecraftConfiguration.{CatalogAuthority, Drafts, Review}
+
+  alias Cadence.Applications.SpacecraftConfiguration.{
+    Assignments,
+    CatalogAuthority,
+    Drafts,
+    Review
+  }
+
   alias Cadence.Applications.TelemetryDecom
   alias Cadence.Applications.TelemetryDecomFixtures, as: Fixtures
   alias Cadence.Catalog.{CompositionPins, FleetSnapshot, SpacecraftConfigurationInput}
@@ -90,6 +97,10 @@ defmodule Cadence.Configuration.CatalogGenerationTest do
 
     latest = Drafts.latest(c.org, c.mission.mission_id, c.craft.spacecraft_id)
     assert latest.catalog_revision_id == c.rev2
+    assert latest.composition_id == pin!(c, c.rev2)
+    assert latest.effective_revision_id == entry["mission_model"]["revision_id"]
+    assert latest.change_set_id == staged.change_set_id
+    assert latest.change_set_revision == revision
     assert latest.configuration_revision_id == entry["configuration_revision_id"]
     assert CatalogAuthority.mismatches(c.org, c.mission.mission_id) == []
     assert_projected(c, c.rev2)
@@ -105,6 +116,75 @@ defmodule Cadence.Configuration.CatalogGenerationTest do
 
     assert rev1 == c.rev1
     assert_projected(c, c.rev1)
+  end
+
+  test "a custom endpoint is pinned on a draft without changing the running assignment", c do
+    endpoint =
+      Fixtures.persist_source_endpoint!(c.org, c.mission.mission_id, c.craft.spacecraft_id,
+        display_name: "Alternate"
+      )
+
+    active = Drafts.latest(c.org, c.mission.mission_id, c.craft.spacecraft_id)
+    current = Drafts.snapshot(c.mission, c.craft)
+
+    document =
+      Map.put(current.document, "telemetry_source_endpoint_id", endpoint.source_endpoint_id)
+
+    assert {:ok, assignment} =
+             Drafts.save(
+               c.scope,
+               c.mission.mission_id,
+               c.craft.spacecraft_id,
+               current.token,
+               document
+             )
+
+    assert assignment.artifact_sha256 == active.artifact_sha256
+    assert assignment.version == active.version + 1
+
+    assert {:ok, %{document: ^document}} =
+             Drafts.fetch(c.org, c.mission.mission_id, assignment.configuration_revision_id)
+
+    assert {:ok, running} =
+             Cadence.Activations.fetch_active_activation(c.org, c.mission.mission_id)
+
+    assert {:ok, entry} = FleetSnapshot.entry(running.metadata, c.craft.spacecraft_id)
+    assert entry["configuration_revision_id"] == active.configuration_revision_id
+    assert entry["document"]["telemetry_source_endpoint_id"] == c.endpoint.source_endpoint_id
+
+    assert {:error, :spacecraft_configuration_not_found} =
+             Drafts.fetch(
+               "another-org",
+               c.mission.mission_id,
+               assignment.configuration_revision_id
+             )
+
+    assert {:error, %Postgrex.Error{postgres: %{code: :check_violation}}} =
+             Repo.query(
+               "UPDATE spacecraft_configuration_assignments SET created_by = $1 WHERE configuration_revision_id = $2",
+               ["another-actor", assignment.configuration_revision_id],
+               mode: :savepoint
+             )
+  end
+
+  test "a new draft round-trips an explicit nil source without taking a spacecraft endpoint", c do
+    craft =
+      Fixtures.persist_spacecraft!(c.org, c.mission.mission_id, display_name: "Unconfigured")
+
+    current = Drafts.snapshot(c.mission, craft)
+    document = SpacecraftConfigurationInput.empty()
+
+    assert {:ok, %{version: 1} = assignment} =
+             Drafts.save(
+               c.scope,
+               c.mission.mission_id,
+               craft.spacecraft_id,
+               current.token,
+               document
+             )
+
+    assert {:ok, %{document: ^document, source_endpoint_id: nil}} =
+             Drafts.fetch(c.org, c.mission.mission_id, assignment.configuration_revision_id)
   end
 
   # 11-15 (001 on dev): a change-set move left the stored decom config on the old catalog. The
@@ -353,16 +433,8 @@ defmodule Cadence.Configuration.CatalogGenerationTest do
 
   test "a profile catalog has one writer: the spacecraft's own configuration can't diverge, and divergence is listed",
        c do
-    # The pin moves the craft onto rev2; then its configuration diverges, as data from before
-    # #65 can.
-    profile!(c, c.rev2)
-    latest = Drafts.latest(c.org, c.mission.mission_id, c.craft.spacecraft_id)
-
-    Repo.query!(
-      "UPDATE spacecraft_configuration_revisions SET catalog_revision_id = $1 " <>
-        "WHERE configuration_revision_id = $2",
-      [c.rev1, latest.configuration_revision_id]
-    )
+    # Simulate a profile pin ahead of the running configuration, without deriving a new head.
+    pin_without_generation!(c)
 
     assert [
              %{
@@ -390,14 +462,8 @@ defmodule Cadence.Configuration.CatalogGenerationTest do
   # qa #43: a fleet with more configured spacecraft than SpacecraftStore reads in one batch
   # crashed the mismatch read, and with it the console's Readiness.
   test "mismatches read a fleet larger than one spacecraft batch", c do
-    profile!(c, c.rev2)
+    pin_without_generation!(c)
     latest = Drafts.latest(c.org, c.mission.mission_id, c.craft.spacecraft_id)
-
-    Repo.query!(
-      "UPDATE spacecraft_configuration_revisions SET catalog_revision_id = $1 " <>
-        "WHERE configuration_revision_id = $2",
-      [c.rev1, latest.configuration_revision_id]
-    )
 
     clones = Cadence.SpacecraftStore.max_batch_size()
 
@@ -411,17 +477,21 @@ defmodule Cadence.Configuration.CatalogGenerationTest do
       [c.craft.spacecraft_id, clones]
     )
 
-    Repo.query!(
-      "INSERT INTO spacecraft_configuration_revisions (configuration_revision_id, " <>
-        "organization_id, mission_id, spacecraft_id, version, catalog_revision_id, document, " <>
-        "content_sha256, application_basis, created_by, inserted_at) " <>
-        "SELECT configuration_revision_id || '-clone-' || n, organization_id, mission_id, " <>
-        "spacecraft_id || '-clone-' || n, version, catalog_revision_id, document, " <>
-        "content_sha256, application_basis, created_by, inserted_at " <>
-        "FROM spacecraft_configuration_revisions, generate_series(1, $2) AS n " <>
-        "WHERE configuration_revision_id = $1",
-      [latest.configuration_revision_id, clones]
-    )
+    1..clones
+    |> Enum.map(fn n ->
+      row =
+        Assignments.new(
+          c.mission,
+          "#{c.craft.spacecraft_id}-clone-#{n}",
+          1,
+          latest.document,
+          latest.created_by,
+          Map.take(latest, [:composition_id, :effective_revision_id])
+        )
+
+      %{row | application_basis: latest.application_basis}
+    end)
+    |> Assignments.append()
 
     mismatches = CatalogAuthority.mismatches(c.org, c.mission.mission_id)
 
@@ -496,6 +566,26 @@ defmodule Cadence.Configuration.CatalogGenerationTest do
       Process.sleep(50)
       assert_eventually(fun, attempts - 1)
     end
+  end
+
+  defp pin_without_generation!(c) do
+    profile = profile!(c, c.rev2)
+
+    # Put the craft back on the earlier artifact without changing what the profile pins.
+    [latest, earlier | _] = Drafts.history(c.org, c.mission.mission_id, c.craft.spacecraft_id)
+
+    row =
+      Assignments.new(
+        c.mission,
+        c.craft.spacecraft_id,
+        latest.version + 1,
+        earlier.document,
+        earlier.created_by,
+        Map.take(earlier, [:composition_id, :effective_revision_id])
+      )
+
+    Assignments.append([%{row | application_basis: earlier.application_basis}])
+    profile
   end
 
   # A profile with `catalog`, the craft pinned to it.

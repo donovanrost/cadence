@@ -8,19 +8,17 @@ defmodule Cadence.Control.ActivationAuthorSeparationTest do
   """
   use Cadence.RuntimeCase, async: false
 
-  import Ecto.Query
-
   alias Cadence.Applications.SpacecraftConfiguration.{
     Active,
+    Assignments,
     Authors,
     Drafts,
-    Review,
-    RevisionRow
+    Review
   }
 
   alias Cadence.Applications.TelemetryDecomFixtures, as: Fixtures
   alias Cadence.Auth
-  alias Cadence.Auth.{ServiceAccountableRow, ServiceIdentity}
+  alias Cadence.Auth.ServiceIdentity
   alias Cadence.Catalog.ConfigurationReviews
   alias Cadence.Catalog.SpacecraftConfigurationInput
   alias Cadence.Control.Activations, as: ControlActivations
@@ -158,25 +156,16 @@ defmodule Cadence.Control.ActivationAuthorSeparationTest do
       )
     )
 
-    revision = fn id, version, by ->
-      %{
-        configuration_revision_id: "#{id}-v#{version}",
-        organization_id: c.org,
-        mission_id: mid,
-        spacecraft_id: id,
-        version: version,
-        document: %{},
-        content_sha256: "x",
-        application_basis: "x",
-        created_by: by,
-        inserted_at: now
-      }
-    end
+    for {version, by} <- [{1, "fleet-a"}, {2, "fleet-b"}] do
+      ids
+      |> Enum.map(fn id ->
+        row =
+          Assignments.new(c.mission, id, version, SpacecraftConfigurationInput.empty(), by, %{})
 
-    Repo.insert_all(
-      RevisionRow,
-      Enum.flat_map(ids, &[revision.(&1, 1, "fleet-a"), revision.(&1, 2, "fleet-b")])
-    )
+        %{row | configuration_revision_id: "#{id}-v#{version}", application_basis: "x"}
+      end)
+      |> Assignments.append()
+    end
 
     # Even craft are reviewed at version 2 (both saved), odd ones at version 1 (only A had).
     reviewed =
@@ -209,20 +198,18 @@ defmodule Cadence.Control.ActivationAuthorSeparationTest do
   end
 
   describe "#280: a version saved under a service identity's id (a change set's applier)" do
-    # Drafts.derive writes the change set applier's id as `created_by`, and that can be a service
-    # identity's (api-ops' cross-PR item on #435). Here B's saved version is re-stamped as if a
-    # service had applied it: the stand-in for derive's write, on the test database only.
+    # A generation assignment can name a service identity as its actor (#435).
+    # Append an assignment with that actor and the input basis of the existing draft.
     setup c do
       save(c, c.b, c.craft, [42])
 
       %{
-        service: issue_service!(c, "Config applier", c.a),
-        revision_id: latest_revision_id(c)
+        service: issue_service!(c, "Config applier", c.a)
       }
     end
 
     test "the service's accountable person (its issuer) can't approve; someone else can", c do
-      restamp!(c.revision_id, c.service.service_identity_id)
+      assign_as!(c, c.service.service_identity_id)
       {:ok, request} = submit(c, c.b, [c.craft])
       id = c.craft.spacecraft_id
 
@@ -235,7 +222,7 @@ defmodule Cadence.Control.ActivationAuthorSeparationTest do
 
       Cadence.ServiceIdentityFixtures.forget_accountables!(legacy)
 
-      restamp!(c.revision_id, legacy)
+      assign_as!(c, legacy)
       {:ok, request} = submit(c, c.b, [c.craft])
 
       for approver <- [c.a, c.c] do
@@ -315,22 +302,21 @@ defmodule Cadence.Control.ActivationAuthorSeparationTest do
     service
   end
 
-  defp latest_revision_id(c) do
-    craft = c.craft.spacecraft_id
+  defp assign_as!(c, actor) do
+    current = Drafts.latest(c.org, c.mission.mission_id, c.craft.spacecraft_id)
+    evidence = Map.take(current, [:composition_id, :effective_revision_id])
 
-    from(row in RevisionRow,
-      where: row.spacecraft_id == ^craft,
-      order_by: [desc: row.version],
-      limit: 1,
-      select: row.configuration_revision_id
-    )
-    |> Repo.one!()
-  end
+    row =
+      Assignments.new(
+        c.mission,
+        c.craft.spacecraft_id,
+        current.version + 1,
+        current.document,
+        actor,
+        evidence
+      )
 
-  defp restamp!(revision_id, by) do
-    {1, _} =
-      from(row in RevisionRow, where: row.configuration_revision_id == ^revision_id)
-      |> Repo.update_all(set: [created_by: by])
+    Assignments.append([%{row | application_basis: current.application_basis}])
   end
 
   defp count_queries(fun) do

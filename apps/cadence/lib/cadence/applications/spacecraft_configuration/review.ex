@@ -131,7 +131,13 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Review do
            :ok <- ready(current.row.document),
            :ok <- CatalogAuthority.check(mission, spacecraft, current.row.catalog_revision_id),
            :ok <- CatalogAuthority.switches_check(spacecraft, current.row.document),
-           {:ok, inputs, cache} <- cached_inputs(cache, mission, current.row.catalog_revision_id),
+           {:ok, inputs, cache} <-
+             cached_inputs(
+               cache,
+               mission,
+               current.row.catalog_revision_id,
+               current.row.effective_revision_id
+             ),
            {:ok, item} <- compile(mission, id, current.row, inputs) do
         review = %{
           id: id,
@@ -152,25 +158,19 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Review do
   end
 
   @doc """
-  One spacecraft's activation contribution from a configuration revision row: its telemetry
-  capability instances and rules, and its fleet entry (catalog, mission model, sources).
-  Shared by the per-spacecraft review and change-set catalog generations (DECISIONS #65).
-  """
-  @spec compile(map(), binary(), struct()) :: {:ok, map()} | {:error, term()}
-  def compile(mission, spacecraft_id, row) do
-    with {:ok, inputs} <- catalog_inputs(mission, row.catalog_revision_id) do
-      compile(mission, spacecraft_id, row, inputs)
-    end
-  end
-
-  @doc """
-  `compile/3` with the catalog's inputs already loaded (`catalog_inputs/2`). A fleet-wide compile
-  loads them once per distinct catalog and passes them to every spacecraft on it: step 4 (11-15)
-  re-read and re-decoded them for each of 499 spacecraft.
+  Computes one assignment's activation contribution from preloaded inputs shared by
+  spacecraft on the same catalog and model revision.
   """
   @spec compile(map(), binary(), struct(), map()) :: {:ok, map()} | {:error, term()}
   def compile(mission, spacecraft_id, row, %{model: model, telemetry: telemetry}) do
-    with {:ok, sources} <- ConfigurationActive.source_ids(mission, spacecraft_id),
+    with {:ok, sources} <- ConfigurationActive.source_ids(mission, spacecraft_id) do
+      compile(mission, spacecraft_id, row, %{model: model, telemetry: telemetry}, sources)
+    end
+  end
+
+  @doc false
+  def compile(mission, spacecraft_id, row, %{model: model, telemetry: telemetry}, sources) do
+    with true <- length(sources) <= 100 || {:error, :spacecraft_source_limit_exceeded},
          true <- sources != [] || {:error, :spacecraft_configuration_review_unavailable},
          {:ok, contribution} <- contribution(mission, spacecraft_id, row, telemetry) do
       {:ok,
@@ -267,6 +267,7 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Review do
       "configuration_revision_id" => row.configuration_revision_id,
       "configuration_version" => row.version,
       "catalog_revision_id" => row.catalog_revision_id,
+      "composition_id" => row.composition_id,
       "commanding_enabled" => row.document["commanding_enabled"],
       "document" => row.document,
       "mission_model" => model,
@@ -276,22 +277,11 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Review do
     }
   end
 
-  @doc """
-  What every spacecraft on `catalog_id` compiles against: `%{model: manifest, telemetry:
-  projection}`. Read once (the catalog revision, its mission-model revision and runtime plans) and
-  passed explicitly, never memoized in the process dictionary: OpentelemetryEcto copies the whole
-  dictionary on every query (step 4, 11-15).
-  """
-  @spec catalog_inputs(map(), binary()) :: {:ok, map()} | {:error, term()}
-  def catalog_inputs(mission, catalog_id) do
-    with {:ok, inputs, _acc} <- catalog_inputs(mission, catalog_id, %{}), do: {:ok, inputs}
-  end
-
   # #534: the telemetry's packet definition versions are resolved by content, with `acc` carrying
   # the generation's resolutions across its catalogs (amendment 1).
   # D3 (#544): `revision_id` is the revision the catalog's composition selected; nil keeps the
   # catalog's own (a catalog with no composition, as before).
-  defp catalog_inputs(mission, catalog_id, acc, revision_id \\ nil) do
+  defp catalog_inputs(mission, catalog_id, acc, revision_id) do
     with {:ok, catalog} <-
            Catalog.fetch_revision(mission.organization_id, mission.mission_id, catalog_id),
          :ok <- has_mission_model(catalog),
@@ -335,10 +325,10 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Review do
   """
   @spec cached_inputs(map(), map(), binary(), binary() | nil) ::
           {:ok, map(), map()} | {:error, term()}
-  # Keyed by catalog: within a generation a catalog's composition selects one revision, and
-  # ApplicationInputs.resync_packet_inputs/3 reads the inputs by catalog.
-  def cached_inputs(cache, mission, catalog_id, revision_id \\ nil) do
-    case Map.fetch(cache, catalog_id) do
+  def cached_inputs(cache, mission, catalog_id, revision_id) do
+    key = {catalog_id, revision_id}
+
+    case Map.fetch(cache, key) do
       {:ok, inputs} ->
         {:ok, inputs, cache}
 
@@ -346,7 +336,7 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Review do
         acc = Map.get(cache, @versions, %{})
 
         with {:ok, inputs, acc} <- catalog_inputs(mission, catalog_id, acc, revision_id),
-             do: {:ok, inputs, cache |> Map.put(catalog_id, inputs) |> Map.put(@versions, acc)}
+             do: {:ok, inputs, cache |> Map.put(key, inputs) |> Map.put(@versions, acc)}
     end
   end
 end

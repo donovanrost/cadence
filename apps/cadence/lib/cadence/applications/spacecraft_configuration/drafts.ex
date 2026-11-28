@@ -1,8 +1,6 @@
 defmodule Cadence.Applications.SpacecraftConfiguration.Drafts do
   @moduledoc "Authorized, versioned spacecraft configuration drafts; saving never activates them."
 
-  import Ecto.Query
-
   alias Cadence.Applications.ConfigurationLock
   alias Cadence.Applications.TelemetryDecom
 
@@ -14,14 +12,13 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Drafts do
   alias Cadence.Applications.SpacecraftConfiguration.ApplicationInputs,
     as: ConfigurationApplications
 
+  alias Cadence.Applications.SpacecraftConfiguration.Assignments
   alias Cadence.Applications.SpacecraftConfiguration.CatalogAuthority
-  alias Cadence.Applications.SpacecraftConfiguration.RevisionRow, as: ConfigurationRevisionRow
   alias Cadence.Catalog.SpacecraftConfigurationInput, as: ConfigurationInput
 
   alias Cadence.Catalog
-  alias Cadence.Ids
+  alias Cadence.Catalog.CompositionPins
   alias Cadence.Missions
-  alias Cadence.Repo
   alias Cadence.SourceEndpoints
   alias Cadence.SpacecraftStore
 
@@ -74,200 +71,25 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Drafts do
       else: :ok
   end
 
-  def saved_for_mission?(organization_id, mission_id) do
-    Repo.exists?(
-      from(row in ConfigurationRevisionRow,
-        where: row.organization_id == ^organization_id and row.mission_id == ^mission_id
-      )
-    )
-  end
+  defdelegate saved_for_mission?(organization_id, mission_id), to: Assignments, as: :saved?
+  defdelegate fetch_many(organization_id, mission_id, ids), to: Assignments
+  defdelegate latest_many(organization_id, mission_id, spacecraft_ids), to: Assignments
+  defdelegate latest_references(organization_id, mission_id, spacecraft_ids), to: Assignments
+  defdelegate latest_for_mission(organization_id, mission_id), to: Assignments
+  defdelegate catalog_usage_entries(organization_id, mission_id), to: Assignments
+  defdelegate history(organization_id, mission_id, spacecraft_id), to: Assignments
 
   def latest(organization_id, mission_id, spacecraft_id) do
-    ConfigurationRevisionRow
-    |> where(
-      [row],
-      row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-        row.spacecraft_id == ^spacecraft_id
-    )
-    |> order_by([row], desc: row.version)
-    |> limit(1)
-    |> Repo.one()
-  end
-
-  @doc "`latest/3` for many spacecraft in one query: `%{spacecraft_id => row}` (absent if none)."
-  def latest_many(_organization_id, _mission_id, []), do: %{}
-
-  def latest_many(organization_id, mission_id, spacecraft_ids) when is_list(spacecraft_ids) do
-    from(row in ConfigurationRevisionRow,
-      where:
-        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-          row.spacecraft_id in ^spacecraft_ids,
-      distinct: row.spacecraft_id,
-      order_by: [asc: row.spacecraft_id, desc: row.version]
-    )
-    |> Repo.all()
-    |> Map.new(&{&1.spacecraft_id, &1})
-  end
-
-  @doc "Each spacecraft's latest saved revision id in the mission, in one query (only what `saved_tokens` compares)."
-  @spec latest_for_mission(binary(), binary()) :: [
-          %{spacecraft_id: binary(), configuration_revision_id: binary()}
-        ]
-  def latest_for_mission(organization_id, mission_id) do
-    from(row in ConfigurationRevisionRow,
-      where: row.organization_id == ^organization_id and row.mission_id == ^mission_id,
-      distinct: row.spacecraft_id,
-      order_by: [asc: row.spacecraft_id, desc: row.version],
-      select: %{
-        spacecraft_id: row.spacecraft_id,
-        configuration_revision_id: row.configuration_revision_id
-      }
-    )
-    |> Repo.all()
-  end
-
-  @doc "Catalog references from each spacecraft’s latest saved configuration in this mission."
-  def catalog_usage_entries(organization_id, mission_id) do
-    latest =
-      from(row in ConfigurationRevisionRow,
-        where: row.organization_id == ^organization_id and row.mission_id == ^mission_id,
-        distinct: row.spacecraft_id,
-        order_by: [asc: row.spacecraft_id, desc: row.version],
-        select: %{spacecraft_id: row.spacecraft_id, catalog_revision_id: row.catalog_revision_id}
-      )
-
-    from(row in subquery(latest),
-      where: not is_nil(row.catalog_revision_id),
-      select: row
-    )
-    |> Repo.all()
-  end
-
-  @doc """
-  A new configuration revision that only moves the catalog (DECISIONS #65), written by a
-  change-set apply for the running configuration `running_id`. Refused while the spacecraft has
-  a newer configuration that isn't active yet (`:spacecraft_configuration_pending`): applying
-  would activate it unreviewed, and superseding it would bury it.
-  """
-  @spec derive_catalog(binary(), binary(), binary(), binary(), binary()) ::
-          {:ok, struct()} | {:error, term()}
-  def derive_catalog(organization_id, mission_id, running_id, catalog_revision_id, actor_id),
-    do:
-      derive(
-        organization_id,
-        mission_id,
-        running_id,
-        %{"catalog_revision_id" => catalog_revision_id},
-        actor_id
-      )
-
-  @doc """
-  The running configuration with `changes` (document keys: the catalog, the switches) as the
-  spacecraft's next configuration revision, for a change-set apply (#36/#65, L22). Refused when a
-  newer configuration than the running one exists.
-  """
-  def derive(organization_id, mission_id, running_id, changes, actor_id) when is_map(changes) do
-    with {:ok, running} <- fetch(organization_id, mission_id, running_id),
-         %{configuration_revision_id: ^running_id} = latest <-
-           latest(organization_id, mission_id, running.spacecraft_id) ||
-             {:error, :spacecraft_configuration_not_found} do
-      document = Map.merge(running.document, changes)
-
-      # The stored decom config follows, as a Save's does (ApplicationInputs.persist); its basis
-      # changes with it, so the caller re-stamps the new revisions (restamp_bases/2).
-      with :ok <-
-             TelemetryDecom.project_configuration(
-               organization_id,
-               mission_id,
-               running.spacecraft_id,
-               document
-             ) do
-        insert_derived(organization_id, mission_id, running, latest, document, actor_id)
-      end
-    else
-      {:error, reason} -> {:error, reason}
-      _newer -> {:error, :spacecraft_configuration_pending}
-    end
-  end
-
-  defp insert_derived(organization_id, mission_id, running, latest, document, actor_id) do
-    catalog_revision_id = document["catalog_revision_id"]
-
-    Repo.insert(
-      ConfigurationRevisionRow.changeset(%{
-        configuration_revision_id: Ids.new("spacecraft_configuration"),
-        organization_id: organization_id,
-        mission_id: mission_id,
-        spacecraft_id: running.spacecraft_id,
-        version: latest.version + 1,
-        catalog_revision_id: catalog_revision_id,
-        document: document,
-        content_sha256: ContentHash.term_sha256(document),
-        application_basis: running.application_basis,
-        created_by: actor_id
-      })
-    )
-  end
-
-  @doc """
-  Stamps revisions `derive/5` just wrote with their spacecraft's current application basis (one read
-  of the bases, one update), after the projection changed it. Without it the post-activation check
-  (`TelemetryDecom`'s applied ids) would see every moved spacecraft as changed elsewhere.
-  """
-  def restamp_bases(_mission, []), do: :ok
-
-  def restamp_bases(mission, rows) when is_list(rows) do
-    bases = ConfigurationApplications.bases(mission, Enum.map(rows, & &1.spacecraft_id))
-
-    Repo.query!(
-      """
-      UPDATE spacecraft_configuration_revisions AS r SET application_basis = v.basis
-      FROM unnest($1::text[], $2::text[]) AS v(id, basis)
-      WHERE r.configuration_revision_id = v.id
-      """,
-      [
-        Enum.map(rows, & &1.configuration_revision_id),
-        Enum.map(rows, &Map.fetch!(bases, &1.spacecraft_id))
-      ]
-    )
-
-    :ok
-  end
-
-  @doc "`fetch/3` for many revision ids in one query: `%{configuration_revision_id => row}` (absent if none)."
-  def fetch_many(_organization_id, _mission_id, []), do: %{}
-
-  def fetch_many(organization_id, mission_id, ids) when is_list(ids) do
-    from(row in ConfigurationRevisionRow,
-      where:
-        row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-          row.configuration_revision_id in ^ids
-    )
-    |> Repo.all()
-    |> Map.new(&{&1.configuration_revision_id, &1})
+    organization_id
+    |> latest_many(mission_id, [spacecraft_id])
+    |> Map.get(spacecraft_id)
   end
 
   def fetch(organization_id, mission_id, id) do
-    case Repo.get_by(ConfigurationRevisionRow,
-           organization_id: organization_id,
-           mission_id: mission_id,
-           configuration_revision_id: id
-         ) do
-      nil -> {:error, :spacecraft_configuration_not_found}
-      row -> {:ok, row}
+    case fetch_many(organization_id, mission_id, [id]) do
+      %{^id => row} -> {:ok, row}
+      %{} -> {:error, :spacecraft_configuration_not_found}
     end
-  end
-
-  def history(organization_id, mission_id, spacecraft_id) do
-    ConfigurationRevisionRow
-    |> where(
-      [row],
-      row.organization_id == ^organization_id and row.mission_id == ^mission_id and
-        row.spacecraft_id == ^spacecraft_id
-    )
-    |> order_by([row], desc: row.version)
-    |> limit(20)
-    |> Repo.all()
   end
 
   # Callers combine this with other workspace reads under the configuration lock.
@@ -378,20 +200,21 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Drafts do
   end
 
   defp validate_references(mission, spacecraft, document) do
-    with :ok <- validate_catalog(mission, document["catalog_revision_id"]),
+    with {:ok, catalog} <- validate_catalog(mission, document["catalog_revision_id"]),
          # DECISIONS #65: a profile catalog is set through change sets only.
          :ok <- CatalogAuthority.check(mission, spacecraft, document["catalog_revision_id"]),
          # L22: switches a change set has set are written through change sets only.
-         :ok <- CatalogAuthority.switches_check(spacecraft, document) do
-      validate_source(mission, spacecraft, document["telemetry_source_endpoint_id"])
+         :ok <- CatalogAuthority.switches_check(spacecraft, document),
+         :ok <- validate_source(mission, spacecraft, document["telemetry_source_endpoint_id"]) do
+      {:ok, catalog}
     end
   end
 
-  defp validate_catalog(_mission, nil), do: :ok
+  defp validate_catalog(_mission, nil), do: {:ok, nil}
 
   defp validate_catalog(mission, id) do
     case Catalog.fetch_revision(mission.organization_id, mission.mission_id, id) do
-      {:ok, _} -> :ok
+      {:ok, catalog} -> {:ok, catalog}
       {:error, _} -> {:error, :spacecraft_catalog_unavailable}
     end
   end
@@ -426,25 +249,40 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Drafts do
     document = change_set_switches(document, locked)
 
     with :ok <- exact_token(current.token, expected_token),
-         :ok <- validate_references(mission, locked, document),
+         {:ok, catalog} <- validate_references(mission, locked, document),
          {:ok, document} <-
            ConfigurationApplications.persist(scope, mission, locked, document) do
-      updated = snapshot(mission, spacecraft)
+      version = if current.row, do: current.row.version + 1, else: 1
 
-      Repo.insert(
-        ConfigurationRevisionRow.changeset(%{
-          configuration_revision_id: Ids.new("spacecraft_configuration"),
-          organization_id: scope.organization_id,
-          mission_id: mission_id,
-          spacecraft_id: spacecraft_id,
-          version: if(current.row, do: current.row.version + 1, else: 1),
-          catalog_revision_id: document["catalog_revision_id"],
-          document: document,
-          content_sha256: ContentHash.term_sha256(document),
-          application_basis: updated.application_basis,
-          created_by: scope.user.user_id
-        })
-      )
+      row =
+        Assignments.new(
+          mission,
+          spacecraft_id,
+          version,
+          document,
+          scope.user.user_id,
+          model_evidence(mission, catalog)
+        )
+
+      basis = ConfigurationApplications.basis(mission, spacecraft_id)
+      [saved] = Assignments.append([%{row | application_basis: basis}])
+      {:ok, saved}
     end
+  end
+
+  defp model_evidence(_mission, nil), do: %{}
+
+  defp model_evidence(mission, catalog) do
+    composition =
+      case CompositionPins.for_catalog_revision(
+             mission.organization_id,
+             mission.mission_id,
+             catalog.catalog_revision_id
+           ) do
+        {:ok, id} -> id
+        {:error, :none} -> nil
+      end
+
+    %{composition_id: composition, effective_revision_id: catalog.mission_model_revision_id}
   end
 end
