@@ -2,11 +2,6 @@ import Config
 
 config :cadence_web, :request_cost, :dev
 
-# CADENCE_LIVE_VUE_VITE_PORT (default 5173) must match the port vite.config.mjs
-# binds, so each worktree's LiveView pages load their own Vite dev server.
-config :live_vue,
-  vite_host: "http://127.0.0.1:#{System.get_env("CADENCE_LIVE_VUE_VITE_PORT", "5173")}"
-
 # Apogee console SPA: in dev, Phoenix serves /console by fetching index.html
 # from the console's Vite dev server (frontend/apps/console). Set
 # CONSOLE_VITE_ORIGIN="" to serve the built priv/static/console instead.
@@ -50,11 +45,10 @@ review_url =
 
 config :cadence_web, :review_session_secure?, not is_nil(review_url)
 
-# CADENCE_CI_SERVER=1: the console-e2e CI server only. No code reloader and no Vite or Tailwind
-# watchers. Under concurrent requests the reloader raced Mix's project loading ("Trying to load
-# XTCE.MixProject ... another project with the same name was already defined", run 44741752992),
-# and CI serves built assets anyway. Inert unless set, so local dev is unchanged. `code_reloader`
-# is read at compile time: set it before compiling.
+# CADENCE_CI_SERVER=1: the console-e2e CI server only: no code reloader. Under concurrent requests
+# the reloader raced Mix's project loading ("Trying to load XTCE.MixProject ... another project
+# with the same name was already defined", run 44741752992). Inert unless set, so local dev is
+# unchanged. `code_reloader` is read at compile time: set it before compiling.
 ci_server? = System.get_env("CADENCE_CI_SERVER") in ["1", "true"]
 
 # The Tidewave dev toolbar, not on the CI server: it loads from tidewave.ai into every page and
@@ -71,15 +65,7 @@ config :cadence_web, CadenceWeb.Endpoint,
   http: [ip: {127, 0, 0, 1}, port: dev_port],
   code_reloader: not ci_server?,
   reloadable_apps: [:cadence, :cadence_catalog, :ccsds, :xtce, :cadence_web],
-  debug_errors: true,
-  watchers:
-    if(ci_server?,
-      do: [],
-      else: [
-        vite: {PhoenixVite.Npm, :run, [:vite, ~w(dev)]},
-        tailwind: {Tailwind, :install_and_run, [:cadence_web, ~w(--watch)]}
-      ]
-    )
+  debug_errors: true
 
 # #780: the development ingest routes exist in dev and test only; prod never sets this.
 config :cadence_web, :dev_ingest_routes, true

@@ -8,11 +8,6 @@ defmodule CadenceWeb.Endpoint do
     same_site: "Lax"
   ]
 
-  socket("/live", Phoenix.LiveView.Socket,
-    websocket: [connect_info: [session: @session_options]],
-    longpoll: [connect_info: [session: @session_options]]
-  )
-
   # Apogee console SPA live data. Session-authenticated: the client sends its
   # CSRF token as the `_csrf_token` param so Phoenix exposes the cookie session.
   socket("/socket", CadenceWeb.ConsoleSocket,
