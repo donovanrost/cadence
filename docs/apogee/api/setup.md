@@ -448,7 +448,7 @@ switches. The editable `document` never carries them; they're read-only in `swit
 - `systems` (ADR-020 P5, #1078 B1), beside `document`: the SpaceSystems the saved `handled_apids`
   amount to in the document catalog's model, `[{system_id, path, name, bound: "all"|"some",
   apids: [int]}]` by path (`bound: "all"` when every container of the system is selected); `[]`
-  when no APID is selected; null when the document has no catalog or it has no compiled model.
+  when no APID is selected (a document whose `handled_apids` is absent reads as every APID: every system that has a container, `bound: "all"`); null when the document has no catalog or it has no compiled model. It is read from the catalog's telemetry plan alone (one row).
   Read-only: until B2 the input is still `handled_apids`.
 - `external_changes`: bool.
 - `switches`: `{telemetry_enabled: SWITCH, commanding_enabled: SWITCH}`, where SWITCH is `{value:

@@ -9,7 +9,7 @@ defmodule Cadence.MissionModels.SystemSelection do
     * `contributions/2`: per system of a revision, what it holds (the choices a binding offers);
     * `select/2`: the packet definitions a selection picks (today an APID list: the decom compile
       selects through it, so the input can change to systems without touching the compile);
-    * `effective/3`: the systems an APID selection amounts to, for a craft's read: each system
+    * `effective/2`: the systems an APID selection amounts to, for a craft's read: each system
       that owns a selected container, and whether all of its containers are selected.
 
   Systems nest: binding a system binds its descendants (B2). Pure over a revision and its plans.
@@ -57,26 +57,42 @@ defmodule Cadence.MissionModels.SystemSelection do
   end
 
   @doc """
-  The systems an APID selection amounts to: each system owning a selected container, as
-  `%{system_id, path, name, bound: :all | :some, apids}`, by path. `bound: :all` when every
-  container of the system is selected.
+  The systems a selection amounts to, from the telemetry plan alone (one row, not the revision
+  and all four plans): each system owning a selected container, as `%{system_id, path, name,
+  bound: :all | :some, apids}`, by path. `bound: :all` when every container of the system is
+  selected. `selection` is `{:apids, [apid]}` or `:all` (a nil `handled_apids`: every container,
+  so every system that has one). A plan that isn't ready, or nil, binds nothing.
   """
-  @spec effective(Revision.t(), %{optional(atom()) => RuntimePlan.t()}, selection()) :: [map()]
-  def effective(%Revision{} = revision, plans, {:apids, apids}) when is_list(apids) do
-    chosen = MapSet.new(apids)
+  @spec effective(RuntimePlan.t() | nil, selection() | :all) :: [map()]
+  def effective(%RuntimePlan{status: :ready, plan: plan}, selection) do
+    chosen = if selection == :all, do: :all, else: MapSet.new(elem(selection, 1))
 
-    for %{packets: [_ | _] = packets} = system <- contributions(revision, plans),
-        picked = Enum.filter(packets, &MapSet.member?(chosen, &1.apid)),
-        picked != [] do
-      %{
-        system_id: system.system_id,
-        path: system.path,
-        name: system.name,
-        bound: if(length(picked) == length(packets), do: :all, else: :some),
-        apids: picked |> Enum.map(& &1.apid) |> Enum.uniq() |> Enum.sort()
-      }
-    end
+    plan
+    |> Map.get("packet_definitions", [])
+    |> Enum.filter(&is_binary(&1["space_system_id"]))
+    |> Enum.group_by(&{&1["space_system_id"], &1["space_system_path"]})
+    |> Enum.flat_map(fn {{system_id, path}, packets} ->
+      picked = Enum.filter(packets, &(chosen == :all or MapSet.member?(chosen, &1["apid"])))
+
+      if picked == [],
+        do: [],
+        else: [
+          %{
+            system_id: system_id,
+            path: path,
+            name: name_of(path),
+            bound: if(length(picked) == length(packets), do: :all, else: :some),
+            apids: picked |> Enum.map(& &1["apid"]) |> Enum.uniq() |> Enum.sort()
+          }
+        ]
+    end)
+    |> Enum.sort_by(& &1.path)
   end
+
+  def effective(_plan, _selection), do: []
+
+  defp name_of("/"), do: "/"
+  defp name_of(path), do: path |> String.split("/", trim: true) |> List.last()
 
   defp owned(plans, target, key) do
     case Map.get(plans, target) do

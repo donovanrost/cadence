@@ -50,6 +50,8 @@ defmodule Cadence.Reads.Spacecraft.Configuration do
           active_catalog
         ])
 
+      plans = telemetry_plans(mission, [saved_catalog, active_catalog])
+
       fleet =
         SpacecraftStore.list_spacecraft_page(mission.organization_id, mission.mission_id,
           page_size: 100
@@ -89,7 +91,7 @@ defmodule Cadence.Reads.Spacecraft.Configuration do
          document: current.document,
          composition: Map.get(compositions, saved_catalog),
          # ADR-020 P5 (B1): the systems the saved APIDs amount to in the catalog's model.
-         systems: effective_systems(mission, saved_catalog, current.document),
+         systems: effective_systems(plans, saved_catalog, current.document),
          external_changes: current.external_changes,
          switches: switches,
          active:
@@ -98,7 +100,7 @@ defmodule Cadence.Reads.Spacecraft.Configuration do
                version: active_entry["configuration_version"],
                document: active_entry["document"],
                composition: Map.get(compositions, active_catalog),
-               systems: effective_systems(mission, active_catalog, active_entry["document"]),
+               systems: effective_systems(plans, active_catalog, active_entry["document"]),
                # E2 (#546; U109): the revision it runs had its approval withdrawn, else nil.
                approval_withdrawn: approval_withdrawn(mission, id),
                generation: active.activation.generation
@@ -136,14 +138,17 @@ defmodule Cadence.Reads.Spacecraft.Configuration do
     end
   end
 
-  defp effective_systems(mission, catalog_revision_id, document),
-    do:
-      CatalogSystems.effective(
-        mission.organization_id,
-        mission.mission_id,
-        catalog_revision_id,
-        (document || %{})["handled_apids"]
-      )
+  # The telemetry plan of each distinct catalog, read once (one row each), however many of the
+  # saved and active documents name it.
+  defp telemetry_plans(mission, catalogs) do
+    for catalog <- Enum.uniq(catalogs), is_binary(catalog), into: %{} do
+      {catalog,
+       CatalogSystems.telemetry_plan(mission.organization_id, mission.mission_id, catalog)}
+    end
+  end
+
+  defp effective_systems(plans, catalog_revision_id, document),
+    do: CatalogSystems.effective(plans[catalog_revision_id], (document || %{})["handled_apids"])
 
   defp fleet_navigation(mission, craft, active, section) do
     heads =

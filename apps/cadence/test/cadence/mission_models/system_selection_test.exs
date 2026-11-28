@@ -45,6 +45,7 @@ defmodule Cadence.MissionModels.SystemSelectionTest do
       "packet_name" => name,
       "apid" => apid,
       "space_system_id" => system.semantic_id,
+      "space_system_path" => system.qualified_name,
       "runtime_name" => path
     }
   end
@@ -114,16 +115,36 @@ defmodule Cadence.MissionModels.SystemSelectionTest do
   describe "effective/3 (an APID selection, as systems)" do
     test "a system with all its containers selected is bound :all" do
       assert [%{path: "/bus", bound: :all, apids: [10, 11]}] =
-               SystemSelection.effective(revision(), plans(), {:apids, [10, 11]})
+               SystemSelection.effective(plans().telemetry, {:apids, [10, 11]})
     end
 
     test "a system with some selected is :some; selected APIDs in no plan name no system" do
       assert [%{path: "/bus", bound: :some, apids: [10]}, %{path: "/payload", bound: :all}] =
-               SystemSelection.effective(revision(), plans(), {:apids, [10, 20, 99]})
+               SystemSelection.effective(plans().telemetry, {:apids, [10, 20, 99]})
     end
 
     test "no APIDs bind no system" do
-      assert SystemSelection.effective(revision(), plans(), {:apids, []}) == []
+      assert SystemSelection.effective(plans().telemetry, {:apids, []}) == []
+    end
+  end
+
+  describe "effective/2 from the telemetry plan alone" do
+    test "every APID (a nil handled_apids) binds every system that has a container, all of it" do
+      assert [
+               %{path: "/bus", bound: :all, apids: [10, 11], name: "bus"},
+               %{path: "/payload", bound: :all, apids: [20]}
+             ] = SystemSelection.effective(plans().telemetry, :all)
+    end
+
+    test "no plan, or a plan that isn't ready, binds nothing" do
+      assert SystemSelection.effective(nil, :all) == []
+      assert SystemSelection.effective(%{plans().telemetry | status: :blocked}, :all) == []
+    end
+
+    test "the root system is named '/'" do
+      root_packet = packet(@root, "R", 1, "/R") |> Map.put("space_system_path", "/")
+      plan = plan(:telemetry, %{"packet_definitions" => [root_packet]})
+      assert [%{path: "/", name: "/", bound: :all}] = SystemSelection.effective(plan, :all)
     end
   end
 
