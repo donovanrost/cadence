@@ -29,7 +29,8 @@ defmodule Cadence.Limits.Store.FleetSummary do
           limit_state: :critical | :caution | :nominal,
           violating: non_neg_integer(),
           last_received_at: DateTime.t() | nil,
-          worst: Event.t() | nil
+          worst: Event.t() | nil,
+          worst_evaluated_at: DateTime.t() | nil
         }
 
   # The severity rank of a normalized state: red 2, yellow 1, everything else 0.
@@ -50,7 +51,10 @@ defmodule Cadence.Limits.Store.FleetSummary do
          limit_state: condition(summary.worst_rank),
          violating: summary.violating,
          last_received_at: summary.last_received_at,
-         worst: worst && LatestStateRow.to_domain(worst)
+         worst: worst && LatestStateRow.to_domain(worst),
+         # When the ground-limit evaluation that wrote the worst state ran (not when its sample
+         # arrived): ground limits are batch, and the console says how old they are (DECISIONS #17).
+         worst_evaluated_at: worst && worst.updated_at
        }}
     end)
   end

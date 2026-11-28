@@ -125,19 +125,68 @@ describe("listener_refusal on Now (ux U50)", () => {
     expect(row?.meta).toBe("FIRST 03:12Z · STILL REFUSING");
   });
 
+  describe("peer_not_allowed (#993): the fix names who owns the allowed addresses", () => {
+    const REFUSED =
+      "The last one came from an address outside this listener's allowed source addresses, so Cadence refused it before reading anything.";
+    const peer = (o: Record<string, unknown>) =>
+      rowOf({
+        last_refusal: { peer: "203.0.113.9:4000", reason: "peer_not_allowed", scid: null },
+        ...o,
+      });
+
+    it("a provider's egress: ask the provider, Cadence can't change them", () => {
+      const row = peer({ allowlist_source: "provider", transport_id: "tr-1" });
+      expect(row?.sentence).toBe(
+        `${CONTEXT} ${REFUSED} ${NOT_CONNECTED} Ask Northlight to check the source addresses it connects from; Cadence can't change them.`,
+      );
+      expect(row?.sentenceParts).toBeUndefined();
+      expect(row?.sentence).not.toContain("203.0.113.9");
+    });
+
+    it("a Cadence transport: edit its allowed addresses in Setup, linked by transport_id", () => {
+      const row = peer({ allowlist_source: "transport", transport_id: "tr-1" });
+      expect(row?.sentence).toBe(
+        `${CONTEXT} ${REFUSED} ${NOT_CONNECTED} Edit the transport's allowed source addresses in Setup.`,
+      );
+      const link = row?.sentenceParts?.find((p) => typeof p !== "string" && "to" in p);
+      expect(link).toEqual({
+        text: "allowed source addresses",
+        to: { name: "setup.comms.transports", params: { transportId: "tr-1" } },
+      });
+      expect(row?.sentenceParts?.map((p) => (typeof p === "string" ? p : p.text)).join("")).toBe(
+        row?.sentence,
+      );
+      expect(peer({ allowlist_source: "transport", transport_id: null })?.sentenceParts).toBe(
+        undefined,
+      );
+    });
+
+    it("an unknown owner (null or new): a sentence true for both", () => {
+      for (const allowlist_source of [null, "relay"])
+        expect(peer({ allowlist_source, transport_id: null })?.sentence).toBe(
+          `${CONTEXT} ${REFUSED} ${NOT_CONNECTED} Check who sets this listener's allowed source addresses.`,
+        );
+    });
+  });
+
   it("words every reason; unknown keys read as unknown", () => {
     const said = (reason: string, scid: number | null = null) =>
       rowOf({ connected: true, last_refusal: { peer: null, reason, scid } })?.sentence;
     expect(said("unregistered_scid")).toContain(
       "The last one sent frames for a spacecraft no pass on this listener expects.",
     );
-    expect(said("unexpected_peer")).toContain(
-      "The last one came from an address Northlight's profile doesn't expect.",
-    );
+    // #993: nothing emits unexpected_peer any more; an old one reads as unknown.
+    expect(said("unexpected_peer")).toContain("Cadence couldn't match the last one to a pass.");
     expect(said("unidentified")).toContain(
       "Cadence couldn't tell from its first frames which spacecraft the last one was for.",
     );
     expect(said("read_failed")).toContain("Cadence couldn't read the last one's first frames.");
+    expect(said("no_registered_contact")).toContain(
+      "No pass was registered on this listener when the last one arrived.",
+    );
+    expect(said("peer_not_allowed")).toContain(
+      "The last one came from an address outside this listener's allowed source addresses, so Cadence refused it before reading anything.",
+    );
     expect(said("something_new")).toContain("Cadence couldn't match the last one to a pass.");
   });
 

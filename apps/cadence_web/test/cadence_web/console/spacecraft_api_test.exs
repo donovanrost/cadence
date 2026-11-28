@@ -65,6 +65,10 @@ defmodule CadenceWeb.Console.SpacecraftAPITest do
 
     assert Enum.map(second["data"]["spacecraft"], & &1["name"]) == ["Charlie"]
     assert second["meta"]["next_cursor"] == nil
+    # The mission's counts and SCIDs come with the first page only (#933).
+    refute Map.has_key?(second["data"], "summary")
+    refute Map.has_key?(second["data"], "scids_in_use")
+    assert Map.has_key?(first["data"], "scids_in_use")
 
     filtered = conn |> get(path <> "?q=brav") |> json_response(200)
     assert Enum.map(filtered["data"]["spacecraft"], & &1["name"]) == ["Bravo"]

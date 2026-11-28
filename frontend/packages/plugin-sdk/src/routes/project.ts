@@ -32,7 +32,7 @@ const isHeaderKind = (value: string): value is HeaderKind => headerKinds.include
 
 /** The one rule for a route's layer; the host's shell and the header contracts both read it. */
 export function routeLayer(path: string): Layer {
-  return path === "/missions/:mission_id/ops" || path.includes("/ops/") ? "ops" : "management";
+  return path.includes("/ops/") ? "ops" : "management";
 }
 
 /**

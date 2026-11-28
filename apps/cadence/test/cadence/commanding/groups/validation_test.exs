@@ -86,15 +86,31 @@ defmodule Cadence.Commanding.Groups.ValidationTest do
   end
 
   test "enforces the size bounds", c do
-    targets = for i <- 1..1_001, do: "sc-#{i}"
+    targets = for i <- 1..5_001, do: "sc-#{i}"
 
-    assert {:error, {:command_group_too_large, %{max_targets: 1_000, targets: 1_001}}} =
+    assert {:error, {:command_group_too_large, %{max_targets: 5_000, targets: 5_001}}} =
              Validation.validate(
                c.org,
                c.mission,
                c.actor,
                draft(targets, [cmd(c, "SET_SIGNED", %{})])
              )
+
+    # The members are targets x commands: 1,251 x 16 is within each own bound but not the product.
+    stack = List.duplicate(cmd(c, "SET_SIGNED", %{}), 16)
+
+    assert :ok = Validation.check_size(draft(for(i <- 1..1_250, do: "sc-#{i}"), stack))
+
+    assert {:error, {:command_group_too_large, %{max_members: 20_000, targets: 1_251}}} =
+             Validation.check_size(draft(for(i <- 1..1_251, do: "sc-#{i}"), stack))
+  end
+
+  test "a deployment's bounds replace the defaults", c do
+    Application.put_env(:cadence, :command_group_bounds, max_targets: 1)
+    on_exit(fn -> Application.delete_env(:cadence, :command_group_bounds) end)
+
+    assert {:error, {:command_group_too_large, %{max_targets: 1, targets: 2}}} =
+             Validation.check_size(draft(~w(sc-a sc-b), [cmd(c, "SET_SIGNED", %{})]))
   end
 
   test "a mission without an active catalog is not active" do

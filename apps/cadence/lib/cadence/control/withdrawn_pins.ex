@@ -18,6 +18,7 @@ defmodule Cadence.Control.WithdrawnPins do
 
   alias Cadence.Activations
   alias Cadence.Catalog.FleetSnapshot
+  alias Cadence.Catalog.ModelRevisions
   alias Cadence.Control.ActorRef
 
   alias Cadence.MissionModels.{
@@ -34,7 +35,8 @@ defmodule Cadence.Control.WithdrawnPins do
           composition_id: binary() | nil,
           revision_id: binary(),
           decision: map(),
-          hold_basis: binary()
+          hold_basis: binary(),
+          earlier_approved: %{revision_id: binary(), catalog_revision: map() | nil} | nil
         }
 
   @doc "`%{spacecraft_id => pin()}` for the affected craft among `spacecraft_ids` only."
@@ -54,10 +56,14 @@ defmodule Cadence.Control.WithdrawnPins do
 
       names = ActorRef.names(organization_id, withdrawn |> Map.values() |> Enum.map(& &1.actor))
 
-      for {spacecraft_id, revision_id} <- running,
-          %DecisionRow{} = record <- [Map.get(withdrawn, revision_id)],
-          into: %{},
-          do: {spacecraft_id, pin(revision_id, record, Map.get(compositions, revision_id), names)}
+      pins =
+        for {spacecraft_id, revision_id} <- running,
+            %DecisionRow{} = record <- [Map.get(withdrawn, revision_id)],
+            into: %{},
+            do:
+              {spacecraft_id, pin(revision_id, record, Map.get(compositions, revision_id), names)}
+
+      with_earlier(organization_id, mission_id, pins)
     end
   end
 
@@ -109,6 +115,31 @@ defmodule Cadence.Control.WithdrawnPins do
     )
     |> Repo.all()
     |> Map.new(&{&1.revision_id, &1})
+  end
+
+  # U109's way out: per composition, the revision the next staging would select (an earlier
+  # approved, runnable version) with its catalog revision, or nil when nothing approved is left.
+  # One selection per distinct composition, and one catalog read.
+  defp with_earlier(organization_id, mission_id, pins) do
+    earlier =
+      for composition <- pins |> Map.values() |> Enum.map(& &1.composition_id) |> Enum.uniq(),
+          is_binary(composition),
+          {:ok, revision} <- [Selection.select(organization_id, mission_id, composition)],
+          into: %{},
+          do: {composition, revision}
+
+    catalogs = ModelRevisions.for_models(organization_id, mission_id, Map.values(earlier))
+
+    Map.new(pins, fn {id, pin} ->
+      revision = Map.get(earlier, pin.composition_id)
+
+      {id,
+       Map.put(
+         pin,
+         :earlier_approved,
+         revision && %{revision_id: revision, catalog_revision: Map.get(catalogs, revision)}
+       )}
+    end)
   end
 
   defp pin(revision_id, record, composition_id, names) do

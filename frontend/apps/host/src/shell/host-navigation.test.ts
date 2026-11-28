@@ -74,8 +74,7 @@ function clickLink(
   href: string,
   attrs = "",
   options: MouseEventInit = {},
-  // §11c B: the mission home left the host, so links are clicked from the Ops landing.
-  current = "https://cadence.test/missions/m-1/ops",
+  current = "https://cadence.test/missions/m-1/ops/timeline",
 ) {
   const navigate = vi.fn();
   cleanups.push(installHostNavigation(document, { href: current } as Location, navigate));
@@ -158,8 +157,8 @@ test("remote component handlers can cancel navigation before the host processes 
   expect(navigate).not.toHaveBeenCalled();
 });
 
-test("the mission Ops entry resolves to the operational shell", () => {
-  const route = hostRoute(new URL("https://cadence.test/missions/mission-1/ops"));
-  expect(route?.workspacePage).toBe("landing");
+test("the mission timeline resolves to the operational shell", () => {
+  const route = hostRoute(new URL("https://cadence.test/missions/mission-1/ops/timeline"));
+  expect(route?.workspacePage).toBe("timeline");
   expect(shellForRoute(required(route))).toBe("ops");
 });

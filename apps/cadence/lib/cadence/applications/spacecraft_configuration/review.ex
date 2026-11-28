@@ -73,9 +73,10 @@ defmodule Cadence.Applications.SpacecraftConfiguration.Review do
              Enum.map(changed, & &1.spacecraft_id)
            ) do
       tokens =
-        for row <- changed, spacecraft = craft[row.spacecraft_id], into: %{} do
-          {row.spacecraft_id, ConfigurationDrafts.snapshot(mission, spacecraft).token}
-        end
+        ConfigurationDrafts.tokens(
+          mission,
+          for(row <- changed, spacecraft = craft[row.spacecraft_id], do: {spacecraft, row})
+        )
 
       if map_size(tokens) > 0, do: {:ok, tokens}, else: {:error, :nothing_to_review}
     else

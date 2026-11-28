@@ -4,12 +4,7 @@ defmodule CadenceWeb.HostPageLive do
 
   alias Cadence.Reads.OperationalContext
 
-  alias CadenceWeb.{
-    HostContext,
-    HostPageAuthorization,
-    OpsLandingPage,
-    OpsTimelinePage
-  }
+  alias CadenceWeb.{HostContext, HostPageAuthorization, OpsTimelinePage}
 
   alias Plug.Conn.{InvalidQueryError, Query}
 
@@ -215,7 +210,6 @@ defmodule CadenceWeb.HostPageLive do
 
       socket =
         assign(socket,
-          ops_landing_page: OpsLandingPage.load(socket.assigns.current_scope, info),
           timeline_page: OpsTimelinePage.load(socket.assigns.current_scope, info)
         )
         |> CadenceWeb.OpsExplorationPage.prepare(info, path)
@@ -274,7 +268,6 @@ defmodule CadenceWeb.HostPageLive do
         |> HostContext.from_assigns()
         |> Map.drop([:nav_context, :nav_item, :ops_nav_item, :active_dashboard_id]),
       timeline_page: assigns[:timeline_page],
-      ops_landing_page: assigns[:ops_landing_page],
       ops_page: assigns[:ops_page]
     }
   end

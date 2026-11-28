@@ -20,7 +20,14 @@ defmodule Cadence.Commanding.Groups.Validation do
   alias Cadence.SourceEndpoints
   alias Cadence.SourceEndpoints.SourceEndpoint
 
-  @default_bounds %{max_targets: 1_000, max_commands: 16, max_members: 5_000}
+  # A guard for one request and one transaction, not a product limit (#795). Preflight and submit
+  # validate every member in one transaction, at about 0.2 ms (preflight) and 0.3 ms (submit) a
+  # member; the scale test (`group_size_scale_test.exs`) measured 5,000 targets x 4 commands
+  # (20,000 members) at 3.3 s and 6 s, and 500 x 16 at 1.7 s and 2.7 s. 20,000 members leaves
+  # more than 2x headroom under the 15 s transaction timeout. A deployment sets
+  # `config :cadence, :command_group_bounds`; past about 50,000 members it also needs the Repo's
+  # transaction timeout raised.
+  @default_bounds %{max_targets: 5_000, max_commands: 16, max_members: 20_000}
   @payload_keys [
     :source_endpoint_ref,
     :command_id,

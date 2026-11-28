@@ -15,7 +15,6 @@ defmodule Cadence.Reads.WithdrawnApprovalAttention do
 
   alias Cadence.Catalog.ModelRevisions
   alias Cadence.Control.WithdrawnPins
-  alias Cadence.MissionModels.Selection
   alias Cadence.Reads.MissionModelApprovals.CompositionKeys
 
   @source "model_approval_withdrawn"
@@ -34,11 +33,10 @@ defmodule Cadence.Reads.WithdrawnApprovalAttention do
       pins = WithdrawnPins.for_spacecraft(org, mission, craft)
       revisions = Map.keys(affected)
       compositions = CompositionKeys.for_list(org, mission, revisions)
-      earlier = earlier(org, mission, pins)
-      catalogs = ModelRevisions.for_models(org, mission, revisions ++ Map.values(earlier))
+      catalogs = ModelRevisions.for_models(org, mission, revisions)
 
       for {spacecraft_id, pin} <- Enum.sort(pins) do
-        item(spacecraft_id, pin, compositions, catalogs, Map.get(earlier, pin.composition_id))
+        item(spacecraft_id, pin, compositions, catalogs)
       end
     end
   end
@@ -49,16 +47,7 @@ defmodule Cadence.Reads.WithdrawnApprovalAttention do
   @spec counts(binary(), binary()) :: %{open: non_neg_integer(), acknowledged: 0}
   def counts(org, mission), do: %{open: length(items(org, mission)), acknowledged: 0}
 
-  # The revision each affected composition would select next, if any (`Selection.select/3`).
-  defp earlier(org, mission, pins) do
-    for composition <- pins |> Map.values() |> Enum.map(& &1.composition_id) |> Enum.uniq(),
-        is_binary(composition),
-        {:ok, revision} <- [Selection.select(org, mission, composition)],
-        into: %{},
-        do: {composition, revision}
-  end
-
-  defp item(spacecraft_id, pin, compositions, catalogs, earlier) do
+  defp item(spacecraft_id, pin, compositions, catalogs) do
     decision = pin.decision
 
     %{
@@ -79,8 +68,8 @@ defmodule Cadence.Reads.WithdrawnApprovalAttention do
         decided_at: decision.at,
         reason: decision.reason,
         composition: Map.get(compositions, pin.revision_id),
-        earlier_approved:
-          earlier && %{revision_id: earlier, catalog_revision: Map.get(catalogs, earlier)}
+        # The way out, from the same read as the state line (WithdrawnPins).
+        earlier_approved: pin.earlier_approved
       }
     }
   end

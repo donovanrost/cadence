@@ -2,16 +2,13 @@ defmodule Cadence.Management.Commanding do
   @moduledoc """
   Management-plane boundary for command authoring, request, and approval.
 
-  Command stages, requests, and approvals remain management-owned. Control
-  receives only the immutable `ApprovedCommand` handoff.
+  Command requests and approvals remain management-owned. Control receives only the immutable
+  `ApprovedCommand` handoff.
   """
 
   alias Cadence.Commanding.{
     CommandRequest,
-    CommandStage,
-    RequestStore,
-    StagedCommandItem,
-    StageStore
+    RequestStore
   }
 
   alias Cadence.Management.Commanding.ReviewAccess
@@ -24,52 +21,6 @@ defmodule Cadence.Management.Commanding do
   # todo(authz): Cedar should decide who may author and request each command (any mission
   # operator today, DECISIONS #62), e.g. by significance, hazard or target.
   defdelegate authorize(scope, mission_id), to: ReviewAccess
-
-  @spec persist_command_stage(binary(), CommandStage.t()) ::
-          {:ok, CommandStage.t()} | {:error, term()}
-  defdelegate persist_command_stage(organization_id, command_stage),
-    to: StageStore,
-    as: :persist_stage
-
-  @spec update_command_stage(binary(), CommandStage.t()) ::
-          {:ok, CommandStage.t()} | {:error, term()}
-  defdelegate update_command_stage(organization_id, command_stage),
-    to: StageStore,
-    as: :update_stage
-
-  @spec fetch_command_stage(binary(), binary(), binary()) ::
-          {:ok, CommandStage.t()} | {:error, term()}
-  defdelegate fetch_command_stage(organization_id, mission_id, command_stage_id),
-    to: StageStore,
-    as: :fetch_stage
-
-  @spec list_command_stages(binary(), binary(), keyword()) :: [CommandStage.t()]
-  defdelegate list_command_stages(organization_id, mission_id, opts \\ []),
-    to: StageStore,
-    as: :list_stages
-
-  @spec persist_staged_command_item(binary(), StagedCommandItem.t()) ::
-          {:ok, StagedCommandItem.t()} | {:error, term()}
-  defdelegate persist_staged_command_item(organization_id, staged_command_item),
-    to: StageStore,
-    as: :persist_item
-
-  @spec update_staged_command_item(binary(), StagedCommandItem.t()) ::
-          {:ok, StagedCommandItem.t()} | {:error, term()}
-  defdelegate update_staged_command_item(organization_id, staged_command_item),
-    to: StageStore,
-    as: :update_item
-
-  @spec fetch_staged_command_item(binary(), binary(), binary()) ::
-          {:ok, StagedCommandItem.t()} | {:error, term()}
-  defdelegate fetch_staged_command_item(organization_id, mission_id, staged_command_item_id),
-    to: StageStore,
-    as: :fetch_item
-
-  @spec list_staged_command_items(binary(), binary(), keyword()) :: [StagedCommandItem.t()]
-  defdelegate list_staged_command_items(organization_id, mission_id, opts \\ []),
-    to: StageStore,
-    as: :list_items
 
   @spec fetch_command_request(binary(), binary(), binary()) ::
           {:ok, CommandRequest.t()} | {:error, term()}

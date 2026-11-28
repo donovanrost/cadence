@@ -15,6 +15,11 @@ config :cadence_web, :console,
        url -> url
      end)
 
+# Dev only: /dev/mailbox (HTML and /json) shows the mail the Local adapter holds, so a seed that
+# works through the public API can read an invitation link, as a person would from their inbox.
+# The router compiles the route in only when this is true; test and prod leave it off (#745).
+config :cadence_web, :dev_routes, true
+
 config :cadence_web,
   dashboard_engine_source_execution: [
     source_execution_max_concurrency: 4,

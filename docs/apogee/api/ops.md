@@ -54,7 +54,8 @@ freshness to the second; at 1 Hz feeds, throttle that to about 10 s client-side)
         "worst_point": {
           "point_id": "…", "point_name": "VBAT", "value": 23.1,
           "limit_state": "critical", "raw_limit_state": "red_low",
-          "received_at": "2026-11-08T02:41:15Z"
+          "received_at": "2026-11-08T02:41:15Z", "source": "ground_limit",
+          "evaluated_at": "2026-11-08T02:43:00Z"
         },
         "last_received_at": "2026-11-08T02:41:15Z",
         "stale": false,
@@ -88,7 +89,14 @@ freshness to the second; at 1 Hz feeds, throttle that to about 10 s client-side)
   heard across restarts; it can only be fresh or stale. `stale` = `now − last_received_at > stale_after_s` (server-decided, U9).
 - `counts.fresh`: spacecraft heard within `stale_after_s` (the "TLM FRESH 488/500" meta).
 - `worst_point`: the most severe violating point, newest first among equals. It is `null` when
-  nothing violates.
+  nothing violates. A spacecraft's condition is the worst of two sources (DECISIONS #17):
+  **live catalog monitoring** (`semantic_latest_alarm_states`: `watch`/`warning` are caution,
+  `distress`/`critical`/`severe` are critical) and **ground limits** (batch evaluations); on a tie the
+  live alarm is the worst point, and `violating_points` counts both. `worst_point.source` says which
+  (`catalog_monitoring` | `ground_limit`). A ground-limit point carries `evaluated_at`, when the
+  evaluation that wrote it ran (not when its sample arrived), so a client can say how old it is; a
+  live one has `evaluated_at: null`, and its `value` and `raw_limit_state` are `null` too (the state
+  row names the parameter and its state, not the value that raised it).
 - `plane`, `slot`, `phase_deg` (from `metadata.orbit.mean_anomaly_deg`) and `operational_phase`
   come from spacecraft metadata until domain makes them first-class. Any of them may be `null`;
   apply U8 for the matrix shape.

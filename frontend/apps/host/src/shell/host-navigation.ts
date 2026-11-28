@@ -10,7 +10,7 @@ function normalizeHostRoute(route: CatalogRoute) {
         return { ...route, kind: "ops_module" as const, contribution: route.contribution };
       break;
     case "ops_workspace":
-      if (route.workspacePage === "landing" || route.workspacePage === "timeline")
+      if (route.workspacePage === "timeline")
         return { ...route, kind: "ops_workspace" as const, workspacePage: route.workspacePage };
       break;
   }

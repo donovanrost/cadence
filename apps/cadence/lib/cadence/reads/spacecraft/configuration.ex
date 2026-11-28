@@ -268,7 +268,9 @@ defmodule Cadence.Reads.Spacecraft.Configuration do
       %{^spacecraft_id => pin} ->
         %{
           revision_id: pin.revision_id,
-          decision: Map.take(pin.decision, [:kind, :by, :at, :reason])
+          decision: Map.take(pin.decision, [:kind, :by, :at, :reason]),
+          # U109's way out (console, #924): an earlier approved version, or nil.
+          earlier_approved: pin.earlier_approved
         }
 
       _none ->

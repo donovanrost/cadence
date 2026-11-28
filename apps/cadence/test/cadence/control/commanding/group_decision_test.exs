@@ -10,6 +10,7 @@ defmodule Cadence.Control.Commanding.GroupDecisionTest do
   alias Cadence.Commanding.Groups.GroupStore
   alias Cadence.Commanding.RequestDigest
   alias Cadence.Control.Commanding.{GroupDecision, GroupSubmission}
+  alias Cadence.Management.Commanding.ApprovedCommand
 
   setup do
     c = setup!(3)
@@ -29,6 +30,12 @@ defmodule Cadence.Control.Commanding.GroupDecisionTest do
     do: GroupDecision.decide(scope, c.mission, c.group.command_group_id, decision)
 
   defp members(c), do: GroupStore.members(c.org, c.mission, c.group.command_group_id)
+
+  defp excluded_endpoints(_c),
+    do:
+      Enum.sort(
+        for i <- [1, 3], do: Cadence.SourceEndpoints.managed_source_endpoint_id("sc-#{i}")
+      )
 
   defp queue_count(c),
     do: Repo.aggregate(from(q in CommandQueueEntryRow, where: q.mission_id == ^c.mission), :count)
@@ -69,6 +76,91 @@ defmodule Cadence.Control.Commanding.GroupDecisionTest do
     assert [%{lifecycle_state: :rejected}] = by_target[1]
     assert [%{lifecycle_state: :queued}] = by_target[0]
     assert queue_count(c) == 2
+  end
+
+  # #795: the exclusion is bound by the rows it leaves, not by a separate digest. The review token
+  # binds the GO to the members it covered; each approved member is queued with its own approved
+  # hash and each excluded one is rejected, in the append-only approvals.
+  test "GO excluding leaves exactly the excluded targets' members rejected and unqueued, the rest approved with their hash",
+       c do
+    covered = GroupDecision.members_digest(c.group)
+
+    assert {:ok, group} =
+             decide(c, c.approver, %{
+               kind: :go_excluding,
+               excluded: ["sc-1", "sc-3"],
+               note: "in safe mode",
+               expected_review: GroupDecision.review_token(c.group)
+             })
+
+    {out, kept} = Enum.split_with(members(c), &(&1.group_slot.target_index in [0, 2]))
+    assert Enum.map(out, & &1.source_endpoint_ref) |> Enum.sort() == excluded_endpoints(c)
+    assert [%{group_slot: %{target_index: 1}}] = kept
+
+    out_ids = Enum.map(out, & &1.command_request_id)
+    kept_ids = Enum.map(kept, & &1.command_request_id)
+
+    assert Enum.all?(out, &(&1.lifecycle_state == :rejected))
+    assert Enum.all?(kept, &(&1.lifecycle_state == :queued))
+
+    entries = Repo.all(from(q in CommandQueueEntryRow, where: q.mission_id == ^c.mission))
+    assert Enum.map(entries, & &1.command_request_id) == kept_ids
+
+    approvals =
+      from(a in CommandApprovalRow, where: a.mission_id == ^c.mission)
+      |> Repo.all()
+      |> Map.new(&{&1.command_request_id, &1})
+
+    assert Map.keys(approvals) |> Enum.sort() == Enum.sort(out_ids ++ kept_ids)
+    assert Enum.all?(out_ids, &(approvals[&1].decision == "rejected"))
+    assert Enum.all?(out_ids, &(approvals[&1].reason == "Excluded at review: in safe mode"))
+    assert Enum.all?(kept_ids, &(approvals[&1].decision == "approved"))
+
+    # Each approval names the member's own review token as the approver saw it, before the GO.
+    for member <- kept ++ out do
+      assert approvals[member.command_request_id].subject_digest ==
+               RequestDigest.digest(%{member | lifecycle_state: :approval_pending})
+    end
+
+    [kept_member] = kept
+    [entry] = entries
+
+    {:ok, approved} =
+      ApprovedCommand.new(
+        %{kept_member | lifecycle_state: :approved},
+        CommandApprovalRow.to_domain(approvals[kept_member.command_request_id])
+      )
+
+    assert CommandQueueEntryRow.to_domain(entry).metadata[
+             "approved_content_sha256"
+           ] == approved.content_sha256
+
+    assert group.decision["excluded"] == ["sc-1", "sc-3"]
+    assert group.decision["excluded_request_ids"] == Enum.sort(out_ids)
+    assert group.decision["members_digest"] == covered
+  end
+
+  test "an exclusion that repeats a target, or names one the group doesn't have, is refused", c do
+    review = GroupDecision.review_token(c.group)
+
+    assert {:error, {:invalid_params, %{"excluded" => _}}} =
+             decide(c, c.approver, %{
+               kind: :go_excluding,
+               excluded: ["sc-2", "sc-2"],
+               note: "x",
+               expected_review: review
+             })
+
+    assert {:error, :unknown_excluded_target} =
+             decide(c, c.approver, %{
+               kind: :go_excluding,
+               excluded: ["sc-2", "nobody"],
+               note: "x",
+               expected_review: review
+             })
+
+    assert Enum.all?(members(c), &(&1.lifecycle_state == :approval_pending))
+    assert queue_count(c) == 0
   end
 
   test "send back and NO-GO reject every member and need a note", c do
