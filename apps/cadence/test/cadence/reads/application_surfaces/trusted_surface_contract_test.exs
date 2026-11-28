@@ -82,69 +82,12 @@ defmodule Cadence.Reads.ApplicationSurfaces.TrustedSurfaceContractTest do
     end
   end
 
-  test "legacy commands preserve only admitted navigation context through the real Vue adapter",
-       context do
-    query = %{
-      "status" => "queued",
-      "target" => "endpoint/a",
-      "query" => "CMD+a",
-      "focus_command_id" => "request/a?b",
-      "page" => "2"
-    }
-
-    assert {:ok,
-            %{"data" => %{"presentation" => %{"component" => "OpsCommands", "props" => props}}}} =
-             OpsConsole.load(context.scope, context.host_context, %{
-               request("commands")
-               | params: query
-             })
-
-    assert props == %{"mission_id" => @mission_id, "query" => query}
-
-    checker =
-      Path.expand(
-        "../../../../../../frontend/modules/commanding/src/features/mission-commands/producer-contract-check.mjs",
-        __DIR__
-      )
-
-    {output, status} =
-      System.cmd(
-        System.find_executable("node"),
-        [
-          "--no-warnings",
-          checker,
-          Jason.encode!([props, %{"mission_id" => @mission_id, "query" => %{}}]),
-          "legacy"
-        ],
-        stderr_to_stdout: true
-      )
-
-    assert status == 0, output
-    assert output =~ "Legacy command monitor producer/consumer contract passed"
-
-    for invalid <- [
-          %{"document" => %{}},
-          %{"status" => "launch"},
-          %{"page" => "0"},
-          %{"query" => "bad\n"}
-        ] do
-      assert {:error, :unsupported_application_surface_query} =
-               OpsConsole.load(context.scope, context.host_context, %{
-                 request("commands")
-                 | params: invalid
-               })
-    end
-  end
-
   test "Ops route outputs satisfy their real remote mount contracts", context do
     alarms = surface_props(context, "alarms", "OpsAlarms")
     assert alarms == %{"mission_id" => @mission_id, "query" => %{}}
 
     timeline = surface_props(context, "timeline", "OpsTimeline")
     assert timeline == %{"mission_id" => @mission_id, "query" => %{}}
-
-    commands = surface_props(context, "commands", "OpsCommands")
-    assert commands == %{"mission_id" => @mission_id, "query" => %{}}
   end
 
   test "deep trusted configuration forms stay inside the output boundary", context do

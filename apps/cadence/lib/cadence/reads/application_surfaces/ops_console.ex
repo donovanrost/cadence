@@ -8,7 +8,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
   alias Cadence.Auth.{Policy, Scope}
   alias Cadence.Reads.ApplicationSurfaces.OpsConsole.Presentation
 
-  alias Cadence.Reads.CommandMonitor
   alias Cadence.Reads.LimitAlarmConditions
   alias Cadence.Reads.OpsWorkspace.Landing
 
@@ -84,13 +83,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
 
   defp validate_params(%{id: "alarms"}, params) do
     case LimitAlarmConditions.admit_query(Map.delete(params, "mission_id")) do
-      {:ok, _} -> :ok
-      _ -> {:error, :invalid_application_surface_query}
-    end
-  end
-
-  defp validate_params(%{id: "commands"}, params) do
-    case CommandMonitor.admit_query(Map.delete(params, "mission_id")) do
       {:ok, _} -> :ok
       _ -> {:error, :invalid_application_surface_query}
     end
@@ -207,7 +199,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
   defp dispatch("workspace", scope, mission, _params), do: landing(scope, mission)
   defp dispatch("alarms", scope, mission, params), do: alarms(scope, mission, params)
   defp dispatch("timeline", scope, mission, params), do: timeline(scope, mission, params)
-  defp dispatch("commands", scope, mission, params), do: commands(scope, mission, params)
 
   defp dispatch("data_sources", scope, mission, params),
     do: envelope("OpsDataSources", Presentation.data_sources(scope, mission, params, :reader))
@@ -266,13 +257,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
     })
   end
 
-  defp commands(_scope, mission, params) do
-    envelope("OpsCommands", %{
-      "mission_id" => mission.mission_id,
-      "query" => Map.delete(params, "mission_id")
-    })
-  end
-
   defp page(id, title, mission, params),
     do: %{
       "id" => id,
@@ -288,7 +272,6 @@ defmodule Cadence.Reads.ApplicationSurfaces.OpsConsole do
     }
 
   defp component_name("workspace"), do: "OpsConsoleLanding"
-  defp component_name("commands"), do: "OpsCommands"
   defp component_name("telemetry_explore"), do: "OpsTelemetryExplore"
   defp component_name("data_sources"), do: "OpsDataSources"
   defp component_name("data_source_registration"), do: "OpsDataSourceRegistration"
