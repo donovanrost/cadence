@@ -1,7 +1,7 @@
 defmodule CadenceSimulator.Provider.Capabilities do
   @moduledoc "Environment-scoped Simulator Provider Contract capabilities."
 
-  alias CadenceSimulator.Provider.Contract
+  alias CadenceSimulator.Provider.{Contract, DeliveryTLS}
 
   @confirmation_modes ["immediate", "asynchronous"]
   @idempotency_modes ["native", "client_reference", "none"]
@@ -76,12 +76,18 @@ defmodule CadenceSimulator.Provider.Capabilities do
       # How the provider gets each spacecraft's orbit (#968): the simulator accepts the element
       # set Cadence uploads (PUT /v1/spacecraft/:ref/ephemeris) rather than looking it up by NORAD id.
       "orbit" => %{"source" => "accepts_ephemeris_upload"},
-      "delivery" => %{
-        "kinds" => ["realtime_stream"],
-        "protocols" => ["tcp"],
-        "directions" => ["downlink", "uplink"]
-      }
+      "delivery" => delivery_capabilities()
     }
+  end
+
+  defp delivery_capabilities do
+    delivery = %{
+      "kinds" => ["realtime_stream"],
+      "protocols" => ["tcp"],
+      "directions" => ["downlink", "uplink"]
+    }
+
+    if DeliveryTLS.enabled?(), do: Map.put(delivery, "delivery_auth", "mtls"), else: delivery
   end
 
   defp validate_member(behavior, key, allowed) do

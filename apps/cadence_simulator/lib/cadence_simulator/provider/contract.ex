@@ -6,7 +6,16 @@ defmodule CadenceSimulator.Provider.Contract do
   import Plug.Conn
 
   @version "1.0"
-  @sensitive_fragments ["credential", "password", "private_key", "secret", "token"]
+  @sensitive_fragments [
+    "certificate_pem",
+    "credential",
+    "csr_pem",
+    "password",
+    "private_key",
+    "secret",
+    "server_ca_pem",
+    "token"
+  ]
 
   @spec version() :: binary()
   def version, do: @version

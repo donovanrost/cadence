@@ -5,7 +5,7 @@ import { allow, expect, test } from "./support/fixtures.ts";
 import { expectNoFalseSuccess, expectSaid, WORDS } from "./support/outcomes.ts";
 
 // CP2 · Contact planning policy (fe-setup). Saving creates a pending version that another admin
-// approves or rejects. The seeded policy (dev/reflect_orbital_planning.exs): 48 h horizon,
+// approves or rejects. The seeded policy (dev/seed/planning.exs): 48 h horizon,
 // 1,000 contacts per plan.
 const screen = missionPath("setup/contact-planning/policy");
 // GET /contact-planning (summary) isn't built yet; the page copes, the browser logs the 404.

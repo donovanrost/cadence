@@ -62,8 +62,6 @@ function snapshot(path: string, mission: string | null = null) {
       organization: { organization_id: "org-1", display_name: "Operations" },
       organizations: [],
       capabilities: new Array<string>(),
-      notifications: [],
-      unread_count: 0,
       csrf_token: "csrf",
       mission: mission ? { mission_id: mission, display_name: mission, slug: mission } : null,
       dashboard_navigation: { starred: [], recent: [] },
