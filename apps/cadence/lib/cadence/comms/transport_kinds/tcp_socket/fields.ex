@@ -51,7 +51,7 @@ defmodule Cadence.Comms.TransportKinds.TCPSocket.Fields do
     case PeerAddresses.normalize(value) do
       {:ok, []} -> {:error, @allowlist_required}
       {:ok, entries} -> {:ok, entries}
-      {:error, message} -> {:error, "Allowed source addresses: " <> message}
+      {:error, _reason, message} -> {:error, "Allowed source addresses: " <> message}
     end
   end
 
