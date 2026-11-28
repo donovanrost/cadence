@@ -1,7 +1,7 @@
 # Frontend code standard
 
-This is the agreed standard for authored frontend code: applications, domain modules,
-shared packages, tests, and tools. Apply it to new code and substantive refactors. Existing
+This is the agreed standard for authored frontend code: the console, the `apogee-ui` kit,
+tests, and tools. Apply it to new code and substantive refactors. Existing
 violations are migration work; their presence does not establish a convention to copy.
 
 Types should express the rules that callers must follow. Prefer simple, readable contracts
@@ -57,12 +57,12 @@ Keep ordinary primitives where a distinction would add no useful protection.
 
 ## Decode external data at boundaries
 
-Network responses, persisted browser data, and remote-module exports enter as `unknown`.
+Network responses and persisted browser data enter as `unknown`.
 Decode each value at its meaningful boundary, then pass a precise value to feature code.
 Derive static types from runtime schemas or composable readers where practical, so there is
-one definition of the accepted shape. The existing
-[communications form readers](../modules/communications/src/shared/form-validation.ts)
-illustrate inferred reader output; domain validation stays with its owning module.
+one definition of the accepted shape. The console's
+[shared entity readers](../apps/console/src/api/entities.ts) illustrate inferred reader output;
+domain validation stays with its owning feature.
 
 Validate identity, scope, versions, bounds, and evidence relationships as well as structure.
 Preserve distinctions that matter to the protocol, including exact numeric text and missing
@@ -213,9 +213,7 @@ rules, package tests and root tools. Each shared test suite has one aggregate ow
 does not run the complete frontend gates, and Elixir tests remain outside frontend-only
 acceptance.
 
-The cleanup plan records verification and completion for its findings 6–12. The
-[Vue quality follow-up](vue-quality-followup.md) implements the deferred behavior findings and
-records their separate validation; stricter types alone do not close behavior findings.
+Stricter types alone do not close behavior findings; a behavior fix needs its own test.
 
 Compiler and framework references:
 
