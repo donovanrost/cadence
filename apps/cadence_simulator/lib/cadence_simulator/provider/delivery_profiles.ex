@@ -1,7 +1,7 @@
 defmodule CadenceSimulator.Provider.DeliveryProfiles do
   @moduledoc "Provider-owned delivery profiles exposed by a simulator run."
 
-  alias CadenceSimulator.Provider.{Contract, Ids, ServiceProfiles, Store}
+  alias CadenceSimulator.Provider.{Contract, DeliveryTLS, Ids, ServiceProfiles, Store}
 
   @directions ["downlink", "uplink", "bidirectional"]
   @delivery_kinds ["realtime_stream", "object_delivery", "message_bus", "provider_managed"]
@@ -116,6 +116,7 @@ defmodule CadenceSimulator.Provider.DeliveryProfiles do
          {:ok, frame_bytes} <- positive_integer(framing["frame_bytes"], "framing.frame_bytes"),
          {:ok, operator_summary} <-
            optional_provisioning_text(attrs, "operator_summary", @summary[direction]),
+         {:ok, auth} <- provisioned_auth(run, attrs, direction),
          {:ok, extensions} <- provisioning_object(attrs, "extensions", %{}) do
       service_refs = compatible_service_refs(run, direction)
 
@@ -123,7 +124,7 @@ defmodule CadenceSimulator.Provider.DeliveryProfiles do
         {:error, {:invalid, "no compatible active Service Profile is available"}}
       else
         {:ok,
-         %{
+         Map.merge(auth, %{
            "display_name" => display_name,
            "client_reference" => client_reference,
            "direction" => direction,
@@ -142,7 +143,7 @@ defmodule CadenceSimulator.Provider.DeliveryProfiles do
            "supported_service_profile_refs" => service_refs,
            "operator_summary" => operator_summary,
            "extensions" => extensions
-         }}
+         })}
       end
     end
   end
@@ -179,7 +180,31 @@ defmodule CadenceSimulator.Provider.DeliveryProfiles do
       "created_at" => now,
       "updated_at" => now
     }
+    |> put_delivery_auth(request)
   end
+
+  defp provisioned_auth(run, attrs, direction) do
+    with {:ok, auth} <-
+           delivery_auth(attrs["delivery_auth"], direction, "realtime_stream", attrs["egress"]) do
+      resolve_provisioned_auth(run["id"], auth)
+    end
+  end
+
+  defp resolve_provisioned_auth(run_id, %{"delivery_credential_ref" => ref} = auth) do
+    if DeliveryTLS.available?({run_id, ref}),
+      do: {:ok, auth},
+      else: {:error, {:invalid, "delivery credential is unavailable in this provider run"}}
+  end
+
+  defp resolve_provisioned_auth(_run_id, auth), do: {:ok, auth}
+
+  defp put_delivery_auth(profile, %{"delivery_auth" => "mtls", "delivery_credential_ref" => ref}) do
+    profile
+    |> Map.put("delivery_auth", "mtls")
+    |> put_in(["egress", "delivery_credential_ref"], ref)
+  end
+
+  defp put_delivery_auth(profile, _request), do: profile
 
   # (#990, DECISIONS #115) The addresses the simulator connects to Cadence from, which Cadence
   # allows on its listening endpoint. It runs next to Cadence, so loopback by default; a deployment
@@ -281,6 +306,7 @@ defmodule CadenceSimulator.Provider.DeliveryProfiles do
          # (#990) A seeded profile connects from where the simulator does, unless it says otherwise.
          {:ok, egress} <-
            object(profile, "egress", %{"source_addresses" => source_addresses()}, index),
+         {:ok, auth} <- delivery_auth(profile["delivery_auth"], direction, delivery_kind, egress),
          {:ok, extensions} <- object(profile, "extensions", %{}, index) do
       {:ok,
        %{
@@ -295,12 +321,25 @@ defmodule CadenceSimulator.Provider.DeliveryProfiles do
          "diagnostics" => diagnostics,
          "egress" => egress,
          "extensions" => extensions
-       }}
+       }
+       |> put_delivery_auth(auth)}
     end
   end
 
   defp normalize_profile(_profile, index),
     do: {:error, {:invalid, "delivery_profiles[#{index}] must be an object"}}
+
+  defp delivery_auth(auth, _direction, _kind, _egress) when auth in [nil, "plaintext"],
+    do: {:ok, %{}}
+
+  defp delivery_auth("mtls", "downlink", "realtime_stream", %{"delivery_credential_ref" => ref}) do
+    if DeliveryTLS.valid_reference?(ref),
+      do: {:ok, %{"delivery_auth" => "mtls", "delivery_credential_ref" => ref}},
+      else: {:error, {:invalid, "delivery_credential_ref is invalid"}}
+  end
+
+  defp delivery_auth(_auth, _direction, _kind, _egress),
+    do: {:error, {:invalid, "delivery_auth is invalid"}}
 
   defp required_text(map, key, index) do
     case map[key] do

@@ -4,8 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./ops-workspace": "./src/ops-workspace/index.ts",
-    "./auth-and-navigation": "./src/auth-and-navigation/index.ts"
+    "./ops-workspace": "./src/ops-workspace/index.ts"
   },
   "scripts": {
     "dev": "vp dev",

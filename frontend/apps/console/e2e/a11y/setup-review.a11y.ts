@@ -25,7 +25,7 @@ const SETUP_SCREENS: readonly (readonly [string, string])[] = [
 ];
 
 const person = { id: "user_review_check", kind: "user", name: "QA Org Admin" };
-/** A seeded spacecraft (dev/reflect_orbital_demo.exs), as the sweep uses. */
+/** A seeded spacecraft (dev/seed/earendil.exs), as the sweep uses. */
 const SPACECRAFT = "spacecraft-earendil-001";
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>

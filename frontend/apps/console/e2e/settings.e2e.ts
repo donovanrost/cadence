@@ -6,8 +6,8 @@ import type { Page } from "@playwright/test";
 // Setup › Settings (director 11-15): a mission's pass review value saves, persists across a reload,
 // and goes back to the organization's value. The only browser test of settings. It writes one
 // mission-level override ('A pass counts as realized at') and always resets it, in afterEach too,
-// so a failed run leaves the mission inheriting again. Locally qa points it at a QA mission
-// (E2E_SETTINGS_MISSION_SLUG=qa-mission-23565); CI's seed only has the demo mission.
+// so a failed run leaves the mission inheriting again. Point it at a QA mission with
+// E2E_SETTINGS_MISSION_SLUG=qa-mission-23565; the REST seed creates both QA missions in CI.
 const missionSlug = process.env["E2E_SETTINGS_MISSION_SLUG"] ?? DEMO.missionSlug;
 const screen = `/console/${DEMO.organizationSlug}/${missionSlug}/setup/settings/cadence.pass_review`;
 const FIELD = "A pass counts as realized at";

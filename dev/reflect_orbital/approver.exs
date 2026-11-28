@@ -49,7 +49,6 @@ defmodule Cadence.Dev.ReflectOrbital.Approver do
   def approve_route_changes(:applied, %Scope{}, _mission_id), do: :applied
 
   def approve_route_changes({:in_review, id, version}, %Scope{} = scope, mission_id) do
-    # TODO(#745, #752): review through a second admin's REST session from the dev invitation.
     case Configuration.review(scope, mission_id, id, :approve, %{
            comment: "Approve the seeded extra routes",
            expected_version: version

@@ -1,5 +1,14 @@
 import Config
 
+if config_env() == :dev do
+  if directory = System.get_env("CADENCE_DEV_DELIVERY_TLS_DIRECTORY") do
+    config :cadence_simulator,
+      delivery_tls_backend:
+        {CadenceSimulator.Provider.DeliveryTLSFileBackend, :resolve,
+         [Path.join(directory, "provider")]}
+  end
+end
+
 if config_env() != :test do
   enabled? =
     System.get_env("CADENCE_SIMULATOR_HTTP_ENABLED", "false")

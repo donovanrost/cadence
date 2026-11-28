@@ -27,10 +27,6 @@ defmodule CadenceWeb.HostContext do
       nav_context: assigns[:nav_context],
       nav_item: assigns[:nav_item],
       ops_nav_item: value(assigns, :ops_nav_item, :dashboards),
-      # #709: notices moved to the console (Account); the legacy host's bell reads empty until
-      # #668 deletes the host and this context.
-      unread_count: 0,
-      notifications: [],
       fleet_health: fleet_health(assigns[:fleet_health]),
       ops_context: ops_context(assigns[:ops_context]),
       dashboard_author: value(assigns, :dashboard_author?, false),
