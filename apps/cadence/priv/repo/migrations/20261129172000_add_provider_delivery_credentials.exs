@@ -67,5 +67,47 @@ defmodule Cadence.Repo.Migrations.AddProviderDeliveryCredentials do
           "generation > 0 AND ((state = 'current' AND overlap_ends_at IS NULL AND revoked_at IS NULL) OR (state = 'previous' AND overlap_ends_at IS NOT NULL AND revoked_at IS NULL) OR (state = 'revoked' AND revoked_at IS NOT NULL))"
       )
     )
+
+    execute(
+      """
+      CREATE FUNCTION cadence_provider_delivery_terminal() RETURNS trigger
+      LANGUAGE plpgsql AS $$
+      BEGIN
+        RAISE EXCEPTION 'provider delivery credential records cannot be removed or changed after revocation or retirement'
+          USING ERRCODE = 'check_violation';
+      END;
+      $$
+      """,
+      "DROP FUNCTION cadence_provider_delivery_terminal()"
+    )
+
+    protect_terminal_records("provider_delivery_credentials", "OLD.retired_at IS NOT NULL")
+    protect_terminal_records("provider_delivery_certificate_generations", "OLD.state = 'revoked'")
+  end
+
+  defp protect_terminal_records(table, terminal) do
+    execute(
+      """
+      CREATE TRIGGER delivery_terminal_update BEFORE UPDATE ON #{table}
+      FOR EACH ROW WHEN (#{terminal}) EXECUTE FUNCTION cadence_provider_delivery_terminal()
+      """,
+      "DROP TRIGGER delivery_terminal_update ON #{table}"
+    )
+
+    execute(
+      """
+      CREATE TRIGGER delivery_prevent_delete BEFORE DELETE ON #{table}
+      FOR EACH ROW EXECUTE FUNCTION cadence_provider_delivery_terminal()
+      """,
+      "DROP TRIGGER delivery_prevent_delete ON #{table}"
+    )
+
+    execute(
+      """
+      CREATE TRIGGER delivery_prevent_truncate BEFORE TRUNCATE ON #{table}
+      FOR EACH STATEMENT EXECUTE FUNCTION cadence_provider_delivery_terminal()
+      """,
+      "DROP TRIGGER delivery_prevent_truncate ON #{table}"
+    )
   end
 end

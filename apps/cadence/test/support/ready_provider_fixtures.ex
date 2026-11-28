@@ -8,11 +8,11 @@ defmodule Cadence.ReadyProviderFixtures do
   alias Cadence.GroundNetworks
   alias Cadence.GroundNetworks.MissionProvider
 
-  def persist_ready_provider!(organization_id, mission_id) do
+  def persist_ready_provider!(organization_id, mission_id, attrs \\ %{}) do
     now = ~U[2026-07-14 12:00:00.000000Z]
 
     provider =
-      MissionProvider.new(%{
+      %{
         mission_id: mission_id,
         display_name: "Simulator",
         provider_type: :simulator,
@@ -61,7 +61,9 @@ defmodule Cadence.ReadyProviderFixtures do
             ]
           }
         }
-      })
+      }
+      |> Map.merge(attrs)
+      |> MissionProvider.new()
 
     {:ok, provider} = GroundNetworks.persist_provider(organization_id, provider)
     provider

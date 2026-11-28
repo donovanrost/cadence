@@ -16,9 +16,11 @@ defmodule Cadence.DeliveryCredentialFixtures do
   @rsa {1, 2, 840, 113_549, 1, 1, 1}
   @rsa_sha256 {1, 2, 840, 113_549, 1, 1, 11}
 
-  def issuer_options do
+  def issuer_options(opts \\ []) do
+    root_options = Keyword.put(opts, :key, {:namedCurve, @p256})
+
     %{cert: cert, key: key} =
-      :public_key.pkix_test_root_cert(~c"Test delivery issuer", key: {:namedCurve, @p256})
+      :public_key.pkix_test_root_cert(~c"Test delivery issuer", root_options)
 
     [
       issuer_reference: "test-delivery-issuer",

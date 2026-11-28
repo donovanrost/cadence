@@ -8,6 +8,7 @@ defmodule Cadence.GroundNetworks.ProviderDeliveryCredentials do
   import Ecto.Query
 
   alias Cadence.Auth.{Policy, Scope}
+  alias Cadence.Comms.{Transport, TransportStore}
   alias Cadence.GroundNetworks.{MissionProviders, ProviderAccountGrants, ProviderAccounts}
   alias Cadence.GroundNetworks.{ProviderAudit, ProviderAuditEntry}
   alias Cadence.GroundNetworks.ProviderDeliveryCredentials.{CredentialRow, GenerationRow, Issuer}
@@ -16,7 +17,11 @@ defmodule Cadence.GroundNetworks.ProviderDeliveryCredentials do
   alias Cadence.Repo
 
   @overlap_hours 24
-  @reasons ~w(initial_enrollment scheduled_rotation suspected_compromise retired_binding end_overlap operator_requested)
+  @reason_codes %{
+    issue: ~w(initial_enrollment),
+    rotate: ~w(scheduled_rotation suspected_compromise operator_requested),
+    revoke: ~w(suspected_compromise retired_binding end_overlap operator_requested)
+  }
 
   def issue(scope, mission, provider, binding, params, opts \\ []),
     do: enroll(scope, mission, provider, binding, params, opts, :issue)
@@ -36,8 +41,8 @@ defmodule Cadence.GroundNetworks.ProviderDeliveryCredentials do
 
   def revoke(%Scope{} = scope, mission, provider, binding, params) do
     with :ok <- authorize(scope, mission, :revoke),
-         {:ok, reason} <- reason(params),
-         {:ok, target} <- revocation_target(params) do
+         {:ok, reason} <- reason(:revoke, params),
+         {:ok, target} <- revocation_target(params, reason) do
       Repo.transact(fn ->
         persist_revocation(scope, mission, provider, binding, target, reason)
       end)
@@ -56,7 +61,7 @@ defmodule Cadence.GroundNetworks.ProviderDeliveryCredentials do
   defp enroll(%Scope{} = scope, mission, provider_id, binding, params, opts, action) do
     with :ok <- authorize(scope, mission, action),
          :ok <- validate_binding(binding),
-         {:ok, reason} <- reason(params),
+         {:ok, reason} <- reason(action, params),
          {:ok, expected} <- expected_generation(action, params),
          {:ok, key} <- Issuer.public_key(params["csr_pem"]) do
       enrollment = %{action: action, key: key, expected: expected, opts: opts, reason: reason}
@@ -69,19 +74,36 @@ defmodule Cadence.GroundNetworks.ProviderDeliveryCredentials do
   end
 
   defp persist_enrollment(scope, mission, provider_id, binding, enrollment) do
-    %{action: action, key: key, expected: expected, opts: opts, reason: reason} = enrollment
+    %{action: action, reason: reason} = enrollment
+    org = scope.organization_id
 
-    with {:ok, provider} <- live_provider(scope.organization_id, mission, provider_id),
+    with {:ok, provider} <- live_provider(org, mission, provider_id),
+         :ok <- require_live_binding(org, mission, provider_id, binding),
          {:ok, credential} <- enrollment_binding(scope, provider, binding, action),
          :ok <- validate_provider(credential, provider),
-         {:ok, leaf} <- install_leaf(credential, action, key, expected, opts),
-         {:ok, _} <- audit(scope, credential, action, reason, [leaf.fingerprint]) do
+         {:ok, leaf, revoked} <- install_leaf(credential, enrollment),
+         {:ok, _} <- audit(scope, credential, action, reason, [leaf.fingerprint | revoked]) do
       {:ok,
        %{
          credential: summarize(credential, generations(credential)),
          certificate_pem: leaf.certificate_pem,
          issuer_certificate_pem: leaf.issuer_certificate_pem
        }}
+    end
+  end
+
+  defp require_live_binding(org, mission, provider_id, binding) do
+    case TransportStore.lock_current_transport(org, mission, binding) do
+      {:ok,
+       %Transport{
+         origin: :provider_managed,
+         lifecycle_state: :active,
+         mission_provider_id: ^provider_id
+       }} ->
+        :ok
+
+      _unavailable ->
+        {:error, :delivery_binding_unavailable}
     end
   end
 
@@ -124,7 +146,8 @@ defmodule Cadence.GroundNetworks.ProviderDeliveryCredentials do
     )
   end
 
-  defp install_leaf(credential, action, key, expected, opts) do
+  defp install_leaf(credential, enrollment) do
+    %{action: action, key: key, expected: expected, opts: opts, reason: reason} = enrollment
     now = DateTime.utc_now()
     generations = live_generations(credential)
     current = Enum.find(generations, &(&1.state == :current))
@@ -136,9 +159,9 @@ defmodule Cadence.GroundNetworks.ProviderDeliveryCredentials do
     with :ok <- allow_enrollment(action, current, expected),
          :ok <- refuse_reused_key(key_fingerprint),
          {:ok, leaf} <- Issuer.issue(key, credential.credential_ref, now, issuer_options(opts)),
-         :ok <- advance_overlap(current, previous, now),
+         {:ok, revoked} <- advance_overlap(reason, current, previous, now),
          :ok <- insert_generation(credential, generation, leaf, key_fingerprint) do
-      {:ok, leaf}
+      {:ok, leaf, revoked}
     end
   end
 
@@ -192,18 +215,25 @@ defmodule Cadence.GroundNetworks.ProviderDeliveryCredentials do
   defp issuer_options(opts),
     do: Keyword.merge(Application.get_env(:cadence, :provider_delivery_issuer, []), opts)
 
-  defp advance_overlap(nil, _previous, _now), do: :ok
+  defp advance_overlap("suspected_compromise", current, previous, now),
+    do: deny_generations(Enum.reject([current, previous], &is_nil/1), now)
 
-  defp advance_overlap(current, previous, now) do
-    with {:ok, _} <- deny_generation(previous, now),
+  defp advance_overlap(_reason, nil, _previous, _now), do: {:ok, []}
+
+  defp advance_overlap(_reason, current, previous, now) do
+    cutoff = Enum.min([current.expires_at, DateTime.add(now, @overlap_hours, :hour)], DateTime)
+    {microsecond, _precision} = cutoff.microsecond
+    cutoff = %{cutoff | microsecond: {microsecond, 6}}
+
+    with {:ok, revoked} <- deny_generation(previous, now),
          {:ok, _} <-
            Repo.update(
              Ecto.Changeset.change(current,
                state: :previous,
-               overlap_ends_at: DateTime.add(now, @overlap_hours, :hour)
+               overlap_ends_at: cutoff
              )
            ) do
-      :ok
+      {:ok, Enum.map(List.wrap(revoked), & &1.fingerprint)}
     end
   end
 
@@ -359,14 +389,22 @@ defmodule Cadence.GroundNetworks.ProviderDeliveryCredentials do
     })
   end
 
-  defp reason(%{"reason" => reason}) when reason in @reasons, do: {:ok, reason}
-  defp reason(_params), do: {:error, :invalid_delivery_credential_reason}
+  defp reason(action, %{"reason" => reason}) do
+    if reason in Map.fetch!(@reason_codes, action),
+      do: {:ok, reason},
+      else: {:error, :invalid_delivery_credential_reason}
+  end
+
+  defp reason(_action, _params), do: {:error, :invalid_delivery_credential_reason}
 
   defp validate_binding(id) do
     if Ids.valid_identifier?(id), do: :ok, else: {:error, :invalid_delivery_binding}
   end
 
-  defp revocation_target(%{"fingerprint" => fingerprint} = params)
+  defp revocation_target(%{"keep_previous" => true}, "suspected_compromise"),
+    do: {:error, :invalid_delivery_revocation_target}
+
+  defp revocation_target(%{"fingerprint" => fingerprint} = params, _reason)
        when is_binary(fingerprint) and byte_size(fingerprint) == 64 do
     case Map.get(params, "keep_previous", false) do
       keep when is_boolean(keep) -> {:ok, {fingerprint, keep}}
@@ -374,13 +412,14 @@ defmodule Cadence.GroundNetworks.ProviderDeliveryCredentials do
     end
   end
 
-  defp revocation_target(%{"fingerprint" => _}), do: {:error, :invalid_delivery_revocation_target}
-
-  defp revocation_target(%{"keep_previous" => _}),
+  defp revocation_target(%{"fingerprint" => _}, _reason),
     do: {:error, :invalid_delivery_revocation_target}
 
-  defp revocation_target(%{"target" => "binding"}), do: {:ok, :binding}
-  defp revocation_target(_params), do: {:error, :invalid_delivery_revocation_target}
+  defp revocation_target(%{"keep_previous" => _}, _reason),
+    do: {:error, :invalid_delivery_revocation_target}
+
+  defp revocation_target(%{"target" => "binding"}, _reason), do: {:ok, :binding}
+  defp revocation_target(_params, _reason), do: {:error, :invalid_delivery_revocation_target}
 
   defp check_keep_previous(%{state: :current}, _), do: :ok
   defp check_keep_previous(_target, false), do: :ok

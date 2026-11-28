@@ -51,14 +51,26 @@ defmodule Cadence.Comms.TransportStore do
 
   defp store_version(transport, opts) do
     Repo.transact(fn ->
-      Repo.query!("SELECT pg_advisory_xact_lock(hashtext($1))", [
-        "transport_version:#{transport.mission_id}:#{transport.transport_id}"
-      ])
+      lock_transport_version(transport.mission_id, transport.transport_id)
 
       with :ok <- authorize_delivery_transition(transport, opts) do
         insert_transport(transport)
       end
     end)
+  end
+
+  @doc "Fetches the latest active transport under its version-write lock in the caller's transaction."
+  @spec lock_current_transport(binary(), binary(), binary()) ::
+          {:ok, Transport.t()} | {:error, term()}
+  def lock_current_transport(organization_id, mission_id, transport_id) do
+    lock_transport_version(mission_id, transport_id)
+    fetch_transport(organization_id, mission_id, transport_id)
+  end
+
+  defp lock_transport_version(mission_id, transport_id) do
+    Repo.query!("SELECT pg_advisory_xact_lock(hashtext($1))", [
+      "transport_version:#{mission_id}:#{transport_id}"
+    ])
   end
 
   # TLS delivery is provisionable only after the inbound TLS gate lands. In particular, a raw

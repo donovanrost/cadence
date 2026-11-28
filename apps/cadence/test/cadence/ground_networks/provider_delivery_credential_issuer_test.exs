@@ -5,7 +5,8 @@ defmodule Cadence.GroundNetworks.ProviderDeliveryCredentialIssuerTest do
   alias Cadence.GroundNetworks.ProviderDeliveryCredentials.Issuer
 
   test "issues a bounded client-only certificate from the CSR public key and the server identity" do
-    opts = Fixtures.issuer_options()
+    issuer_id = :crypto.strong_rand_bytes(20)
+    opts = Fixtures.issuer_options(extensions: [{:Extension, {2, 5, 29, 14}, false, issuer_id}])
     assert {:ok, key} = Issuer.public_key(Fixtures.csr())
     now = DateTime.utc_now() |> DateTime.truncate(:second)
     assert {:ok, issued} = Issuer.issue(key, "delivery_credential_test", now, opts)
@@ -27,15 +28,35 @@ defmodule Cadence.GroundNetworks.ProviderDeliveryCredentialIssuerTest do
 
     assert elem(tbs, 7) == key
 
+    {:Validity, {:utcTime, not_before}, {:utcTime, _}} = elem(tbs, 5)
+
+    assert not_before ==
+             String.to_charlist(
+               Calendar.strftime(DateTime.add(now, -5, :minute), "%y%m%d%H%M%SZ")
+             )
+
+    {:OTPSubjectPublicKeyInfo, _, {:ECPoint, point}} = key
+
     assert elem(tbs, 10) == [
              {:Extension, {2, 5, 29, 19}, true, {:BasicConstraints, false, :asn1_NOVALUE}},
              {:Extension, {2, 5, 29, 15}, true, [:digitalSignature]},
-             {:Extension, {2, 5, 29, 37}, false, [{1, 3, 6, 1, 5, 5, 7, 3, 2}]}
+             {:Extension, {2, 5, 29, 37}, false, [{1, 3, 6, 1, 5, 5, 7, 3, 2}]},
+             {:Extension, {2, 5, 29, 14}, false, :crypto.hash(:sha, point)},
+             {:Extension, {2, 5, 29, 35}, false,
+              {:AuthorityKeyIdentifier, issuer_id, :asn1_NOVALUE, :asn1_NOVALUE}}
            ]
   end
 
   test "enforces proof of possession and the key floor" do
-    assert {:ok, _key} = Issuer.public_key(Fixtures.csr(key: {:rsa, 3072}))
+    assert {:ok, key} = Issuer.public_key(Fixtures.csr(key: {:rsa, 3072}))
+
+    assert {:ok, _leaf} =
+             Issuer.issue(
+               key,
+               "delivery_credential_rsa",
+               DateTime.utc_now(),
+               Fixtures.issuer_options()
+             )
 
     for csr <- [
           Fixtures.csr(key: {:rsa, 2048}),

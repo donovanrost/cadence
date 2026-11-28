@@ -20,7 +20,9 @@ defmodule Cadence.GroundNetworks.ProviderDeliveryCredentials.Issuer do
         attribute: :AttributeTypeAndValue,
         extension: :Extension,
         constraints: :BasicConstraints,
+        authority_key_id: :AuthorityKeyIdentifier,
         spki: :OTPSubjectPublicKeyInfo,
+        plain_spki: :SubjectPublicKeyInfo,
         key_algorithm: :PublicKeyAlgorithm,
         signature_algorithm: :SignatureAlgorithm
       ] do
@@ -33,6 +35,8 @@ defmodule Cadence.GroundNetworks.ProviderDeliveryCredentials.Issuer do
 
   @max_csr_bytes 16_384
   @leaf_lifetime_days 30
+  @clock_skew_minutes 5
+  @subject_key_id {2, 5, 29, 14}
   @ec {1, 2, 840, 10_045, 2, 1}
   @rsa {1, 2, 840, 113_549, 1, 1, 1}
   @curves [{1, 2, 840, 10_045, 3, 1, 7}, {1, 3, 132, 0, 34}, {1, 3, 132, 0, 35}]
@@ -84,8 +88,10 @@ defmodule Cadence.GroundNetworks.ProviderDeliveryCredentials.Issuer do
   def issue(subject_key, credential_ref, now, opts) do
     with {:ok, ca, ca_key} <- issuer_material(opts),
          {:ok, signature} <- issuer_signature(ca_key),
-         certificate(tbsCertificate: tbs_certificate(subject: issuer)) <-
+         certificate(tbsCertificate: ca_certificate) <-
            :public_key.pkix_decode_cert(ca, :otp) do
+      issuer = tbs_certificate(ca_certificate, :subject)
+      starts_at = DateTime.add(now, -@clock_skew_minutes, :minute)
       expires_at = now |> DateTime.add(@leaf_lifetime_days, :day) |> DateTime.truncate(:second)
 
       leaf =
@@ -98,7 +104,7 @@ defmodule Cadence.GroundNetworks.ProviderDeliveryCredentials.Issuer do
             {:rdnSequence,
              [[attribute(type: {2, 5, 4, 3}, value: {:utf8String, credential_ref})]]},
           subjectPublicKeyInfo: subject_key,
-          validity: validity(notBefore: pkix_time(now), notAfter: pkix_time(expires_at)),
+          validity: validity(notBefore: pkix_time(starts_at), notAfter: pkix_time(expires_at)),
           extensions: [
             extension(extnID: {2, 5, 29, 19}, critical: true, extnValue: constraints(cA: false)),
             extension(extnID: {2, 5, 29, 15}, critical: true, extnValue: [:digitalSignature]),
@@ -106,6 +112,16 @@ defmodule Cadence.GroundNetworks.ProviderDeliveryCredentials.Issuer do
               extnID: {2, 5, 29, 37},
               critical: false,
               extnValue: [{1, 3, 6, 1, 5, 5, 7, 3, 2}]
+            ),
+            extension(
+              extnID: @subject_key_id,
+              critical: false,
+              extnValue: identify_key(subject_key)
+            ),
+            extension(
+              extnID: {2, 5, 29, 35},
+              critical: false,
+              extnValue: authority_key_id(keyIdentifier: identify_issuer(ca_certificate))
             )
           ]
         )
@@ -131,6 +147,20 @@ defmodule Cadence.GroundNetworks.ProviderDeliveryCredentials.Issuer do
     _error -> {:error, :delivery_issuer_unavailable}
   catch
     :exit, _reason -> {:error, :delivery_issuer_unavailable}
+  end
+
+  defp identify_issuer(tbs_certificate(extensions: extensions, subjectPublicKeyInfo: key)) do
+    Enum.find_value(List.wrap(extensions), fn
+      extension(extnID: @subject_key_id, extnValue: identifier) -> identifier
+      _other -> nil
+    end) || identify_key(key)
+  end
+
+  defp identify_key(key) do
+    der = :public_key.pkix_encode(:OTPSubjectPublicKeyInfo, key, :otp)
+    plain_spki(subjectPublicKey: subject) = :public_key.der_decode(:SubjectPublicKeyInfo, der)
+    # RFC 5280 derives this identifier from the subjectPublicKey bit string.
+    :crypto.hash(:sha, subject)
   end
 
   defp decode_key(

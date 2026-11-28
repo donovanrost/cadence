@@ -1698,10 +1698,11 @@ forbidden`. Each answers with the provider's row as the list shows it.
 #### Provider delivery credentials (#991)
 
 Use `/api/v1/missions/:mission_id/providers/:provider_id/delivery-credentials/:binding_id`.
-The binding ID is the stable transport ID, shared across versions of that transport. The
-credential reference belongs to this mission provider, account grant and binding. These routes
-use the console mission pipeline and require a human administrator's session. Mutations also
-require the session's CSRF token.
+The binding ID is the stable transport ID, shared across versions of that transport. Issue and
+rotate require an active provider-managed transport in this mission, owned by the provider in
+the path. The credential reference belongs to that mission provider, account grant and binding.
+These routes use the console mission pipeline and require a human administrator's session.
+Mutations also require the session's CSRF token.
 
 | Method and suffix | Request and response |
 | --- | --- |
@@ -1718,18 +1719,24 @@ nullable `overlap_ends_at` and `revoked_at`. The read returns the current and pr
 records when present and the most recent revoked record, newest generation first. Dates use
 ISO 8601 UTC. A stale expected generation or transport version returns `409 version_conflict`.
 
-Use a reason from `initial_enrollment`, `scheduled_rotation`, `suspected_compromise`,
+Issue accepts `initial_enrollment`. Rotate accepts `scheduled_rotation`,
+`suspected_compromise` or `operator_requested`. Revoke accepts `suspected_compromise`,
 `retired_binding`, `end_overlap` or `operator_requested`. Downgrade accepts
 `provider_compatibility` or `operator_requested`. Reasons and actor identity are recorded in
-the provider audit trail. Revoking the current generation ends any overlap unless the operator
-explicitly sends `keep_previous: true`. Revoking a binding retires that binding permanently.
+the provider audit trail. A compromise rotation revokes both outgoing generations as it installs
+the replacement. Revoking the current generation also ends any overlap unless the operator
+explicitly sends `keep_previous: true` for a reason other than `suspected_compromise`. A
+compromise revocation with `keep_previous: true` returns `422 invalid_params`.
+Revoking a binding permanently retires that transport ID for enrollment. If the grant changes,
+retire the old binding and enroll against a new transport.
 
 The provider generates and retains the private key. Cadence verifies proof of possession,
 assigns the certificate subject and extensions, and returns the signed client certificate and
 issuer certificate for installation at the provider. Supported CSR keys are P-256, P-384,
-P-521 and RSA of at least 3072 bits, with SHA-256 or stronger signatures. The leaf expires
-within 30 days. Rotation retains the previous fingerprint for up to 24 hours, bounded by
-its certificate expiry. To enable issuance, set the application configuration
+P-521 and RSA of at least 3072 bits, with SHA-256 or stronger signatures. The leaf starts
+five minutes before issuance to allow for clock skew and expires within 30 days of issuance.
+A routine rotation retains the previous fingerprint for up to 24 hours, bounded by its
+certificate expiry. To enable issuance, set the application configuration
 `:cadence, :provider_delivery_issuer` with `issuer_reference` and a `secret_backend` that
 resolves purpose `provider_delivery_issuer` to `certificate_pem` and `private_key_pem`.
 Provision a dedicated deployment client CA in that backend.

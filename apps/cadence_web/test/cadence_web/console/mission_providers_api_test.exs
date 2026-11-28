@@ -4,12 +4,17 @@ defmodule CadenceWeb.Console.MissionProvidersAPITest do
 
   @moduletag :capture_log
 
+  import Cadence.ReadyProviderFixtures
+
   alias Cadence.Auth.{Scope, ServiceIdentity}
+  alias Cadence.Comms.{Transport, TransportStore}
   alias Cadence.Control.Providers, as: ControlProviders
   alias Cadence.DeliveryCredentialFixtures
   alias Cadence.GroundNetworks.{ProviderAccountGrants, ProviderAccounts, ProviderCredentials}
   alias Cadence.GroundNetworks.{ProviderAudit, ProviderError}
+  alias Cadence.Management.Transports
   alias Cadence.Platform.ScopedReadUpdates
+  alias Cadence.Repo
   alias Cadence.TestSupport.FakeProviderClient
   alias CadenceWeb.TestFixtures
 
@@ -106,9 +111,10 @@ defmodule CadenceWeb.Console.MissionProvidersAPITest do
 
   test "issues, rotates and terminally revokes a fingerprint under the same binding reference",
        c do
-    provider = create!(c)["id"]
+    provider = ready_binding_provider!(c)
+    binding = ready_binding!(c, provider)
     delivery_issuer!()
-    path = c.base <> "/#{provider}/delivery-credentials/downlink"
+    path = delivery_path(c, provider, binding)
     issue = %{"reason" => "initial_enrollment", "csr_pem" => DeliveryCredentialFixtures.csr()}
 
     assert %{
@@ -123,6 +129,13 @@ defmodule CadenceWeb.Console.MissionProvidersAPITest do
 
     assert [%{"state" => "current", "generation" => 1, "fingerprint" => first}] =
              credential["generations"]
+
+    first_expiry = DateTime.utc_now() |> DateTime.add(30, :minute) |> DateTime.truncate(:second)
+
+    Repo.query!(
+      "UPDATE provider_delivery_certificate_generations SET expires_at = $1 WHERE fingerprint = $2",
+      [DateTime.to_naive(first_expiry), first]
+    )
 
     rotate = %{
       "reason" => "scheduled_rotation",
@@ -147,10 +160,22 @@ defmodule CadenceWeb.Console.MissionProvidersAPITest do
              }
            ] = generations
 
-    assert is_binary(overlap)
+    assert {:ok, cutoff, 0} = DateTime.from_iso8601(overlap)
+    assert DateTime.compare(cutoff, first_expiry) == :eq
     assert c |> admin() |> post(path <> "/rotate", rotate) |> json_response(409)
 
     revoke = %{"reason" => "suspected_compromise", "fingerprint" => current}
+
+    for {params, reason} <- [
+          {Map.put(revoke, "keep_previous", true), "invalid_delivery_revocation_target"},
+          {%{revoke | "reason" => "initial_enrollment"}, "invalid_delivery_credential_reason"}
+        ] do
+      assert %{"error" => %{"details" => %{"reason" => ^reason}}} =
+               c |> admin() |> post(path <> "/revoke", params) |> json_response(422)
+    end
+
+    assert %{"data" => %{"generations" => ^generations}} =
+             c |> admin() |> get(path) |> json_response(200)
 
     assert %{"data" => %{"generations" => revoked}} =
              c |> admin() |> post(path <> "/revoke", revoke) |> json_response(200)
@@ -208,10 +233,100 @@ defmodule CadenceWeb.Console.MissionProvidersAPITest do
     refute inspect(entries) =~ "BEGIN CERTIFICATE"
   end
 
-  test "delivery credential actions are scoped and person-session only", c do
-    provider = create!(c)["id"]
+  test "only a live provider-managed transport can enroll through its owning provider", c do
+    provider = ready_binding_provider!(c)
+    other_provider = ready_binding_provider!(c)
+    binding = ready_binding!(c, provider)
+    archived = ready_binding!(c, provider)
     delivery_issuer!()
-    path = c.base <> "/#{provider}/delivery-credentials/downlink/issue"
+
+    assert {:ok, _} =
+             TransportStore.archive_transport(c.scope.organization_id, c.mission_id, archived)
+
+    direct = direct_binding!(c)
+    issue = %{"reason" => "initial_enrollment", "csr_pem" => DeliveryCredentialFixtures.csr()}
+
+    for {candidate, id} <- [
+          {other_provider, binding},
+          {provider, archived},
+          {provider, direct},
+          {provider, "uncreated-transport"}
+        ] do
+      path = delivery_path(c, candidate, id)
+
+      assert %{"error" => %{"code" => "delivery_credential_not_found"}} =
+               c |> admin() |> post(path <> "/issue", issue) |> json_response(404)
+    end
+
+    path = delivery_path(c, provider, binding)
+
+    assert %{"error" => %{"details" => %{"reason" => "invalid_delivery_credential_reason"}}} =
+             c
+             |> admin()
+             |> post(path <> "/issue", %{issue | "reason" => "suspected_compromise"})
+             |> json_response(422)
+
+    assert %{"data" => %{"credential" => %{"provider_binding_id" => ^binding}}} =
+             c |> admin() |> post(path <> "/issue", issue) |> json_response(201)
+  end
+
+  test "compromise rotation retires both prior leaves in the same audited action", c do
+    provider = ready_binding_provider!(c)
+    path = delivery_path(c, provider, ready_binding!(c, provider))
+    delivery_issuer!()
+    issue = %{"reason" => "initial_enrollment", "csr_pem" => DeliveryCredentialFixtures.csr()}
+
+    assert %{"data" => %{"credential" => %{"generations" => [%{"fingerprint" => first}]}}} =
+             c |> admin() |> post(path <> "/issue", issue) |> json_response(201)
+
+    rotate = %{
+      "reason" => "scheduled_rotation",
+      "csr_pem" => DeliveryCredentialFixtures.csr(),
+      "expected_generation" => 1
+    }
+
+    assert %{"data" => %{"credential" => %{"generations" => [%{"fingerprint" => second} | _]}}} =
+             c |> admin() |> post(path <> "/rotate", rotate) |> json_response(200)
+
+    compromise = %{
+      "reason" => "suspected_compromise",
+      "csr_pem" => DeliveryCredentialFixtures.csr(),
+      "expected_generation" => 2
+    }
+
+    assert %{
+             "data" => %{
+               "credential" => %{
+                 "generations" => [
+                   %{"state" => "current", "generation" => 3, "fingerprint" => third},
+                   %{"state" => "revoked", "fingerprint" => ^second}
+                 ]
+               }
+             }
+           } = c |> admin() |> post(path <> "/rotate", compromise) |> json_response(200)
+
+    assert %{rows: [["revoked"], ["revoked"]]} =
+             Repo.query!(
+               "SELECT state FROM provider_delivery_certificate_generations WHERE fingerprint IN ($1, $2)",
+               [first, second]
+             )
+
+    [entry] =
+      ProviderAudit.list_entries(c.scope.organization_id,
+        mission_id: c.mission_id,
+        actions: ["provider_delivery_credential.rotate"],
+        limit: 1
+      )
+
+    assert entry.decision_document["reason"] == "suspected_compromise"
+    assert Enum.sort(entry.decision_document["fingerprints"]) == Enum.sort([first, second, third])
+  end
+
+  test "delivery credential actions are scoped and person-session only", c do
+    provider = ready_binding_provider!(c)
+    binding = ready_binding!(c, provider)
+    delivery_issuer!()
+    path = delivery_path(c, provider, binding) <> "/issue"
     params = %{"reason" => "initial_enrollment", "csr_pem" => DeliveryCredentialFixtures.csr()}
 
     assert %{"error" => %{"code" => "invalid_csrf"}} =
@@ -246,6 +361,56 @@ defmodule CadenceWeb.Console.MissionProvidersAPITest do
 
     assert outsider |> TestFixtures.member_conn() |> post(path, params) |> json_response(404)
   end
+
+  defp ready_binding_provider!(c) do
+    persist_ready_provider!(c.scope.organization_id, c.mission_id, %{
+      provider_account_id: c.grant.provider_account_id,
+      provider_account_version: 1,
+      provider_account_grant_id: c.grant.provider_account_grant_id,
+      provider_account_grant_version: c.grant.version,
+      credential_ref: "provider-credential-l12",
+      base_url: "http://simulator.test",
+      environment_ref: "run-alpha"
+    })
+  end
+
+  defp ready_binding!(c, provider) do
+    transport =
+      Transport.new(%{
+        mission_id: c.mission_id,
+        display_name: "Provider downlink",
+        origin: :provider_managed,
+        mission_provider_id: provider.provider_id,
+        mission_provider_version: provider.version,
+        service_profile_ref: %{"id" => "service-downlink", "version" => 3},
+        delivery_profile_ref: %{"id" => "delivery-cadence", "version" => 7}
+      })
+
+    {:ok, transport} = Transports.persist_transport(c.scope.organization_id, transport)
+    transport.transport_id
+  end
+
+  defp direct_binding!(c) do
+    transport =
+      Transport.new(%{
+        mission_id: c.mission_id,
+        display_name: "Direct downlink",
+        configuration: %{
+          "mode" => "listen",
+          "direction_capability" => "inbound",
+          "host" => "127.0.0.1",
+          "port" => 5101,
+          "framing_mode" => "raw",
+          "expected_peer_addresses" => ["127.0.0.1/32"]
+        }
+      })
+
+    {:ok, transport} = Transports.persist_transport(c.scope.organization_id, transport)
+    transport.transport_id
+  end
+
+  defp delivery_path(c, provider, binding),
+    do: c.base <> "/#{provider.provider_id}/delivery-credentials/#{binding}"
 
   defp delivery_issuer! do
     previous = Application.get_env(:cadence, :provider_delivery_issuer)
