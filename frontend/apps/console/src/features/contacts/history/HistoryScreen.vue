@@ -196,6 +196,7 @@ const clear = () => go({ spacecraft: undefined, station: undefined, state: undef
       ref="sheet"
       :title="sheetTitle"
       placement="side"
+      detail
       @closed="h.go({ contact: undefined })"
     >
       <HistoryDrawer

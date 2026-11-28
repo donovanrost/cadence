@@ -39,8 +39,20 @@ const props = withDefaults(
      * so the dialog is described by it. The id of that sentence; absent, no aria-describedby.
      */
     describedBy?: string | undefined;
+    /**
+     * A detail sheet beside what it details (a11y A3): a side sheet showing the row or point picked
+     * from a list or plot that stays on screen. Picking another one re-opens it (focus moves in, as
+     * for any side sheet), and closing returns focus to the one picked last, not the first.
+     */
+    detail?: boolean | undefined;
   }>(),
-  { width: "narrow", initialFocus: "footer button", placement: "center", dismissible: true },
+  {
+    width: "narrow",
+    initialFocus: "footer button",
+    placement: "center",
+    dismissible: true,
+    detail: false,
+  },
 );
 const emit = defineEmits<{ closed: [] }>();
 defineSlots<{ default(): unknown; footer?(): unknown }>();
@@ -65,11 +77,15 @@ const focusInitial = () =>
   )?.focus();
 /** Already open (only a side sheet can be: its page stays usable), the opener moves focus back in (ux a11y A3). */
 function open() {
+  const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   if (!dialog.value?.open) {
-    opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    opener = active;
     modal.value = props.placement !== "side" || phone();
     if (modal.value) dialog.value?.showModal();
     else dialog.value?.show();
+  } else if (props.detail && active && !dialog.value.contains(active)) {
+    // A3: a detail sheet re-opened by another pick returns focus to that pick on close.
+    opener = active;
   }
   void nextTick(focusInitial);
 }

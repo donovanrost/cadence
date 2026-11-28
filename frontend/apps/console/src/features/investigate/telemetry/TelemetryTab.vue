@@ -222,6 +222,7 @@ const latest = (p: (typeof all.value)[number]) =>
       <SampleAside
         v-if="sample.open.value && wide"
         wide
+        :pick="sample.sampleId.value ?? ''"
         :state="sampleRead"
         :title="sampleTitle"
         :at-label="atLabel"
@@ -380,6 +381,7 @@ const latest = (p: (typeof all.value)[number]) =>
     <SampleAside
       v-if="sample.open.value && !wide"
       :wide="false"
+      :pick="sample.sampleId.value ?? ''"
       :state="sampleRead"
       :title="sampleTitle"
       :at-label="atLabel"

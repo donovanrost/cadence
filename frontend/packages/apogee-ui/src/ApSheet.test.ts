@@ -101,6 +101,34 @@ describe("ApSheet", () => {
     elsewhere.remove();
   });
 
+  it("a detail sheet returns focus to the one picked last, not the first (ux a11y A3)", async () => {
+    const first = document.createElement("button");
+    const second = document.createElement("button");
+    document.body.append(first, second);
+    const wrapper = mount(ApSheet, {
+      attachTo: document.body,
+      props: { title: "Sample", placement: "side", initialFocus: "input", detail: true },
+      slots: { default: "<input aria-label='Name' />" },
+    });
+    const sheet = wrapper.vm as { open: () => void; close: () => void };
+    const input = wrapper.get("input").element;
+    first.focus();
+    sheet.open();
+    await nextTick();
+    // Another pick while it's open: focus moves in, and that pick becomes where Esc returns.
+    second.focus();
+    sheet.open();
+    await nextTick();
+    expect(document.activeElement).toBe(input);
+    expect(wrapper.get("dialog").attributes("aria-modal")).toBeUndefined();
+    sheet.close();
+    await nextTick();
+    expect(document.activeElement).toBe(second);
+    wrapper.unmount();
+    first.remove();
+    second.remove();
+  });
+
   it("is modal on a phone even as a side sheet, with a Close ✕ (design-language §9)", async () => {
     vi.stubGlobal("matchMedia", (query: string) => ({ matches: query.includes("max-width") }));
     const showModal = vi.spyOn(HTMLDialogElement.prototype, "showModal");

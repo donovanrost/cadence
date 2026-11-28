@@ -49,7 +49,7 @@ export function useSample(
       .replace({ query: { ...route.query, sample: undefined, received: undefined } })
       .catch((e: unknown) => console.error("Navigation failed", e));
   }
-  return { open, read, close };
+  return { open, read, close, sampleId };
 }
 
 /** True from 1100px (the console breakpoint), where the aside sits in T1's column (U80). */
