@@ -10,6 +10,7 @@ defmodule Cadence.GroupReleaseFixtures do
   alias Cadence.Commanding.Groups.{CommandGroup, GroupStore}
   alias Cadence.CommandMemberFixtures
   alias Cadence.Contacts.{Path, RealizedContact, ScheduledContact, TransportBinding}
+  alias Cadence.Ids
   alias Cadence.Jobs.Runner, as: JobRunner
   alias Cadence.SourceEndpoints.SourceEndpoint
   alias Cadence.Spacecraft
@@ -24,7 +25,7 @@ defmodule Cadence.GroupReleaseFixtures do
 
   # A queued group (approved; members queued in order) with one NOOP member per target listed.
   def armed_group!(c, targets) do
-    id = "command_group_release_" <> Integer.to_string(System.unique_integer([:positive]))
+    id = Ids.new("command_group_release")
 
     {:ok, _group} =
       GroupStore.insert_group(

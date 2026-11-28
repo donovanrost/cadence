@@ -10,6 +10,8 @@ defmodule Cadence.Commanding.ReleaseLaneTest do
     RequestQueueStore
   }
 
+  alias Cadence.Commanding.Groups.CommandGroupRow
+
   alias Cadence.CommandReviewFixtures
   alias Cadence.Missions.MissionRow
   alias Cadence.OperationalEvents.EventRow
@@ -347,7 +349,14 @@ defmodule Cadence.Commanding.ReleaseLaneTest do
       )
     end)
 
-    for schema <- [CommandQueueEntryRow, CommandRequestRow, EventRow, MissionEventRow, MissionRow] do
+    for schema <- [
+          CommandQueueEntryRow,
+          CommandRequestRow,
+          CommandGroupRow,
+          EventRow,
+          MissionEventRow,
+          MissionRow
+        ] do
       Repo.delete_all(
         from(row in schema, where: row.organization_id == ^c.org and row.mission_id == ^c.mission)
       )

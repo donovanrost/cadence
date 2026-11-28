@@ -12,6 +12,8 @@ defmodule Cadence.Commanding.ReleaseRecoveryConcurrencyTest do
     RequestQueueStore
   }
 
+  alias Cadence.Commanding.Groups.CommandGroupRow
+
   alias Cadence.CommandReviewFixtures
   alias Cadence.Control.Commanding, as: ControlCommanding
   alias Cadence.Missions.MissionRow
@@ -323,6 +325,7 @@ defmodule Cadence.Commanding.ReleaseRecoveryConcurrencyTest do
           CommandReleaseAttemptRow,
           CommandQueueEntryRow,
           CommandRequestRow,
+          CommandGroupRow,
           EventRow,
           MissionEventRow,
           MissionRow
