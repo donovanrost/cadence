@@ -15,7 +15,6 @@ defmodule Cadence.Dev.ReflectOrbital.Seed do
   alias Cadence.Dev.ReflectOrbital.Configuration
   alias Cadence.Dev.ReflectOrbital.Fixture, as: F
   alias Cadence.Dev.ReflectOrbital.Planning
-  alias Cadence.Dev.RouteChanges
   alias Cadence.GroundNetworks
 
   alias Cadence.GroundNetworks.{
@@ -29,6 +28,7 @@ defmodule Cadence.Dev.ReflectOrbital.Seed do
   alias Cadence.Missions.Mission
   alias Cadence.Organizations.Organization
   alias Cadence.{Repo, Spacecraft, SpacecraftType}
+  alias EarendilRouteChanges, as: RouteChanges
 
   @token_key "EARENDIL_DEMO_PROVIDER_TOKEN"
   @fleet_chunk 100

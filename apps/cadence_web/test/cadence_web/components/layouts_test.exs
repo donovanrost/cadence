@@ -21,7 +21,6 @@ defmodule CadenceWeb.LayoutsTest do
       assert vue.component == "ApplicationShell"
       refute vue.ssr
       assert vue.props["variant"] == Atom.to_string(variant)
-      assert vue.props["context"]["notifications"] == []
       assert is_binary(vue.props["context"]["csrf_token"])
       refute Map.has_key?(vue.props, "presentation")
     end

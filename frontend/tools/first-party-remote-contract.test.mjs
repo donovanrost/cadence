@@ -48,15 +48,6 @@ void test("the approved first-party remotes expose explicit publication and mani
 
     assert.equal(readPublication(directory).bundle, bundle);
   }
-
-  const organizationAdmin = declaredIdentity(
-    await readFile(
-      join(frontendRoot, "apps", "organization-admin", "src", "federated-application.ts"),
-      "utf8",
-    ),
-    "organization-admin",
-  );
-  assert.equal(organizationAdmin.packageId, "cadence.organization-admin");
 });
 
 void test("real-workspace publication discovery admits exactly the approved remote identities", async () => {

@@ -1,6 +1,8 @@
 defmodule QaRestMissions do
   @moduledoc "Creates the two QA missions, catalogs and pending fleet changes over REST."
 
+  alias EarendilRouteChanges, as: RouteChanges
+
   import EarendilRestClient, only: [request!: 3, request!: 4, request!: 5]
 
   @missions [
@@ -23,15 +25,19 @@ defmodule QaRestMissions do
   ]
   @metadata %{"fixture" => "apogee-qa-mission-v1"}
 
-  def seed(client, organization_id) do
+  def seed(client, approver, organization_id) do
     Enum.reduce(@missions, client, fn mission, client ->
       {client, mission_id} = ensure_mission(client, organization_id, mission)
       client = ensure_catalog(client, mission_id, mission)
-      client = ensure_fleet(client, mission_id, mission)
+      client = ensure_fleet(client, approver, mission_id, mission)
+      client = ensure_sources_and_apps(client, mission_id, mission)
 
       client =
         if mission.slug == "qa-mission-23565",
-          do: ensure_provider(client, organization_id, mission_id),
+          do:
+            client
+            |> ensure_provider(organization_id, mission_id)
+            |> ensure_direct_route(approver, mission_id, mission),
           else: client
 
       IO.puts("  #{mission.slug}: mission and catalog present")
@@ -108,41 +114,210 @@ defmodule QaRestMissions do
     end
   end
 
-  defp ensure_fleet(client, mission_id, mission) do
+  defp ensure_fleet(client, approver, mission_id, mission) do
     path = "/missions/#{mission_id}/config"
     {client, directory} = request!(client, :get, "/missions/#{mission_id}/spacecraft")
     present = MapSet.new(Enum.map(directory["spacecraft"], & &1["id"]))
     required = Enum.map(mission.craft, fn {index, _scid} -> craft_id(mission, index) end)
     {client, config} = request!(client, :get, path)
 
-    cond do
-      Enum.all?(required, &MapSet.member?(present, &1)) ->
-        client
+    client =
+      cond do
+        Enum.all?(required, &MapSet.member?(present, &1)) ->
+          client
 
-      config["change_set"] ->
-        IO.puts("  #{mission.slug}: an open configuration change set awaits review")
-        client
+        config["change_set"] ->
+          IO.puts("  #{mission.slug}: an open configuration change set awaits review")
+          client
 
-      true ->
-        ops = [profile_op(mission) | Enum.map(mission.craft, &craft_op(mission, &1))]
-        {client, preview} = request!(client, :post, path <> "/preview", %{ops: ops})
-        unless preview["verdict"] == "go", do: raise("QA fleet preview: #{inspect(preview)}")
+        true ->
+          ops = [profile_op(mission) | Enum.map(mission.craft, &craft_op(mission, &1))]
+          {client, preview} = request!(client, :post, path <> "/preview", %{ops: ops})
+          unless preview["verdict"] == "go", do: raise("QA fleet preview: #{inspect(preview)}")
 
-        {client, stage} =
-          request!(client, :post, path <> "/stage", %{
-            summary: "Seed #{mission.name} profile and spacecraft",
-            source: %{kind: "dev_seed", name: mission.slug},
-            ops: ops
+          {client, stage} =
+            request!(client, :post, path <> "/stage", %{
+              summary: "Seed #{mission.name} profile and spacecraft",
+              source: %{kind: "dev_seed", name: mission.slug},
+              ops: ops
+            })
+
+          {client, result} =
+            request!(client, :post, path <> "/change-sets/#{stage["change_set_id"]}/submit", %{
+              reason: "Seed #{mission.name}",
+              expected_version: stage["version"]
+            })
+
+          IO.puts("  #{mission.slug}: fleet change set #{result["state"]}")
+          client
+      end
+
+    approve_change_set(client, approver, mission_id)
+    client
+  end
+
+  defp approve_change_set(client, approver, mission_id) do
+    path = "/missions/#{mission_id}/config"
+    {client, %{"change_set" => set}} = request!(client, :get, path)
+
+    set =
+      if set && set["state"] == "open" do
+        {_, submitted} =
+          request!(client, :post, path <> "/change-sets/#{set["id"]}/submit", %{
+            reason: "Seed QA fleet",
+            expected_version: set["version"]
           })
 
-        {client, result} =
-          request!(client, :post, path <> "/change-sets/#{stage["change_set_id"]}/submit", %{
-            reason: "Seed #{mission.name}",
-            expected_version: stage["version"]
-          })
+        submitted
+      else
+        set
+      end
 
-        IO.puts("  #{mission.slug}: fleet change set #{result["state"]}")
+    if set && set["state"] == "in_review" do
+      {_, result} =
+        request!(
+          approver,
+          :post,
+          path <> "/change-sets/#{set["change_set_id"] || set["id"]}/review",
+          %{
+            decision: "approve",
+            expected_version: set["version"]
+          }
+        )
+
+      unless result["state"] == "applied", do: raise("QA fleet approval failed")
+    end
+  end
+
+  defp ensure_sources_and_apps(client, mission_id, mission) do
+    Enum.reduce(mission.craft, client, fn {index, _scid}, client ->
+      id = craft_id(mission, index)
+      path = "/missions/#{mission_id}/spacecraft/#{id}"
+      {client, sources} = request!(client, :get, path <> "/source-endpoints")
+      source_ref = "QA MISSION #{String.replace_prefix(mission.slug, "qa-mission-", "")}-#{index}"
+
+      client =
+        if Enum.any?(sources, &(&1["source_ref"] == source_ref)) do
+          client
+        else
+          {client, _created} =
+            request!(client, :post, path <> "/source-endpoints", %{
+              source_endpoint: %{
+                source_ref: source_ref,
+                display_name: "#{source_ref} TT&C",
+                metadata: @metadata
+              }
+            })
+
+          client
+        end
+
+      {client, listing} = request!(client, :get, path <> "/apps")
+      decom = Enum.find(listing["apps"], &(&1["key"] == "telemetry_decom"))
+
+      if decom && decom["state"] == "installed" do
         client
+      else
+        {client, _installed} =
+          request!(client, :post, path <> "/apps/telemetry_decom/install", %{})
+
+        client
+      end
+    end)
+  end
+
+  defp ensure_direct_route(client, approver, mission_id, mission) do
+    craft_id = craft_id(mission, 1)
+    route_id = "spacecraft_route_#{craft_id}-direct"
+    existing = RouteChanges.extra_route_ids(client, mission_id, mission.profile)
+
+    if MapSet.member?(existing, route_id) do
+      client
+    else
+      {client, %{"stations" => stations}} =
+        request!(client, :get, "/missions/#{mission_id}/ground-stations")
+
+      {client, %{"transports" => transports}} =
+        request!(client, :get, "/missions/#{mission_id}/transports")
+
+      station_id = "station-qa-23565-local"
+      transport_id = "transport-qa-23565-direct"
+
+      station_ops =
+        if Enum.any?(stations, &(&1["id"] == station_id)) do
+          []
+        else
+          [
+            %{
+              kind: "ground_station",
+              action: "create",
+              entity_id: station_id,
+              document: %{
+                display_name: "QA local test station",
+                code: "QALOCAL",
+                metadata: @metadata
+              }
+            }
+          ]
+        end
+
+      transport_op =
+        if Enum.any?(transports, &(&1["id"] == transport_id)) do
+          %{
+            kind: "transport",
+            action: "update",
+            entity_id: transport_id,
+            changes: [%{path: "ground_station_id", value: station_id}]
+          }
+        else
+          %{
+            kind: "transport",
+            action: "create",
+            entity_id: transport_id,
+            document: %{
+              display_name: "QA direct TCP client",
+              origin: "direct",
+              transport_kind: "tcp_socket",
+              direction_capability: "inbound",
+              ground_station_id: station_id,
+              configuration: %{
+                mode: "connect",
+                direction_capability: "inbound",
+                host: "127.0.0.1",
+                port: 47_991,
+                framing_mode: "fixed_size",
+                frame_size: 1115,
+                tls_enabled: false
+              },
+              metadata: @metadata
+            }
+          }
+        end
+
+      route =
+        RouteChanges.route(
+          route_id,
+          craft_id,
+          station_id,
+          transport_id,
+          "QA direct downlink",
+          "TT&C downlink",
+          "primary",
+          "none"
+        )
+
+      case RouteChanges.submit(
+             client,
+             mission_id,
+             "qa-direct-route",
+             "Seed QA local test downlink",
+             station_ops ++ [transport_op, route]
+           ) do
+        :applied -> :ok
+        {:in_review, _id, _version} -> approve_change_set(client, approver, mission_id)
+      end
+
+      client
     end
   end
 

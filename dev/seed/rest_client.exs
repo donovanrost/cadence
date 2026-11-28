@@ -3,18 +3,22 @@ defmodule EarendilRestClient do
 
   @api_base "/api/v1"
 
-  def sign_in(base, email, password) do
-    client = %{base: String.trim_trailing(base, "/"), cookies: %{}, csrf: nil}
-    {client, page} = request!(client, :get, "/console/sign-in", nil, api?: false)
-    [_, csrf] = Regex.run(~r/<meta name="csrf-token" content="([^"]+)"/, page)
-    client = %{client | csrf: csrf}
+  def sign_in(base, email, password, opts \\ []) do
+    client = guest(base)
     {client, _} = request!(client, :post, "/auth/sign-in", %{email: email, password: password})
     {client, session} = request!(%{client | csrf: nil}, :get, "/session")
 
-    unless session["admin_mode"] == true,
+    unless not Keyword.get(opts, :admin?, true) or session["admin_mode"] == true,
       do: raise("admin sign-in: environment admin session did not enter admin mode")
 
     {%{client | csrf: session["csrf_token"]}, session}
+  end
+
+  def guest(base) do
+    client = %{base: String.trim_trailing(base, "/"), cookies: %{}, csrf: nil}
+    {client, page} = request!(client, :get, "/console/sign-in", nil, api?: false)
+    [_, csrf] = Regex.run(~r/<meta name="csrf-token" content="([^"]+)"/, page)
+    %{client | csrf: csrf}
   end
 
   def select_organization(client, organization_id) do

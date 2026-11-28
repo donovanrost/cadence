@@ -13,7 +13,7 @@ Scope follows `docs/apogee/DECISIONS.md`; the decision number is in brackets whe
 
 ## Personas
 
-Seeded by `dev/apogee_qa_personas.exs` (see `../../dev-environment.md`); sessions saved by `e2e/auth.setup.ts`.
+Seeded through `dev/seed/qa.exs` (see `../../dev-environment.md`); sessions saved by `e2e/auth.setup.ts`.
 
 | Key | User | Role | Used for |
 | --- | --- | --- | --- |

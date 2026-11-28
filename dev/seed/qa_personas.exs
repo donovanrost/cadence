@@ -1,47 +1,23 @@
 defmodule QaRestPersonas do
-  @moduledoc "Stages QA people through invitations; accepting them waits on dev mailbox #745."
-
-  import EarendilRestClient, only: [request!: 3, request!: 4]
+  @moduledoc "Creates QA people through invitations and accepts them from the dev mailbox."
 
   @people [
-    {"qa-operator@example.com", "member"},
-    {"qa-second@example.com", "member"},
-    {"qa-org-admin@example.com", "organization_admin"},
-    {"qa-org-admin-2@example.com", "organization_admin"}
+    {"qa-operator@example.com", "member", "QA Operator"},
+    {"qa-second@example.com", "member", "QA Second Operator"},
+    {"qa-org-admin@example.com", "organization_admin", "QA Org Admin"},
+    {"qa-org-admin-2@example.com", "organization_admin", "QA Org Admin 2"}
   ]
 
   def seed(client, organization_id) do
-    path = "/organizations/#{organization_id}"
-    {client, directory} = request!(client, :get, path <> "/people")
-
     client =
-      Enum.reduce(@people, client, fn {email, role}, client ->
-        member = Enum.find(directory["members"], &(&1["email"] == email))
+      Enum.reduce(@people, client, fn {email, role, name}, admin ->
+        {admin, _person} =
+          EarendilInvitations.ensure_person(admin, organization_id, email, role, name)
 
-        pending =
-          Enum.find(directory["invitations"], fn invitation ->
-            invitation["email"] == email and invitation["status"] == "pending"
-          end)
-
-        cond do
-          member ->
-            client
-
-          pending && pending["role"] == role ->
-            client
-
-          pending ->
-            raise "QA persona #{email} has a pending invitation with the wrong role"
-
-          true ->
-            {client, _} =
-              request!(client, :post, path <> "/invitations", %{email: email, role: role})
-
-            client
-        end
+        admin
       end)
 
-    IO.puts("  QA people present or invited; acceptance and sessions wait on #745")
+    IO.puts("  four QA people joined through dev invitations")
     client
   end
 end

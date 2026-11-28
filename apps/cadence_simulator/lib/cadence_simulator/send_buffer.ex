@@ -15,6 +15,7 @@ defmodule CadenceSimulator.SendBuffer do
 
   require Logger
 
+  alias CadenceSimulator.Provider.DeliveryTLS
   alias CadenceSimulator.SimulatorMetrics
 
   @default_batch_timeout 10
@@ -28,6 +29,7 @@ defmodule CadenceSimulator.SendBuffer do
 
   defstruct [
     :output,
+    :delivery_tls,
     :runtime_resolver,
     :socket,
     :base_batch_timeout,
@@ -44,8 +46,7 @@ defmodule CadenceSimulator.SendBuffer do
     :packet_loss_rate,
     :latency_ms,
     :jitter_ms,
-    :connect_timeout,
-    :send_timeout,
+    :socket_timeouts,
     :reconnect_timer,
     :reconnect_timer_ref,
     :max_buffer_bytes,
@@ -136,6 +137,7 @@ defmodule CadenceSimulator.SendBuffer do
 
     state = %__MODULE__{
       output: output,
+      delivery_tls: Keyword.get(opts, :delivery_tls),
       runtime_resolver: Keyword.get(opts, :runtime_resolver),
       base_batch_timeout: batch_timeout,
       base_batch_size: batch_size,
@@ -147,8 +149,10 @@ defmodule CadenceSimulator.SendBuffer do
       mode: Keyword.get(opts, :mode, :connect),
       coordinator_pid: Keyword.get(opts, :coordinator_pid),
       socket_owner: nil,
-      connect_timeout: Keyword.get(opts, :connect_timeout, @default_connect_timeout),
-      send_timeout: Keyword.get(opts, :send_timeout, @default_send_timeout),
+      socket_timeouts: %{
+        connect: Keyword.get(opts, :connect_timeout, @default_connect_timeout),
+        send: Keyword.get(opts, :send_timeout, @default_send_timeout)
+      },
       reconnect_timer:
         Keyword.get_lazy(opts, :reconnect_timer, fn ->
           interval = Keyword.get(opts, :reconnect_interval, @default_reconnect_interval)
@@ -181,6 +185,10 @@ defmodule CadenceSimulator.SendBuffer do
 
     {:noreply, new_state}
   end
+
+  def handle_cast({:attach_socket, _socket}, %{delivery_tls: identity} = state)
+      when not is_nil(identity),
+      do: {:noreply, state}
 
   def handle_cast({:attach_socket, socket}, state) do
     close_socket(state)
@@ -293,7 +301,38 @@ defmodule CadenceSimulator.SendBuffer do
   def handle_info({:tcp, _socket, _data}, state), do: {:noreply, state}
   def handle_info({:tcp_closed, _socket}, state), do: {:noreply, state}
   def handle_info({:tcp_error, _socket, _reason}, state), do: {:noreply, state}
+
+  def handle_info({:ssl, socket, _data}, %{socket: socket} = state) do
+    case DeliveryTLS.socket_result(:ssl.setopts(socket, active: :once)) do
+      :ok -> {:noreply, state}
+      {:error, reason} -> {:noreply, disconnect_output(state, reason)}
+    end
+  end
+
+  def handle_info({:ssl_closed, socket}, %{socket: socket, packets_sent: 0} = state),
+    do: {:noreply, disconnect_output(state, :delivery_tls_handshake_failed)}
+
+  def handle_info({:ssl_closed, socket}, %{socket: socket} = state),
+    do: {:noreply, disconnect_output(state, :closed)}
+
+  def handle_info({:ssl_error, socket, reason}, %{socket: socket} = state) do
+    {:error, reason} = DeliveryTLS.socket_result({:error, reason})
+    {:noreply, disconnect_output(state, reason)}
+  end
+
+  def handle_info({:ssl, _socket, _data}, state), do: {:noreply, state}
+  def handle_info({:ssl_closed, _socket}, state), do: {:noreply, state}
+  def handle_info({:ssl_error, _socket, _reason}, state), do: {:noreply, state}
   def handle_info({:timeout, _ref, :reconnect}, state), do: {:noreply, state}
+
+  @impl true
+  def format_status(%{state: %{delivery_tls: nil}} = status), do: status
+
+  def format_status(status) do
+    status
+    |> Map.update!(:state, &Map.delete(&1, :socket))
+    |> Map.drop([:message, :log])
+  end
 
   @impl true
   def terminate(_reason, state) do
@@ -363,7 +402,12 @@ defmodule CadenceSimulator.SendBuffer do
   end
 
   defp do_send(%{socket: nil} = state, _iolist), do: {:error, missing_socket_reason(state)}
-  defp do_send(%{output: {:tcp, _, _}, socket: socket}, iolist), do: :gen_tcp.send(socket, iolist)
+
+  defp do_send(%{output: {:tcp, _, _}, socket: socket, delivery_tls: nil}, iolist),
+    do: :gen_tcp.send(socket, iolist)
+
+  defp do_send(%{output: {:tcp, _, _}, socket: socket}, iolist),
+    do: DeliveryTLS.socket_result(:ssl.send(socket, iolist))
 
   defp do_send(%{output: {:udp, host, port}, socket: socket}, iolist) do
     :gen_udp.send(socket, String.to_charlist(host), port, IO.iodata_to_binary(iolist))
@@ -389,13 +433,13 @@ defmodule CadenceSimulator.SendBuffer do
       nodelay: true,
       sndbuf: @default_tcp_socket_buffer,
       recbuf: @default_tcp_socket_buffer,
-      send_timeout: state.send_timeout,
+      send_timeout: state.socket_timeouts.send,
       send_timeout_close: true
     ]
 
     state = update_in(state.connection_stats.attempts, &(&1 + 1))
 
-    case :gen_tcp.connect(String.to_charlist(host), port, opts, state.connect_timeout) do
+    case connect_tcp(state, host, port, opts) do
       {:ok, socket} ->
         downtime_ms =
           if state.connection_stats.disconnected_at,
@@ -446,6 +490,17 @@ defmodule CadenceSimulator.SendBuffer do
 
   defp do_connect_output(state, _allow_refresh?), do: state
 
+  defp connect_tcp(%{delivery_tls: nil, socket_timeouts: %{connect: timeout}}, host, port, opts),
+    do: :gen_tcp.connect(String.to_charlist(host), port, opts, timeout)
+
+  defp connect_tcp(
+         %{delivery_tls: identity, socket_timeouts: %{connect: timeout}},
+         host,
+         port,
+         opts
+       ),
+       do: DeliveryTLS.connect(identity, host, port, opts, timeout)
+
   defp disconnect_output(state, reason) do
     close_socket(state)
 
@@ -464,6 +519,8 @@ defmodule CadenceSimulator.SendBuffer do
   end
 
   defp record_connection_error(state, reason) do
+    notify_delivery_failure(state.coordinator_pid, reason)
+
     %{
       state
       | connection_stats: %{
@@ -474,6 +531,13 @@ defmodule CadenceSimulator.SendBuffer do
         }
     }
   end
+
+  defp notify_delivery_failure(pid, reason)
+       when is_pid(pid) and
+              reason in [:delivery_tls_credential_unavailable, :delivery_tls_handshake_failed],
+       do: send(pid, {:delivery_failed, reason})
+
+  defp notify_delivery_failure(_pid, _reason), do: :ok
 
   defp schedule_reconnect(%{mode: :listen} = state), do: state
   defp schedule_reconnect(%{socket_owner: :external} = state), do: state
@@ -497,7 +561,13 @@ defmodule CadenceSimulator.SendBuffer do
 
   defp close_socket(%{socket: nil}), do: :ok
   defp close_socket(%{socket_owner: :external}), do: :ok
-  defp close_socket(%{output: {:tcp, _, _}, socket: socket}), do: :gen_tcp.close(socket)
+
+  defp close_socket(%{output: {:tcp, _, _}, socket: socket, delivery_tls: nil}),
+    do: :gen_tcp.close(socket)
+
+  defp close_socket(%{output: {:tcp, _, _}, socket: socket}),
+    do: DeliveryTLS.socket_result(:ssl.close(socket))
+
   defp close_socket(%{output: {:udp, _, _}, socket: socket}), do: :gen_udp.close(socket)
   defp close_socket(_), do: :ok
 
@@ -678,6 +748,9 @@ defmodule CadenceSimulator.SendBuffer do
   end
 
   defp maybe_refresh_output(%{runtime_resolver: nil} = state), do: state
+
+  defp maybe_refresh_output(%{delivery_tls: identity} = state) when not is_nil(identity),
+    do: state
 
   defp maybe_refresh_output(state) do
     case resolve_runtime_updates(state.runtime_resolver) do
