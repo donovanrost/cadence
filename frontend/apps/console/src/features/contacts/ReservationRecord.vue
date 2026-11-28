@@ -7,12 +7,20 @@ import ContactRecordView from "./ContactRecordView.vue";
 import { fetchReservation, type Reservation } from "./records.ts";
 import { useShowEarlier } from "./pageFocus.ts";
 import { clock, sentenceCase, TONE_CLASS, valueCells, withVersion } from "./recordWords.ts";
+import { planRoute, requirementRoute, type PlanRef } from "./planLinks.ts";
+import type { RouteLocationRaw } from "vue-router";
 
 /**
  * The pass's reservation and contact records (ux U74, api A11/A13) as two collapsed Technical
  * details disclosures in mono key/values. Nothing is read until one is opened.
  */
-const props = defineProps<{ missionId: MissionId; passId: string; providerName: string | null }>();
+const props = defineProps<{
+  missionId: MissionId;
+  passId: string;
+  providerName: string | null;
+  /** The pass's own plan (its day opens K1 on that day); null for a direct booking. */
+  plan?: PlanRef | null;
+}>();
 const opened = ref(false);
 type Key = Readonly<{ m: MissionId; pass: string }>;
 type AuditEntry = Reservation["audit"]["entries"][number];
@@ -45,22 +53,29 @@ const hasEarlier = computed(
 const listEl = ref<HTMLElement | null>(null);
 const moreEl = ref<HTMLElement | null>(null);
 const showEarlier = useShowEarlier(query, listEl, moreEl);
-const facts = computed(() => {
+type Fact = Readonly<{ key: string; text: string; to: RouteLocationRaw | null }>;
+/**
+ * #676: the plan and the requirement open their screens (the plan on K1, on the pass's plan day
+ * when it's the same plan); the other ids are Technical details text.
+ */
+const facts = computed<Fact[]>(() => {
   const v = r.value?.reservation;
   if (!v) return [];
   const id = (x: { id: string; version: number | null } | null) =>
     x ? withVersion(x.id, x.version) : null;
-  return [
-    ["Reservation", v.id],
-    ["Provider revision", v.provider_revision === null ? null : String(v.provider_revision)],
-    ["State", sentenceCase(v.lifecycle_state)],
-    ["Provider", withVersion(props.providerName ?? v.provider.id, v.provider.version)],
-    ["Transport", id(v.transport)],
-    ["Plan", id(v.plan)],
-    ["Requirement", id(v.requirement)],
-    ["Scheduled contact", v.scheduled_contact_id],
-    ["Last reconciled", v.last_reconciled_at ? clock(v.last_reconciled_at) : null],
-  ].filter((f): f is [string, string] => f[1] !== null);
+  const day = props.plan && v.plan && props.plan.id === v.plan.id ? props.plan.day : null;
+  const rows: [string, string | null, RouteLocationRaw | null][] = [
+    ["Reservation", v.id, null],
+    ["Provider revision", v.provider_revision === null ? null : String(v.provider_revision), null],
+    ["State", sentenceCase(v.lifecycle_state), null],
+    ["Provider", withVersion(props.providerName ?? v.provider.id, v.provider.version), null],
+    ["Transport", id(v.transport), null],
+    ["Plan", id(v.plan), v.plan ? planRoute({ ...v.plan, day }) : null],
+    ["Requirement", id(v.requirement), v.requirement ? requirementRoute(v.requirement.id) : null],
+    ["Scheduled contact", v.scheduled_contact_id, null],
+    ["Last reconciled", v.last_reconciled_at ? clock(v.last_reconciled_at) : null, null],
+  ];
+  return rows.flatMap(([key, text, to]) => (text === null ? [] : [{ key, text, to }]));
 });
 const onToggle = (e: Event) => {
   if (e.target instanceof HTMLDetailsElement && e.target.open) opened.value = true;
@@ -76,9 +91,14 @@ const onToggle = (e: Event) => {
     </p>
     <div v-else-if="r" class="flex flex-col gap-2 pt-1 font-mono">
       <dl class="m-0 grid grid-cols-[max-content_minmax(0,1fr)] gap-x-3 gap-y-0.5">
-        <template v-for="[k, v] in facts" :key="k">
-          <dt class="text-text-4">{{ k }}</dt>
-          <dd class="m-0 break-all text-text-2">{{ v }}</dd>
+        <template v-for="f in facts" :key="f.key">
+          <dt class="text-text-4">{{ f.key }}</dt>
+          <dd class="m-0 break-all text-text-2">
+            <RouterLink v-if="f.to" :to="f.to" class="text-readout underline">{{
+              f.text
+            }}</RouterLink>
+            <template v-else>{{ f.text }}</template>
+          </dd>
         </template>
       </dl>
       <table v-if="r.values.length" class="w-full border-collapse">
