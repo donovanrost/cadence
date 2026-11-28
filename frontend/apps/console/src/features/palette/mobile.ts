@@ -1,13 +1,5 @@
 import type { OpState } from "@/ui";
-import {
-  conditionWords,
-  crossedCondition,
-  crossedLimit,
-  formatLimitLike,
-  formatValue,
-  withUnit,
-  type Alarm,
-} from "@/features/alarms/index.ts";
+import type { Alarm } from "@/features/alarms/index.ts";
 import type { GroupRow } from "@/features/commands/index.ts";
 import { fleetOpState, fleetStateWord, type FleetSpacecraft } from "@/features/fleet/index.ts";
 import { spacecraftRank, type Group, type PaletteItem } from "./results.ts";
@@ -57,21 +49,13 @@ export function alarmItems(
         Date.parse(y.a.first_crossed_at ?? "0") - Date.parse(x.a.first_crossed_at ?? "0"),
     )
     .map(({ a, sc, rank }) => {
-      const condition = crossedCondition(a);
-      const words = conditionWords(condition) ?? "out of limits";
-      const limit = withUnit(formatLimitLike(crossedLimit(a), a.value), a.point.unit);
-      const band = condition?.startsWith("red") ? "red" : "yellow";
+      // #1117: an alarm row carries no value, condition or limits; it says only since when.
+      const since = ago(a.first_crossed_at, now);
       return {
         key: `alarm-${a.id}`,
         group: "Alarms" as const,
-        title: `${sc.name} · ${a.point.name} ${words}`,
-        subtitle: [
-          withUnit(formatValue(a.value), a.point.unit),
-          limit === null ? null : `${band} ${limit}`,
-          ago(a.first_crossed_at, now),
-        ]
-          .filter((p): p is string => p !== null)
-          .join(" · "),
+        title: `${sc.name} · ${a.point.name}`,
+        subtitle: since === null ? "Out of limits" : `Out of limits since ${since}`,
         hint: "",
         state: SEVERITY[a.severity],
         to: {

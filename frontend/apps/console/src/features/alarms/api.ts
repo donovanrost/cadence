@@ -63,10 +63,9 @@ const alarm = d.object({
   }),
   severity: d.oneOf(alarmSeverities),
   active: d.boolean,
-  condition: d.nullable(d.known(limitConditions)),
-  value: d.nullable(engineeringValue),
-  limit_set_name: d.nullable(d.string),
-  thresholds: d.nullable(thresholdsReader),
+  // #1117 (#451 T3c): a row is a live alarm state, written on a transition. It carries no value,
+  // condition, limit set or thresholds (ground-limit ideas, null since); the episode carries the
+  // value (last_value with last_evaluated_at). first_crossed_at is the state's received_at.
   first_crossed_at: d.nullable(d.timestamp),
   generation_time: d.nullable(d.timestamp),
   received_at: d.nullable(d.timestamp),
@@ -161,22 +160,6 @@ export function conditionWords(condition: string | null): string | null {
   return known ? CONDITION_WORDS[known] : null;
 }
 
-/**
- * The crossed condition: the row's own, or inferred from value vs thresholds when the server
- * sent none (red before yellow, so the worst band wins).
- */
-export function crossedCondition(alarm: Alarm): string | null {
-  if (alarm.condition !== null) return alarm.condition;
-  const t = alarm.thresholds;
-  const v = alarm.value;
-  if (t === null || typeof v !== "number") return null;
-  if (t.red_low !== null && v < t.red_low) return "red_low";
-  if (t.red_high !== null && v > t.red_high) return "red_high";
-  if (t.yellow_low !== null && v < t.yellow_low) return "yellow_low";
-  if (t.yellow_high !== null && v > t.yellow_high) return "yellow_high";
-  return null;
-}
-
 const CROSSED_BAND = {
   red_low: "red_low",
   red_high: "red_high",
@@ -191,7 +174,3 @@ export function bandFor(thresholds: Thresholds | null, condition: string | null)
   const band = condition !== null && isCrossedBand(condition) ? CROSSED_BAND[condition] : null;
   return band === null || thresholds === null ? null : thresholds[band];
 }
-
-/** The band that was crossed, for the limit readout. */
-export const crossedLimit = (alarm: Alarm): number | null =>
-  bandFor(alarm.thresholds, crossedCondition(alarm));

@@ -3,7 +3,7 @@ import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import { useMissionScope } from "@/shell/index.ts";
 import { useNow, ApCallout, ApEmptyState, ApListRow, ApPanel, ApRemote } from "@/ui";
-import { AlarmsMore, formatValue, withUnit, type Alarm } from "@/features/alarms/index.ts";
+import { AlarmsMore, type Alarm } from "@/features/alarms/index.ts";
 import { fleetOpState, type FleetSpacecraft } from "@/features/fleet/index.ts";
 import { sisters } from "./model.ts";
 import PlaneRing from "./PlaneRing.vue";
@@ -113,9 +113,9 @@ const tones = computed(
           :state="fleetOpState(row.alarm.severity === 'critical' ? 'critical' : 'caution')"
         >
           <template #sentence>
-            <span class="font-mono text-text-3 normal-case">{{ alarm.point.name }}</span>
-            {{ withUnit(formatValue(row.alarm.value), row.alarm.point.unit) ?? "—"
-            }}<template v-if="aosShort(row.sc, now)"> · {{ aosShort(row.sc, now) }}</template>
+            <!-- #1117: an alarm row carries no value, so a sister shows its point and next AOS. -->
+            <span class="font-mono text-text-3 normal-case">{{ alarm.point.name }}</span
+            ><template v-if="aosShort(row.sc, now)"> · {{ aosShort(row.sc, now) }}</template>
           </template>
           <template v-if="i < SPARKS" #action>
             <SisterSpark

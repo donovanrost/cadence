@@ -22,10 +22,6 @@ const alarm = (id: string, sc: string, point: string, extra: Partial<Alarm> = {}
   },
   severity: "critical",
   active: true,
-  condition: "red_low",
-  value: 23.1,
-  limit_set_name: null,
-  thresholds: { red_low: 24, yellow_low: 25, yellow_high: null, red_high: null },
   first_crossed_at: "2026-11-13T02:57:00Z",
   generation_time: null,
   received_at: null,
@@ -54,12 +50,13 @@ const request = (id: string, title: string, extra: Partial<GroupRow> = {}): Grou
 });
 
 describe("phone search (Mobile.md › Search)", () => {
-  it("finds an alarm by spacecraft or point, in words, with the red limit and age", () => {
+  it("finds an alarm by spacecraft or point, and says since when it is out of limits", () => {
     const [item] = alarmItems([alarm("a1", fleet[0]?.id ?? "", "VBAT")], byId, "312", now);
     expect(item).toMatchObject({
       group: "Alarms",
-      title: "EARENDIL-312 · VBAT below red limit",
-      subtitle: "23.1 V · red 24.0 V · T+3m",
+      // #1117: an alarm row carries no value, condition or limits.
+      title: "EARENDIL-312 · VBAT",
+      subtitle: "Out of limits since T+3m",
       state: "crit",
       to: {
         name: "ops.spacecraft",

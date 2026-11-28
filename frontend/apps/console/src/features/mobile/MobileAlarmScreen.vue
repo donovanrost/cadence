@@ -12,7 +12,7 @@ import {
   formatRelative,
   useNow,
 } from "@/ui";
-import { conditionWords, crossedCondition, episodeFor } from "@/features/alarms/index.ts";
+import { conditionWords, episodeFor } from "@/features/alarms/index.ts";
 import { useFleet } from "@/features/fleet/index.ts";
 import {
   DEFAULT_RANGE,
@@ -119,7 +119,8 @@ const view = computed(() => {
   const window = { from: Date.parse(h.value.from), to: Date.parse(h.value.to) };
   const i = trend.intervals.state.value;
   const series = toSeries(h.value);
-  const limits = limitSegments(i.status === "ready" ? i.value : null, window, a.thresholds);
+  const thresholds = episode.value?.thresholds ?? null;
+  const limits = limitSegments(i.status === "ready" ? i.value : null, window, thresholds);
   return {
     window,
     series,
@@ -137,7 +138,7 @@ useMobileHeader(() => {
     : "";
   return {
     title: a
-      ? `${a.point.subsystem ?? "Point"} ${conditionWords(crossedCondition(a)) ?? "out of limits"}`
+      ? `${a.point.subsystem ?? "Point"} ${conditionWords(episode.value?.source_state ?? null) ?? "out of limits"}`
       : (sc.value?.name ?? "Spacecraft"),
     context: `${a ? `Alarm${since}` : "Spacecraft"} · ${scope.value.mission.name}`,
     back: { name: "ops.alarms" },
@@ -158,6 +159,7 @@ useMobileHeader(() => {
             v-if="alarm"
             :sc="sc"
             :alarm="alarm"
+            :episode="episode"
             :history="trend.history.state.value"
             :view="view"
             :range-label="rangeLabel"
