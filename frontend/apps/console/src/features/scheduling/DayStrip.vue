@@ -46,6 +46,9 @@ const MARK: Readonly<Record<MarkState, string>> = {
           :class="c.day === props.day ? 'bg-raised shadow-[inset_0_-2px_0_var(--color-text)]' : ''"
         >
           <span class="font-mono text-xs text-text-2 uppercase">{{ c.label }}</span>
+          <!-- #1027: a real space, so the shown text reads "Mon 30 No plan" as the name does, never
+               "Mon 30No plan" (WCAG 2.5.3); the template drops plain whitespace between spans. -->
+          {{ " " }}
           <span class="flex items-center gap-1 text-sm"
             ><span v-if="c.mark" aria-hidden="true" :class="MARK[c.mark.state]">{{
               c.mark.glyph
